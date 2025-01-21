@@ -1,0 +1,33 @@
+name: 'Code Owners'
+
+concurrency:
+  group: codeowners-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
+
+jobs:
+  codeowners:
+    name: 'Run Codeowners Plus'
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      - name: 'Checkout Code Repository'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 'Update action.yml to build locally'
+        run: |
+          sed -i "s/image: .*/image: 'Dockerfile'/" action.yml
+          cat action.yml
+      
+      - name: 'Codeowners Plus'
+        uses: ./
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          pr: '${{ github.event.pull_request.number }}'
+          verbose: true

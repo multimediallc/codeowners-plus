@@ -1,0 +1,45 @@
+diff --git a/models.py b/models.py
+index 5c8d88a89e..ca1e707a32 100644
+--- a/models.py
++++ b/models.py
+@@ -3,0 +3,1 @@
++ foo
+diff --git a/test_a.py b/test_a.py
+index 82526ac939..79774e649d 100644
+--- a/test_a.py
++++ b/test_a.py
+@@ -1,0 +1,1 @@
++ bar
+diff --git a/frontend/a.ts b/frontend/a.ts
+index 9d7a55d0a8..46607ac304 100644
+--- a/frontend/a.ts
++++ b/frontend/a.ts
+@@ -1,0 +1,1 @@
++ baz
+diff --git a/frontend/b.ts b/frontend/b.ts
+index 9d7a55d0a8..46607ac304 100644
+--- a/frontend/b.ts
++++ b/frontend/b.ts
+@@ -1,0 +1,1 @@
++ bop
+diff --git a/frontend/a.test.ts b/frontend/a.test.ts
+index 1f71dfbf3e..8aa17fcf35 100644
+--- a/frontend/a.test.ts
++++ b/frontend/a.test.ts
+@@ -1,0 +1,4 @@
++ qux
++ quux
++ quuz
++ corge
+diff --git a/frontend/inner/a.js b/frontend/inner/a.js
+index 9d7a55d0a8..46607ac304 100644
+--- a/frontend/inner/a.js
++++ b/frontend/inner/a.js
+@@ -1,0 +1,1 @@
++ cuh
+diff --git a/frontend/inner/b.js b/frontend/inner/b.js
+index 9d7a55d0a8..46607ac304 100644
+--- a/frontend/inner/b.js
++++ b/frontend/inner/b.js
+@@ -1,0 +1,1 @@
++ cip

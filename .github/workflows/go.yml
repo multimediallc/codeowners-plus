@@ -1,0 +1,38 @@
+name: 'Tests'
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    name: 'Go Build & Test'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: 'Set up Go'
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+
+    - name: 'Build'
+      run: go build -v ./...
+
+    - name: 'Test'
+      run: go test -v ./...
+  lint:
+    name: 'Go Lint'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: 'Set up Go'
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+
+    - name: 'Golangci-lint'
+      uses: golangci/golangci-lint-action@v6.1.1
