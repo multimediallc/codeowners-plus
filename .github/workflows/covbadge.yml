@@ -1,0 +1,28 @@
+name: 'Coverage Badge'
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-test:
+    name: 'Check Coverage Badge'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: 'Set up Go'
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+
+    - name: 'Install gobadge'
+      run: go install github.com/AlexBeauchemin/gobadge@v0.3.0
+
+    - name: 'Run gobadge'
+      run: ./covbadge.sh
+
+    - name: 'Fail if not updated'
+      run: git diff -U0 --exit-code

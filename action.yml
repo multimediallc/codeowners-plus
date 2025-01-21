@@ -1,0 +1,22 @@
+name: 'Codeowners Plus'
+description: 'Code ownership tool for manging owner-ship based review assignments and checks'
+author: 'Hans Baker'
+inputs:
+  github-token:
+    description: 'Github API token'
+    required: true
+  pr:
+    description: 'Pull request number'
+    required: true
+  repository:
+    description: 'The owner and repository name.  For example `octocat/Hello-World`'
+    required: true
+    default: '${{ github.repository }}'
+  verbose:
+    description: 'Print debug info'
+    required: false
+    default: false
+
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/multimediallc/codeowners-plus:v0.1.0'
