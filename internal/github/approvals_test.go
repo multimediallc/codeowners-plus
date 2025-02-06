@@ -5,7 +5,7 @@ import (
 
 	"io"
 
-	"github.com/multimediallc/codeowners-plus/pkg/diff"
+	"github.com/multimediallc/codeowners-plus/internal/diff"
 )
 
 type fakeDiff struct{}

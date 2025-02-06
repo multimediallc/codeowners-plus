@@ -5,7 +5,7 @@ import (
 	"io"
 	"slices"
 
-	"github.com/multimediallc/codeowners-plus/pkg/diff"
+	"github.com/multimediallc/codeowners-plus/internal/diff"
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 

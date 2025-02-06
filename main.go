@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/multimediallc/codeowners-plus/internal/config"
+	"github.com/multimediallc/codeowners-plus/internal/diff"
 	"github.com/multimediallc/codeowners-plus/internal/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
-	"github.com/multimediallc/codeowners-plus/pkg/diff"
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 

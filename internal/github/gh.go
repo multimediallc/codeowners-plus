@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v63/github"
-	"github.com/multimediallc/codeowners-plus/pkg/diff"
+	"github.com/multimediallc/codeowners-plus/internal/diff"
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
