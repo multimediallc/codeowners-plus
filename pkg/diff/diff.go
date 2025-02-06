@@ -1,4 +1,4 @@
-package owners
+package diff
 
 import (
 	"bufio"
@@ -9,17 +9,18 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/sourcegraph/go-diff/diff"
+	godiff "github.com/sourcegraph/go-diff/diff"
 )
 
 type Diff interface {
-	GetAllChanges() []DiffFile
-	GetChangesSince(ref string) ([]DiffFile, error)
+	AllChanges() []DiffFile
+	ChangesSince(ref string) ([]DiffFile, error)
+	Context() DiffContext
 }
 
 type GitDiff struct {
 	context DiffContext
-	diff    []*diff.FileDiff
+	diff    []*godiff.FileDiff
 	files   []DiffFile
 }
 
@@ -40,11 +41,11 @@ func NewGitDiff(context DiffContext) (Diff, error) {
 	}, nil
 }
 
-func (gd *GitDiff) GetAllChanges() []DiffFile {
+func (gd *GitDiff) AllChanges() []DiffFile {
 	return gd.files
 }
 
-func (gd *GitDiff) GetChangesSince(ref string) ([]DiffFile, error) {
+func (gd *GitDiff) ChangesSince(ref string) ([]DiffFile, error) {
 	olderDiffContext := DiffContext{
 		Base:       gd.context.Base,
 		Head:       ref,
@@ -59,11 +60,15 @@ func (gd *GitDiff) GetChangesSince(ref string) ([]DiffFile, error) {
 		newerDiff: gd.diff,
 		olderDiff: olderDiff,
 	}
-	diffFiles, err := getChangesSince(changesContext)
+	diffFiles, err := changesSince(changesContext)
 	if err != nil {
 		return nil, err
 	}
 	return diffFiles, nil
+}
+
+func (gd *GitDiff) Context() DiffContext {
+	return gd.context
 }
 
 type DiffContext struct {
@@ -84,12 +89,12 @@ type DiffFile struct {
 }
 
 type changesSinceContext struct {
-	newerDiff []*diff.FileDiff
-	olderDiff []*diff.FileDiff
+	newerDiff []*godiff.FileDiff
+	olderDiff []*godiff.FileDiff
 }
 
 // Parse the diff output to get the file names and hunks
-func toDiffFiles(fileDiffs []*diff.FileDiff) ([]DiffFile, error) {
+func toDiffFiles(fileDiffs []*godiff.FileDiff) ([]DiffFile, error) {
 	diffFiles := make([]DiffFile, 0, len(fileDiffs))
 
 	for _, d := range fileDiffs {
@@ -110,7 +115,7 @@ func toDiffFiles(fileDiffs []*diff.FileDiff) ([]DiffFile, error) {
 }
 
 // Get Changes between two diffs
-func getChangesSince(context changesSinceContext) ([]DiffFile, error) {
+func changesSince(context changesSinceContext) ([]DiffFile, error) {
 	// Get hash of hunks in both diffs
 	// For each file, filter out hunks that are in oldDiff
 	// if len(hunks) > 0, add to diffFiles
@@ -144,19 +149,18 @@ func getChangesSince(context changesSinceContext) ([]DiffFile, error) {
 	return diffFiles, nil
 }
 
-func getGitDiff(data DiffContext) ([]*diff.FileDiff, error) {
-	fmt.Fprintln(InfoBuffer, "Getting diff for", data.Base, "...", data.Head)
+func getGitDiff(data DiffContext) ([]*godiff.FileDiff, error) {
 	cmd := exec.Command("git", "diff", "-U0", fmt.Sprintf("%s...%s", data.Base, data.Head))
 	cmd.Dir = data.Dir
 	cmdOutput, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("Diff Error: %s\n%s\n", err, cmdOutput)
 	}
-	gitDiff, err := diff.ParseMultiFileDiff(cmdOutput)
+	gitDiff, err := godiff.ParseMultiFileDiff(cmdOutput)
 	if err != nil {
 		return nil, err
 	}
-	gitDiff = slices.DeleteFunc(gitDiff, func(d *diff.FileDiff) bool {
+	gitDiff = slices.DeleteFunc(gitDiff, func(d *godiff.FileDiff) bool {
 		for _, dir := range data.IgnoreDirs {
 			if strings.HasPrefix(d.NewName[2:], dir) {
 				return true
@@ -167,7 +171,7 @@ func getGitDiff(data DiffContext) ([]*diff.FileDiff, error) {
 	return gitDiff, nil
 }
 
-func hunkHash(hunk *diff.Hunk) [32]byte {
+func hunkHash(hunk *godiff.Hunk) [32]byte {
 	// Generate a hash for a hunk based on its added and removed lines.
 	var lines []byte
 	data := hunk.Body

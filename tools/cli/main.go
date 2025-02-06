@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/boyter/gocodewalker"
-	"github.com/multimediallc/codeowners-plus/internal"
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
+	"github.com/multimediallc/codeowners-plus/pkg/functional"
 	"github.com/urfave/cli/v2"
 )
 
@@ -152,7 +155,7 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 		close(errChan)
 	}()
 
-	files := make([]owners.DiffFile, 0)
+	files := make([]string, 0)
 	for f := range fileListQueue {
 		file := stripRoot(repo, f.Location)
 		if depth != 0 && depthCheck(file, target, depth) {
@@ -161,14 +164,14 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 		if target != "" && !strings.HasPrefix(file, target) {
 			continue
 		}
-		files = append(files, owners.DiffFile{FileName: file})
+		files = append(files, file)
 	}
 
 	if err := <-errChan; err != nil {
 		return fmt.Errorf("Error walking repo: %s", err)
 	}
 
-	ownersMap, err := owners.NewCodeOwners(repo, files)
+	ownersMap, err := codeowners.NewCodeOwners(repo, files, io.Discard)
 	if err != nil {
 		return fmt.Errorf("Error reading codeowners config: %s", err)
 	}
@@ -176,7 +179,7 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 	unowned := ownersMap.UnownedFiles()
 
 	if dirsOnly {
-		unowned = owners.Filtered(owners.RemoveDuplicates(owners.Map(unowned, func(path string) string {
+		unowned = f.Filtered(f.RemoveDuplicates(f.Map(unowned, func(path string) string {
 			return filepath.Dir(path)
 		})), func(path string) bool {
 			return path != "."
@@ -201,14 +204,14 @@ func fileOwner(repo string, target string) error {
 		return fmt.Errorf("Target is not a file: %s", target)
 	}
 
-	ownersMap, err := owners.NewCodeOwners(repo, []owners.DiffFile{{FileName: target}})
+	ownersMap, err := codeowners.NewCodeOwners(repo, []string{target}, io.Discard)
 	if err != nil {
 		return fmt.Errorf("Error reading codeowners config: %s", err)
 	}
-	fmt.Println(strings.Join(owners.Map(ownersMap.AllRequiredReviewers(), func(rg *owners.ReviewerGroup) string { return rg.ToCommentString() }), "\n"))
-	if len(ownersMap.AllOptionalReviewers()) > 0 {
+	fmt.Println(strings.Join(f.Map(ownersMap.AllRequired(), func(rg *codeowners.ReviewerGroup) string { return rg.ToCommentString() }), "\n"))
+	if len(ownersMap.AllOptional()) > 0 {
 		fmt.Println("Optional:")
-		fmt.Println(strings.Join(owners.Map(ownersMap.AllOptionalReviewers(), func(rg *owners.ReviewerGroup) string { return rg.ToCommentString() }), "\n"))
+		fmt.Println(strings.Join(f.Map(ownersMap.AllOptional(), func(rg *codeowners.ReviewerGroup) string { return rg.ToCommentString() }), "\n"))
 	}
 	return nil
 }
@@ -227,39 +230,41 @@ func verifyCodeowners(repo string, target string) error {
 	if ownersStat, err := os.Stat(filepath.Join(target, ".codeowners")); err != nil || ownersStat.IsDir() {
 		return fmt.Errorf("Target does not contain a .codeowners file: %s", target)
 	}
-	rgm := owners.NewReviewerGroupMemo()
+	warningBuffer := bytes.NewBuffer([]byte{})
 
-	codeowners := owners.ReadCodeownersFile(target, rgm)
+	rgm := codeowners.NewReviewerGroupMemo()
+
+	codeowners := codeowners.Read(target, rgm, io.Discard)
 	if codeowners.Fallback != nil {
 		for _, name := range codeowners.Fallback.Names {
 			if !strings.HasPrefix(name, "@") {
-				fmt.Fprintln(owners.WarningBuffer, "Fallback owner doesn't start with @: "+name)
+				fmt.Fprintln(warningBuffer, "Fallback owner doesn't start with @: "+name)
 			}
 		}
 	}
 	for _, test := range codeowners.OwnerTests {
 		for _, name := range test.Reviewer.Names {
 			if !strings.HasPrefix(name, "@") {
-				fmt.Fprintf(owners.WarningBuffer, "Owner test (%s) name doesn't start with @: %s\n", test.Match, name)
+				fmt.Fprintf(warningBuffer, "Owner test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}
 		}
 	}
 	for _, test := range codeowners.AdditionalReviewerTests {
 		for _, name := range test.Reviewer.Names {
 			if !strings.HasPrefix(name, "@") {
-				fmt.Fprintf(owners.WarningBuffer, "Additional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
+				fmt.Fprintf(warningBuffer, "Additional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}
 		}
 	}
 	for _, test := range codeowners.OptionalReviewerTests {
 		for _, name := range test.Reviewer.Names {
 			if !strings.HasPrefix(name, "@") {
-				fmt.Fprintf(owners.WarningBuffer, "Optional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
+				fmt.Fprintf(warningBuffer, "Optional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}
 		}
 	}
-	if owners.WarningBuffer.Len() > 0 {
-		return fmt.Errorf("\n%s", strings.Replace(owners.WarningBuffer.String(), "WARNING: ", "", -1))
+	if warningBuffer.Len() > 0 {
+		return fmt.Errorf("\n%s", strings.Replace(warningBuffer.String(), "WARNING: ", "", -1))
 	}
 	return nil
 }

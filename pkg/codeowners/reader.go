@@ -1,63 +1,16 @@
-package owners
+package codeowners
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"sort"
 	"strings"
-
-	"github.com/pelletier/go-toml/v2"
 )
 
-type CodeownersConfig struct {
-	MaxReviews           *int         `toml:"max_reviews"`
-	MinReviews           *int         `toml:"min_reviews"`
-	UnskippableReviewers []string     `toml:"unskippable_reviewers"`
-	Ignore               []string     `toml:"ignore"`
-	Enforcement          *Enforcement `toml:"enforcement"`
-}
-
-type Enforcement struct {
-	Approval  bool `toml:"approval"`
-	FailCheck bool `toml:"fail_check"`
-}
-
-func ReadCodeownersConfig(path string) (*CodeownersConfig, error) {
-	if !strings.HasSuffix(path, "/") {
-		path += "/"
-	}
-
-	defaultConfig := &CodeownersConfig{
-		MaxReviews:           nil,
-		MinReviews:           nil,
-		UnskippableReviewers: []string{},
-		Ignore:               []string{},
-		Enforcement:          &Enforcement{Approval: false, FailCheck: true},
-	}
-
-	fileName := path + "codeowners.toml"
-	if _, err := os.Stat(fileName); errors.Is(err, os.ErrNotExist) {
-		return defaultConfig, nil
-	}
-	file, err := os.ReadFile(fileName)
-	if err != nil {
-		return defaultConfig, err
-	}
-	config := defaultConfig
-	err = toml.Unmarshal(file, &config)
-	if err != nil {
-		return defaultConfig, err
-	}
-	if config.Enforcement == nil {
-		config.Enforcement = defaultConfig.Enforcement
-	}
-	return config, nil
-}
-
-type CodeownersRules struct {
+type Rules struct {
 	Fallback                *ReviewerGroup
 	OwnerTests              FileTestCases
 	AdditionalReviewerTests FileTestCases
@@ -65,8 +18,8 @@ type CodeownersRules struct {
 }
 
 // Read the .codeowners file and return the fallback owner, ownership tests, and additional ownership tests
-func ReadCodeownersFile(path string, reviewerGroupManager ReviewerGroupManager) CodeownersRules {
-	rules := CodeownersRules{
+func Read(path string, reviewerGroupManager ReviewerGroupManager, warningWriter io.Writer) Rules {
+	rules := Rules{
 		Fallback:                nil,
 		OwnerTests:              FileTestCases{},
 		AdditionalReviewerTests: FileTestCases{},
@@ -112,17 +65,17 @@ func ReadCodeownersFile(path string, reviewerGroupManager ReviewerGroupManager) 
 		line = strings.TrimSpace(line)
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
-			fmt.Fprintln(WarningBuffer, "WARNING: Invalid line in .codeowners file:", line)
+			fmt.Fprintln(warningWriter, "WARNING: Invalid line in .codeowners file:", line)
 			continue
 		}
 		match := parts[0]
 		if strings.HasPrefix(match, "/") {
-			fmt.Fprintln(WarningBuffer, "WARNING: Leading `/` ignored by `.codeowners`:", match)
+			fmt.Fprintln(warningWriter, "WARNING: Leading `/` ignored by `.codeowners`:", match)
 			// strip leading slash - all matches are relative to the current directory
 			match = match[1:]
 		}
 		if strings.HasSuffix(match, "/") {
-			fmt.Fprintln(WarningBuffer, "WARNING: Trailing `/` not supported by `.codeowners` - replacing with `/**`:", match)
+			fmt.Fprintln(warningWriter, "WARNING: Trailing `/` not supported by `.codeowners` - replacing with `/**`:", match)
 			match = match + "**"
 		}
 		owner := parts[1:]

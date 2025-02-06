@@ -1,13 +1,16 @@
-package owners
+package gh
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/go-github/v63/github"
+	"github.com/multimediallc/codeowners-plus/pkg/diff"
+	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 type NoPRError struct{}
@@ -22,7 +25,7 @@ func (e UserReviewerMapNotInitError) Error() string {
 	return "User reviewer map not initialized"
 }
 
-type GitHubClient struct {
+type Client struct {
 	ctx             context.Context
 	owner           string
 	repo            string
@@ -31,11 +34,13 @@ type GitHubClient struct {
 	userReviewerMap ghUserReviewerMap
 	comments        []*github.IssueComment
 	reviews         []*github.PullRequestReview
+	warningBuffer   io.Writer
+	infoBuffer      io.Writer
 }
 
-func NewGithubClient(owner, repo, token string) *GitHubClient {
+func NewClient(owner, repo, token string) *Client {
 	client := github.NewClient(nil).WithAuthToken(token)
-	return &GitHubClient{
+	return &Client{
 		context.Background(),
 		owner,
 		repo,
@@ -44,10 +49,20 @@ func NewGithubClient(owner, repo, token string) *GitHubClient {
 		nil,
 		nil,
 		nil,
+		io.Discard,
+		io.Discard,
 	}
 }
 
-func (gh *GitHubClient) InitPR(pr_id int) error {
+func (gh *Client) SetWarningBuffer(writer io.Writer) {
+	gh.warningBuffer = writer
+}
+
+func (gh *Client) SetInfoBuffer(writer io.Writer) {
+	gh.infoBuffer = writer
+}
+
+func (gh *Client) InitPR(pr_id int) error {
 	pull, res, err := gh.client.PullRequests.Get(gh.ctx, gh.owner, gh.repo, pr_id)
 	defer res.Body.Close()
 	if err != nil {
@@ -57,9 +72,9 @@ func (gh *GitHubClient) InitPR(pr_id int) error {
 	return nil
 }
 
-func (gh *GitHubClient) InitUserReviewerMap(reviewers []string) error {
+func (gh *Client) InitUserReviewerMap(reviewers []string) error {
 	teamFetch := func(org, team string) []*github.User {
-		fmt.Fprintf(InfoBuffer, "Fetching team members for %s/%s\n", org, team)
+		fmt.Fprintf(gh.infoBuffer, "Fetching team members for %s/%s\n", org, team)
 		allUsers := make([]*github.User, 0)
 		getMembers := func(page int) (*github.Response, error) {
 			listOptions := &github.TeamListTeamMembersOptions{ListOptions: github.ListOptions{PerPage: 100, Page: page}}
@@ -70,7 +85,7 @@ func (gh *GitHubClient) InitUserReviewerMap(reviewers []string) error {
 		}
 		err := walkPaginatedApi(getMembers)
 		if err != nil {
-			fmt.Fprintf(WarningBuffer, "WARNING: Error fetching team members for %s/%s: %v\n", org, team, err)
+			fmt.Fprintf(gh.warningBuffer, "WARNING: Error fetching team members for %s/%s: %v\n", org, team, err)
 		}
 		return allUsers
 	}
@@ -78,7 +93,7 @@ func (gh *GitHubClient) InitUserReviewerMap(reviewers []string) error {
 	return nil
 }
 
-func (gh *GitHubClient) GetTokenUser() (string, error) {
+func (gh *Client) GetTokenUser() (string, error) {
 	user, _, err := gh.client.Users.Get(gh.ctx, "")
 	if err != nil {
 		return "", err
@@ -86,7 +101,7 @@ func (gh *GitHubClient) GetTokenUser() (string, error) {
 	return user.GetLogin(), nil
 }
 
-func (gh *GitHubClient) InitReviews() error {
+func (gh *Client) InitReviews() error {
 	if gh.PR == nil {
 		return &NoPRError{}
 	}
@@ -106,14 +121,14 @@ func (gh *GitHubClient) InitReviews() error {
 	return nil
 }
 
-func (gh *GitHubClient) approvals() []*github.PullRequestReview {
-	approvals := Filtered(gh.reviews, func(approval *github.PullRequestReview) bool {
+func (gh *Client) approvals() []*github.PullRequestReview {
+	approvals := f.Filtered(gh.reviews, func(approval *github.PullRequestReview) bool {
 		return approval.GetState() == "APPROVED"
 	})
 	return approvals
 }
 
-func (gh *GitHubClient) AllApprovals() ([]*CurrentApproval, error) {
+func (gh *Client) AllApprovals() ([]*CurrentApproval, error) {
 	if gh.PR == nil {
 		return nil, &NoPRError{}
 	}
@@ -123,12 +138,12 @@ func (gh *GitHubClient) AllApprovals() ([]*CurrentApproval, error) {
 			return nil, err
 		}
 	}
-	return Map(gh.approvals(), func(approval *github.PullRequestReview) *CurrentApproval {
+	return f.Map(gh.approvals(), func(approval *github.PullRequestReview) *CurrentApproval {
 		return &CurrentApproval{approval.User.GetLogin(), approval.GetID(), nil, approval.GetCommitID()}
 	}), nil
 }
 
-func (gh *GitHubClient) FindUserApproval(ghUser string) (*CurrentApproval, error) {
+func (gh *Client) FindUserApproval(ghUser string) (*CurrentApproval, error) {
 	if gh.PR == nil {
 		return nil, &NoPRError{}
 	}
@@ -138,7 +153,7 @@ func (gh *GitHubClient) FindUserApproval(ghUser string) (*CurrentApproval, error
 			return nil, err
 		}
 	}
-	review, found := Find(gh.approvals(), func(review *github.PullRequestReview) bool {
+	review, found := f.Find(gh.approvals(), func(review *github.PullRequestReview) bool {
 		return review.GetUser().GetLogin() == ghUser
 	})
 
@@ -148,7 +163,7 @@ func (gh *GitHubClient) FindUserApproval(ghUser string) (*CurrentApproval, error
 	return &CurrentApproval{review.User.GetLogin(), review.GetID(), nil, review.GetCommitID()}, nil
 }
 
-func (gh *GitHubClient) GetCurrentReviewerApprovals() ([]*CurrentApproval, error) {
+func (gh *Client) GetCurrentReviewerApprovals() ([]*CurrentApproval, error) {
 	if gh.PR == nil {
 		return nil, &NoPRError{}
 	}
@@ -177,7 +192,7 @@ func currentReviewerApprovalsFromReviews(approvals []*github.PullRequestReview, 
 	return filteredApprovals
 }
 
-func (gh *GitHubClient) GetAlreadyReviewed() ([]string, error) {
+func (gh *Client) GetAlreadyReviewed() ([]string, error) {
 	if gh.PR == nil {
 		return nil, &NoPRError{}
 	}
@@ -199,7 +214,7 @@ func reviewerAlreadyReviewed(reviews []*github.PullRequestReview, userReviewerMa
 	return reviewsReviewers
 }
 
-func (gh *GitHubClient) GetCurrentlyRequested() ([]string, error) {
+func (gh *Client) GetCurrentlyRequested() ([]string, error) {
 	if gh.PR == nil {
 		return nil, &NoPRError{}
 	}
@@ -210,10 +225,10 @@ func (gh *GitHubClient) GetCurrentlyRequested() ([]string, error) {
 }
 
 func currentlyRequested(PR *github.PullRequest, owner string, userReviewerMap ghUserReviewerMap) []string {
-	requestedUsers := Map(PR.RequestedReviewers, func(user *github.User) string {
+	requestedUsers := f.Map(PR.RequestedReviewers, func(user *github.User) string {
 		return user.GetLogin()
 	})
-	requestedTeams := Map(PR.RequestedTeams, func(team *github.Team) string {
+	requestedTeams := f.Map(PR.RequestedTeams, func(team *github.Team) string {
 		return fmt.Sprintf("%s/%s", owner, team.GetSlug())
 	})
 	requested := slices.Concat(requestedUsers, requestedTeams)
@@ -223,10 +238,10 @@ func currentlyRequested(PR *github.PullRequest, owner string, userReviewerMap gh
 			reviewers = append(reviewers, reviewer...)
 		}
 	}
-	return RemoveDuplicates(reviewers)
+	return f.RemoveDuplicates(reviewers)
 }
 
-func (gh *GitHubClient) DismissStaleReviews(staleApprovals []*CurrentApproval) error {
+func (gh *Client) DismissStaleReviews(staleApprovals []*CurrentApproval) error {
 	if gh.PR == nil {
 		return &NoPRError{}
 	}
@@ -242,7 +257,7 @@ func (gh *GitHubClient) DismissStaleReviews(staleApprovals []*CurrentApproval) e
 	return nil
 }
 
-func (gh *GitHubClient) RequestReviewers(reviewers []string) error {
+func (gh *Client) RequestReviewers(reviewers []string) error {
 	if gh.PR == nil {
 		return &NoPRError{}
 	}
@@ -271,7 +286,7 @@ func splitReviewers(reviewers []string) ([]string, []string) {
 	return indvidualReviewers, teamReviewers
 }
 
-func (gh *GitHubClient) ApprovePR() error {
+func (gh *Client) ApprovePR() error {
 	if gh.PR == nil {
 		return &NoPRError{}
 	}
@@ -284,7 +299,7 @@ func (gh *GitHubClient) ApprovePR() error {
 	return err
 }
 
-func (gh *GitHubClient) InitComments() error {
+func (gh *Client) InitComments() error {
 	if gh.PR == nil {
 		return &NoPRError{}
 	}
@@ -304,7 +319,7 @@ func (gh *GitHubClient) InitComments() error {
 	return nil
 }
 
-func (gh *GitHubClient) AddComment(comment string) error {
+func (gh *Client) AddComment(comment string) error {
 	if gh.PR == nil {
 		return &NoPRError{}
 	}
@@ -316,13 +331,13 @@ func (gh *GitHubClient) AddComment(comment string) error {
 	return err
 }
 
-func (gh *GitHubClient) IsInComments(comment string, since *time.Time) (bool, error) {
+func (gh *Client) IsInComments(comment string, since *time.Time) (bool, error) {
 	if gh.PR == nil {
 		return false, &NoPRError{}
 	}
 	if gh.comments == nil {
 		if err := gh.InitComments(); err != nil {
-			fmt.Fprintf(WarningBuffer, "WARNING: Error initializing comments: %v\n", err)
+			fmt.Fprintf(gh.warningBuffer, "WARNING: Error initializing comments: %v\n", err)
 		}
 	}
 	for _, c := range gh.comments {
@@ -336,13 +351,13 @@ func (gh *GitHubClient) IsInComments(comment string, since *time.Time) (bool, er
 	return false, nil
 }
 
-func (gh *GitHubClient) IsSubstringInComments(substring string, since *time.Time) (bool, error) {
+func (gh *Client) IsSubstringInComments(substring string, since *time.Time) (bool, error) {
 	if gh.PR == nil {
 		return false, &NoPRError{}
 	}
 	if gh.comments == nil {
 		if err := gh.InitComments(); err != nil {
-			fmt.Fprintf(WarningBuffer, "WARNING: Error initializing comments: %v\n", err)
+			fmt.Fprintf(gh.warningBuffer, "WARNING: Error initializing comments: %v\n", err)
 		}
 	}
 	for _, c := range gh.comments {
@@ -354,6 +369,13 @@ func (gh *GitHubClient) IsSubstringInComments(substring string, since *time.Time
 		}
 	}
 	return false, nil
+}
+
+// Apply approver satisfaction to the owners map, and return the approvals which should be invalidated
+func (gh *Client) CheckApprovals(fileReviewerMap map[string][]string, approvals []*CurrentApproval, originalDiff diff.Diff) (approvers []string, staleApprovals []*CurrentApproval) {
+	appovalsWithDiff, badApprovals := getApprovalDiffs(approvals, originalDiff, gh.warningBuffer, gh.infoBuffer)
+	approvers, staleApprovals = checkStale(fileReviewerMap, appovalsWithDiff)
+	return approvers, append(badApprovals, staleApprovals...)
 }
 
 type ghUserReviewerMap map[string][]string

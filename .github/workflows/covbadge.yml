@@ -22,7 +22,7 @@ jobs:
       run: go install github.com/AlexBeauchemin/gobadge@v0.3.0
 
     - name: 'Run gobadge'
-      run: ./covbadge.sh
+      run: ./scripts/covbadge.sh
 
     - name: 'Fail if not updated'
       run: git diff -U0 --exit-code

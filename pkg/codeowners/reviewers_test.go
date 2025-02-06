@@ -1,9 +1,11 @@
-package owners
+package codeowners
 
 import (
 	"fmt"
 	"sort"
 	"testing"
+
+	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 func TestToReviewers(t *testing.T) {
@@ -30,7 +32,7 @@ func TestToReviewers(t *testing.T) {
 		if r.Approved {
 			t.Errorf("Case %d: ToReviewers should always initialize not Approved", i)
 		}
-		if !SlicesItemsMatch(r.Names, tc.output) {
+		if !f.SlicesItemsMatch(r.Names, tc.output) {
 			t.Error(tc.failMessage)
 		}
 		if tc.checkExisting && r != existing {
@@ -74,20 +76,20 @@ func TestFileOwners(t *testing.T) {
 	fo.requiredReviewers = append(fo.requiredReviewers, rgMan.ToReviewerGroup("@a", "@b"), rgMan.ToReviewerGroup("@c"))
 	fo.optionalReviewers = append(fo.optionalReviewers, rgMan.ToReviewerGroup("@d"))
 
-	if !SlicesItemsMatch(fo.RequiredNames(), []string{"@a", "@b", "@c"}) {
+	if !f.SlicesItemsMatch(fo.RequiredNames(), []string{"@a", "@b", "@c"}) {
 		t.Error("RequiredNames should return all required reviewers")
 	}
 
-	if !SlicesItemsMatch(fo.OptionalNames(), []string{"@d"}) {
+	if !f.SlicesItemsMatch(fo.OptionalNames(), []string{"@d"}) {
 		t.Error("OptionalNames should return the names of optional reviewers")
 	}
 
 	fo.requiredReviewers[0].Approved = true
-	if !SlicesItemsMatch(fo.RequiredNames(), []string{"@c"}) {
+	if !f.SlicesItemsMatch(fo.RequiredNames(), []string{"@c"}) {
 		t.Error("RequiredNames should exclude reviewers who have already approved")
 	}
 	fo.optionalReviewers[0].Approved = true
-	if !SlicesItemsMatch(fo.OptionalNames(), []string{"@d"}) {
+	if !f.SlicesItemsMatch(fo.OptionalNames(), []string{"@d"}) {
 		t.Error("OptionalNames should not worry about reviewers who have already approved")
 	}
 }
@@ -113,7 +115,7 @@ func TestToCommentString(t *testing.T) {
 func TestReviewerGroupsFlatten(t *testing.T) {
 	rgMan := NewReviewerGroupMemo()
 	rgs := ReviewerGroups{rgMan.ToReviewerGroup("@a", "@c"), rgMan.ToReviewerGroup("@b"), rgMan.ToReviewerGroup("@b", "@c")}
-	if !SlicesItemsMatch(rgs.Flatten(), []string{"@a", "@b", "@c"}) {
+	if !f.SlicesItemsMatch(rgs.Flatten(), []string{"@a", "@b", "@c"}) {
 		t.Error("Flatten should return a list of sorted reviewer names with duplicates removed")
 	}
 }
@@ -123,7 +125,7 @@ func TestReviewerGroupsFilter(t *testing.T) {
 	rgs := ReviewerGroups{rgMan.ToReviewerGroup("@a", "@c"), rgMan.ToReviewerGroup("@b")}
 	rgs = rgs.FilterOut("@a")
 	// Filtering "@a" should remove the whole ReviewerGroup from the list
-	if !SlicesItemsMatch(rgs.Flatten(), []string{"@b"}) {
+	if !f.SlicesItemsMatch(rgs.Flatten(), []string{"@b"}) {
 		t.Error("Filter should remove ReviewerGroup[s] with names in the filter list")
 	}
 	rgMan = NewReviewerGroupMemo()
@@ -131,7 +133,7 @@ func TestReviewerGroupsFilter(t *testing.T) {
 	rgs = rgs.FilterOut("@a", "@b")
 
 	// Filtering "@a" should remove the whole ReviewerGroup from the list
-	if !SlicesItemsMatch(rgs.Flatten(), []string{"@c", "@d"}) {
+	if !f.SlicesItemsMatch(rgs.Flatten(), []string{"@c", "@d"}) {
 		t.Error("Filter should work with multiple names")
 	}
 }

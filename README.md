@@ -4,8 +4,9 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus?1)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-63.6%25-yellow)
+![Coverage](https://img.shields.io/badge/Coverage-59.6%25-yellow)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
 This tool is meant to be an alternative to [GitHub CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners), overcoming limitations with the `CODEOWNERS` spec and GitHub code owners feature.
 
@@ -13,12 +14,12 @@ This tool is meant to be an alternative to [GitHub CODEOWNERS](https://docs.gith
 
 These are features missing from GitHub code owners that are supported by Codeowners Plus
 
-- Smart dismissal of stale reviews (only dismiss review when owned files change, rather than any reviewable push)
-- Supports multiple owners of files (`AND` ownership rules)
-  - Github CODEOWNERS supports only `OR` ownership rules, in contrast
-- Directory-level code ownership files to assign fine-grained code ownership
-- Supports optional reviewers (cc users/teams for non-blocking reviews)
-- Advanced global configuration (see [Advanced Configuration](#advanced-configuration))
+* Smart dismissal of stale reviews (only dismiss review when owned files change, rather than any reviewable push)
+* Supports multiple owners of files (`AND` ownership rules)
+  * Github CODEOWNERS supports only `OR` ownership rules, in contrast
+* Directory-level code ownership files to assign fine-grained code ownership
+* Supports optional reviewers (cc users/teams for non-blocking reviews)
+* Advanced global configuration (see [Advanced Configuration](#advanced-configuration))
 
 ### Caveats & Disclaimer
 
@@ -157,12 +158,12 @@ However, the parser will replace trailing `/` with trailing `/**` to indirectly 
 
 This is the priority of file owners in order from highest priority to lowest priority:
 
-- specific file owner
-- wildcard file owner
-- globstar file owner
-- globstar file owner from parent dirs (recursive)
-- fallback owner for dir
-- fallback owner from parent dir (recursive)
+* specific file owner
+* wildcard file owner
+* globstar file owner
+* globstar file owner from parent dirs (recursive)
+* fallback owner for dir
+* fallback owner from parent dir (recursive)
 
 This means if there is overlap in rules, the last declared will be the owner.  This is similar to GitHub `CODEOWNERS`, except with type-of-rule priority.
 
@@ -249,16 +250,16 @@ A CLI tool is available which provides some utilities for working with `.codeown
 
 You can download the built tools via [releases](https://github.com/multimediallc/codeowners-plus/releases) or build from source:
 ```
-go build -o codeowners-cli ./cmd/cli/main.go
+go build -o codeowners-cli ./tools/cli/main.go
 ```
 
 Available commands are:
 
-- `unowned` to check for unowned files
-- `owner` to check who owns a specific file
-- `verify` to check for typos in a `.codeowners` file
+* `unowned` to check for unowned files
+* `owner` to check who owns a specific file
+* `verify` to check for typos in a `.codeowners` file
 
 ## Future Features
 
-- Inline ownership comments for having owners for specific functions, classes, etc.
+* Inline ownership comments for having owners for specific functions, classes, etc.
 

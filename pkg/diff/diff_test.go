@@ -1,11 +1,11 @@
-package owners
+package diff
 
 import (
 	"io"
 	"os"
 	"testing"
 
-	"github.com/sourcegraph/go-diff/diff"
+	godiff "github.com/sourcegraph/go-diff/diff"
 )
 
 func readFile(path string) ([]byte, error) {
@@ -20,11 +20,11 @@ func readFile(path string) ([]byte, error) {
 
 func TestDiff(t *testing.T) {
 	// Test case 1
-	diffChangesOutput, err := readFile("../test_project/.diff_changes")
+	diffChangesOutput, err := readFile("../../test_project/.diff_changes")
 	if err != nil {
 		t.Errorf("Error reading diff changes file: %v", err)
 	}
-	parsedDiff, err := diff.ParseMultiFileDiff(diffChangesOutput)
+	parsedDiff, err := godiff.ParseMultiFileDiff(diffChangesOutput)
 	if err != nil {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
@@ -71,11 +71,11 @@ func TestDiff(t *testing.T) {
 	}
 
 	// Test case 2
-	diffChangesOutput, err = readFile("../test_project/.diff_nochanges")
+	diffChangesOutput, err = readFile("../../test_project/.diff_nochanges")
 	if err != nil {
 		t.Errorf("Error reading diff changes file: %v", err)
 	}
-	parsedDiff, err = diff.ParseMultiFileDiff(diffChangesOutput)
+	parsedDiff, err = godiff.ParseMultiFileDiff(diffChangesOutput)
 	if err != nil {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
@@ -90,25 +90,25 @@ func TestDiff(t *testing.T) {
 }
 
 func TestDiffOfDiffs(t *testing.T) {
-	newDiffData, err := readFile("../test_project/.diff_changes")
+	newDiffData, err := readFile("../../test_project/.diff_changes")
 	if err != nil {
 		t.Errorf("Error reading diff changes file: %v", err)
 	}
-	newDiff, err := diff.ParseMultiFileDiff(newDiffData)
+	newDiff, err := godiff.ParseMultiFileDiff(newDiffData)
 	if err != nil {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
 
-	oldDiffData, err := readFile("../test_project/.diff_changes_old")
+	oldDiffData, err := readFile("../../test_project/.diff_changes_old")
 	if err != nil {
 		t.Errorf("Error reading diff changes file: %v", err)
 	}
-	oldDiff, err := diff.ParseMultiFileDiff(oldDiffData)
+	oldDiff, err := godiff.ParseMultiFileDiff(oldDiffData)
 	if err != nil {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
 
-	diffOutput, err := getChangesSince(changesSinceContext{newDiff, oldDiff})
+	diffOutput, err := changesSince(changesSinceContext{newDiff, oldDiff})
 	if err != nil {
 		t.Errorf("Error getting diff of diffs: %v", err)
 	}
