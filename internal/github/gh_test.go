@@ -604,8 +604,8 @@ func TestInitReviewsSuccess(t *testing.T) {
 
 	gh.PR = &github.PullRequest{Number: github.Int(123)}
 	mockReviews := []*github.PullRequestReview{
-		{ID: github.Int64(1)},
-		{ID: github.Int64(2)},
+		{User: &github.User{Login: github.String("test")}, ID: github.Int64(1)},
+		{User: &github.User{Login: github.String("test")}, ID: github.Int64(2)},
 	}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
