@@ -142,12 +142,12 @@ func TestGetOwnersNoFallback(t *testing.T) {
 }
 
 func TestNewCodeOwners(t *testing.T) {
-	files := []string{
-		"a.py",
-		"frontend/b.ts",
-		"frontend/inner/a.test.js",
+	files := []DiffFile{
+		{FileName: "a.py"},
+		{FileName: "frontend/b.ts"},
+		{FileName: "frontend/inner/a.test.js"},
 	}
-	_, err := NewCodeOwners("../../test_project", files, io.Discard)
+	_, err := New("../../test_project", files, io.Discard)
 	if err != nil {
 		t.Errorf("NewCodeOwners error: %v", err)
 	}

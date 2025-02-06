@@ -155,7 +155,7 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 		close(errChan)
 	}()
 
-	files := make([]string, 0)
+	files := make([]codeowners.DiffFile, 0)
 	for f := range fileListQueue {
 		file := stripRoot(repo, f.Location)
 		if depth != 0 && depthCheck(file, target, depth) {
@@ -164,14 +164,14 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 		if target != "" && !strings.HasPrefix(file, target) {
 			continue
 		}
-		files = append(files, file)
+		files = append(files, codeowners.DiffFile{FileName: file})
 	}
 
 	if err := <-errChan; err != nil {
 		return fmt.Errorf("Error walking repo: %s", err)
 	}
 
-	ownersMap, err := codeowners.NewCodeOwners(repo, files, io.Discard)
+	ownersMap, err := codeowners.New(repo, files, io.Discard)
 	if err != nil {
 		return fmt.Errorf("Error reading codeowners config: %s", err)
 	}
@@ -204,7 +204,7 @@ func fileOwner(repo string, target string) error {
 		return fmt.Errorf("Target is not a file: %s", target)
 	}
 
-	ownersMap, err := codeowners.NewCodeOwners(repo, []string{target}, io.Discard)
+	ownersMap, err := codeowners.New(repo, []codeowners.DiffFile{{FileName: target}}, io.Discard)
 	if err != nil {
 		return fmt.Errorf("Error reading codeowners config: %s", err)
 	}

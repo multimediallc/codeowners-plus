@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v63/github"
-	"github.com/multimediallc/codeowners-plus/internal/diff"
+	"github.com/multimediallc/codeowners-plus/internal/git"
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
@@ -372,7 +372,11 @@ func (gh *Client) IsSubstringInComments(substring string, since *time.Time) (boo
 }
 
 // Apply approver satisfaction to the owners map, and return the approvals which should be invalidated
-func (gh *Client) CheckApprovals(fileReviewerMap map[string][]string, approvals []*CurrentApproval, originalDiff diff.Diff) (approvers []string, staleApprovals []*CurrentApproval) {
+func (gh *Client) CheckApprovals(
+	fileReviewerMap map[string][]string,
+	approvals []*CurrentApproval,
+	originalDiff git.Diff,
+) (approvers []string, staleApprovals []*CurrentApproval) {
 	appovalsWithDiff, badApprovals := getApprovalDiffs(approvals, originalDiff, gh.warningBuffer, gh.infoBuffer)
 	approvers, staleApprovals = checkStale(fileReviewerMap, appovalsWithDiff)
 	return approvers, append(badApprovals, staleApprovals...)

@@ -5,24 +5,25 @@ import (
 
 	"io"
 
-	"github.com/multimediallc/codeowners-plus/internal/diff"
+	"github.com/multimediallc/codeowners-plus/internal/git"
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 )
 
 type fakeDiff struct{}
 
-func (gd *fakeDiff) AllChanges() []diff.DiffFile {
-	return []diff.DiffFile{}
+func (gd *fakeDiff) AllChanges() []codeowners.DiffFile {
+	return []codeowners.DiffFile{}
 }
 
-func (gd *fakeDiff) ChangesSince(ref string) ([]diff.DiffFile, error) {
+func (gd *fakeDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 	if ref == "bad" {
 		return nil, &NoPRError{}
 	}
-	return []diff.DiffFile{}, nil
+	return []codeowners.DiffFile{}, nil
 }
 
-func (gd *fakeDiff) Context() diff.DiffContext {
-	return diff.DiffContext{}
+func (gd *fakeDiff) Context() git.DiffContext {
+	return git.DiffContext{}
 }
 
 func TestGetApprovalDiffs(t *testing.T) {

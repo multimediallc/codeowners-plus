@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/multimediallc/codeowners-plus/internal/config"
-	"github.com/multimediallc/codeowners-plus/internal/diff"
+	"github.com/multimediallc/codeowners-plus/internal/git"
 	"github.com/multimediallc/codeowners-plus/internal/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
@@ -109,7 +109,7 @@ func main() {
 		printWarning("Error reading codeowners.toml - using default config\n")
 	}
 
-	diffContext := diff.DiffContext{
+	diffContext := git.DiffContext{
 		Base:       client.PR.Base.GetSHA(),
 		Head:       client.PR.Head.GetSHA(),
 		Dir:        *repo_dir,
@@ -118,14 +118,13 @@ func main() {
 
 	// Get the diff of the PR
 	printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
-	gitDiff, err := diff.NewGitDiff(diffContext)
+	gitDiff, err := git.NewDiff(diffContext)
 	if err != nil {
 		errorAndExit(true, "NewGitDiff Error: %v\n", err)
 	}
-	changedFiles := f.Map(gitDiff.AllChanges(), func(s diff.DiffFile) string { return s.FileName })
 
 	// Based on the diff, get the codeowner teams by traversing the directory tree upwards and map against Github users/teams
-	codeOwners, err := codeowners.NewCodeOwners(*repo_dir, changedFiles, WarningBuffer)
+	codeOwners, err := codeowners.New(*repo_dir, gitDiff.AllChanges(), WarningBuffer)
 	if err != nil {
 		errorAndExit(true, "NewCodeOwners Error: %v\n", err)
 	}

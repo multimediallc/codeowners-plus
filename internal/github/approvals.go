@@ -5,25 +5,31 @@ import (
 	"io"
 	"slices"
 
-	"github.com/multimediallc/codeowners-plus/internal/diff"
+	"github.com/multimediallc/codeowners-plus/internal/git"
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 type approvalWithDiff struct {
 	inner *CurrentApproval
-	Diff  []diff.DiffFile
+	Diff  []codeowners.DiffFile
 }
 
 type previousDiffRes struct {
-	diff []diff.DiffFile
+	diff []codeowners.DiffFile
 	err  error
 }
 
-func getApprovalDiffs(approvals []*CurrentApproval, originalDiff diff.Diff, warningWriter io.Writer, infoWriter io.Writer) ([]*approvalWithDiff, []*CurrentApproval) {
+func getApprovalDiffs(
+	approvals []*CurrentApproval,
+	originalDiff git.Diff,
+	warningWriter io.Writer,
+	infoWriter io.Writer,
+) ([]*approvalWithDiff, []*CurrentApproval) {
 	badApprovals := make([]*CurrentApproval, 0)
 	seenDiffs := make(map[string]previousDiffRes)
 	approvalsWithDiff := f.Map(approvals, func(approval *CurrentApproval) *approvalWithDiff {
-		var diffFiles []diff.DiffFile
+		var diffFiles []codeowners.DiffFile
 		var err error
 
 		if seenDiff, ok := seenDiffs[approval.CommitID]; ok {
@@ -44,7 +50,10 @@ func getApprovalDiffs(approvals []*CurrentApproval, originalDiff diff.Diff, warn
 	return approvalsWithDiff, badApprovals
 }
 
-func checkStale(fileReviewerMap map[string][]string, approvals []*approvalWithDiff) ([]string, []*CurrentApproval) {
+func checkStale(
+	fileReviewerMap map[string][]string,
+	approvals []*approvalWithDiff,
+) ([]string, []*CurrentApproval) {
 	staleApprovals := make([]*CurrentApproval, 0)
 	approvers := make([]string, 0)
 	for _, approval := range approvals {

@@ -1,11 +1,12 @@
-package diff
+package git
 
 import (
 	"io"
 	"os"
 	"testing"
 
-	godiff "github.com/sourcegraph/go-diff/diff"
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
+	"github.com/sourcegraph/go-diff/diff"
 )
 
 func readFile(path string) ([]byte, error) {
@@ -24,7 +25,7 @@ func TestDiff(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error reading diff changes file: %v", err)
 	}
-	parsedDiff, err := godiff.ParseMultiFileDiff(diffChangesOutput)
+	parsedDiff, err := diff.ParseMultiFileDiff(diffChangesOutput)
 	if err != nil {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
@@ -33,17 +34,17 @@ func TestDiff(t *testing.T) {
 		t.Errorf("Error getting diff files: %v", err)
 	}
 
-	expectedDiffOutput := []DiffFile{
-		{FileName: "a.py", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "models.py", Hunks: []HunkRange{{Start: 1, End: 1}, {Start: 3, End: 3}}},
-		{FileName: "test_a.py", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "frontend/a.ts", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "frontend/b.ts", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "frontend/a.test.ts", Hunks: []HunkRange{{Start: 1, End: 4}}},
-		{FileName: "frontend/inner/a.js", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "frontend/inner/b.ts", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "frontend/inner/a.test.js", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "backend/test.txt", Hunks: []HunkRange{{Start: 1, End: 1}}},
+	expectedDiffOutput := []codeowners.DiffFile{
+		{FileName: "a.py", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "models.py", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}, {Start: 3, End: 3}}},
+		{FileName: "test_a.py", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "frontend/a.ts", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "frontend/b.ts", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "frontend/a.test.ts", Hunks: []codeowners.HunkRange{{Start: 1, End: 4}}},
+		{FileName: "frontend/inner/a.js", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "frontend/inner/b.ts", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "frontend/inner/a.test.js", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "backend/test.txt", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
 	}
 
 	if len(diffOutput) != len(expectedDiffOutput) {
@@ -75,7 +76,7 @@ func TestDiff(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error reading diff changes file: %v", err)
 	}
-	parsedDiff, err = godiff.ParseMultiFileDiff(diffChangesOutput)
+	parsedDiff, err = diff.ParseMultiFileDiff(diffChangesOutput)
 	if err != nil {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestDiffOfDiffs(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error reading diff changes file: %v", err)
 	}
-	newDiff, err := godiff.ParseMultiFileDiff(newDiffData)
+	newDiff, err := diff.ParseMultiFileDiff(newDiffData)
 	if err != nil {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestDiffOfDiffs(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error reading diff changes file: %v", err)
 	}
-	oldDiff, err := godiff.ParseMultiFileDiff(oldDiffData)
+	oldDiff, err := diff.ParseMultiFileDiff(oldDiffData)
 	if err != nil {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
@@ -113,11 +114,11 @@ func TestDiffOfDiffs(t *testing.T) {
 		t.Errorf("Error getting diff of diffs: %v", err)
 	}
 
-	expectedDiffOutput := []DiffFile{
-		{FileName: "a.py", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "models.py", Hunks: []HunkRange{{Start: 1, End: 1}}}, // 1 of 2 hunks not in old
-		{FileName: "frontend/inner/a.test.js", Hunks: []HunkRange{{Start: 1, End: 1}}},
-		{FileName: "backend/test.txt", Hunks: []HunkRange{{Start: 1, End: 1}}},
+	expectedDiffOutput := []codeowners.DiffFile{
+		{FileName: "a.py", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "models.py", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}}, // 1 of 2 hunks not in old
+		{FileName: "frontend/inner/a.test.js", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
+		{FileName: "backend/test.txt", Hunks: []codeowners.HunkRange{{Start: 1, End: 1}}},
 	}
 
 	if len(diffOutput) != len(expectedDiffOutput) {

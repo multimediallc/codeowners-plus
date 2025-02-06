@@ -28,22 +28,19 @@ type CodeOwners interface {
 	// UnownedFiles returns a list of files in the diff which are not
 	UnownedFiles() []string
 
-	// ApplyApprovals takes a set of pull request review approvals and the original diff to check
-	// if those approvals are stale given the changes since the review.  An approval is stale if
-	// there have been changes in files owned by the approving reviewer since their review.
-	//
-	// For any approvals which are not stale, the reviewer groups the reviewer belong to are marked as approved.
-	// Returns the list of approvals which are stale given the changes since the review.
+	// ApplyApprovals marks the given approvers as satisfied
 	ApplyApprovals(approvers []string)
 }
 
-// NewCodeOwners creates a new CodeOwners object from a root path and a list of diff files
-func NewCodeOwners(root string, files []string, warningWriter io.Writer) (CodeOwners, error) {
+// New creates a new CodeOwners object from a root path and a list of diff files
+func New(root string, files []DiffFile, warningWriter io.Writer) (CodeOwners, error) {
 	reviewerGroupManager := NewReviewerGroupMemo()
 	tree := initOwnerTreeNode(root, root, reviewerGroupManager, nil, warningWriter)
 	tree.warningWriter = warningWriter
-	testMap := tree.BuildFromFiles(files, reviewerGroupManager)
-	ownersMap, err := testMap.getOwners(files)
+	// TODO - support inline ownership rules (issue #3)
+	fileNames := f.Map(files, func(file DiffFile) string { return file.FileName })
+	testMap := tree.BuildFromFiles(fileNames, reviewerGroupManager)
+	ownersMap, err := testMap.getOwners(fileNames)
 	return ownersMap, err
 }
 
@@ -126,7 +123,13 @@ type ownerTreeNode struct {
 	warningWriter           io.Writer
 }
 
-func initOwnerTreeNode(name string, path string, reviewerGroupManager ReviewerGroupManager, parent *ownerTreeNode, warningWriter io.Writer) *ownerTreeNode {
+func initOwnerTreeNode(
+	name string,
+	path string,
+	reviewerGroupManager ReviewerGroupManager,
+	parent *ownerTreeNode,
+	warningWriter io.Writer,
+) *ownerTreeNode {
 	rules := Read(path, reviewerGroupManager, warningWriter)
 	fallback := rules.Fallback
 	ownerTests := rules.OwnerTests
@@ -150,7 +153,10 @@ func initOwnerTreeNode(name string, path string, reviewerGroupManager ReviewerGr
 	}
 }
 
-func (tree *ownerTreeNode) BuildFromFiles(files []string, reviewerGroupManager ReviewerGroupManager) ownerTestFileMap {
+func (tree *ownerTreeNode) BuildFromFiles(
+	files []string,
+	reviewerGroupManager ReviewerGroupManager,
+) ownerTestFileMap {
 	fileMap := make(ownerTestFileMap, len(files))
 	for _, file := range files {
 		file := file
