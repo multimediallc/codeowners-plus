@@ -6,6 +6,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY main.go .
+COPY pkg ./pkg/
 COPY internal ./internal/
 
 # Statically comple with CGO enabled will be needed if we integrate go-tree-sitter
