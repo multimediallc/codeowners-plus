@@ -117,6 +117,9 @@ func (gh *Client) InitReviews() error {
 	if err != nil {
 		return err
 	}
+	allReviews = f.Filtered(allReviews, func(review *github.PullRequestReview) bool {
+		return review.User.GetLogin() != gh.PR.User.GetLogin()
+	})
 	gh.reviews = allReviews
 	return nil
 }
@@ -205,9 +208,6 @@ func (gh *Client) GetAlreadyReviewed() ([]string, error) {
 func reviewerAlreadyReviewed(reviews []*github.PullRequestReview, userReviewerMap ghUserReviewerMap) []string {
 	reviewsReviewers := make([]string, 0, len(reviews))
 	for _, review := range reviews {
-		if review.GetState() == "COMMENTED" {
-			continue
-		}
 		reviewingUser := review.GetUser().GetLogin()
 		if reviewers, ok := userReviewerMap[reviewingUser]; ok {
 			reviewsReviewers = append(reviewsReviewers, reviewers...)
