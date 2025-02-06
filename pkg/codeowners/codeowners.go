@@ -75,9 +75,13 @@ func (om *ownersMap) FileRequired() map[string]ReviewerGroups {
 }
 
 func (om *ownersMap) FileOptional() map[string]ReviewerGroups {
-	return f.MapMap(om.fileToOwner, func(fileOwner fileOwners) ReviewerGroups {
-		return fileOwner.OptionalReviewers()
-	})
+	return f.FilteredMap(
+		f.MapMap(om.fileToOwner, func(fileOwner fileOwners) ReviewerGroups {
+			return fileOwner.OptionalReviewers()
+		}),
+		func(reviewers ReviewerGroups) bool {
+			return len(reviewers) > 0
+		})
 }
 
 func (om *ownersMap) AllRequired() ReviewerGroups {

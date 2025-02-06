@@ -219,6 +219,7 @@ func main() {
 	if err != nil {
 		errorAndExit(true, "GetAlreadyReviewed Error: %v\n", err)
 	}
+	printDebug("Already Reviewed Owners: %s\n", previousReviewers)
 
 	// Request reviews from the required owners not already requested
 	filteredOwners := unapprovedOwners.FilterOut(currentlyRequestedOwners...)
