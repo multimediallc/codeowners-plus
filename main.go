@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -9,7 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/multimediallc/codeowners-plus/internal"
+	"github.com/multimediallc/codeowners-plus/internal/config"
+	"github.com/multimediallc/codeowners-plus/internal/git"
+	"github.com/multimediallc/codeowners-plus/internal/github"
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
+	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 func getEnv(key, fallback string) string {
@@ -24,6 +29,11 @@ func ignoreError[V any, E error](res V, _ E) V {
 }
 
 var (
+	WarningBuffer = bytes.NewBuffer([]byte{})
+	InfoBuffer    = bytes.NewBuffer([]byte{})
+)
+
+var (
 	gh_token = flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token")
 	repo_dir = flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo")
 	pr       = flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number")
@@ -33,12 +43,12 @@ var (
 
 // shouldFail should always be true for errors that are not recoverable
 func errorAndExit(shouldFail bool, format string, args ...interface{}) {
-	_, err := owners.WarningBuffer.WriteTo(os.Stderr)
+	_, err := WarningBuffer.WriteTo(os.Stderr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing warning buffer: %v\n", err)
 	}
 	if *verbose {
-		_, err := owners.InfoBuffer.WriteTo(os.Stderr)
+		_, err := InfoBuffer.WriteTo(os.Stderr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing info buffer: %v\n", err)
 		}
@@ -53,12 +63,12 @@ func errorAndExit(shouldFail bool, format string, args ...interface{}) {
 
 func printDebug(format string, args ...interface{}) {
 	if *verbose {
-		fmt.Fprintf(owners.InfoBuffer, format, args...)
+		fmt.Fprintf(InfoBuffer, format, args...)
 	}
 }
 
 func printWarning(format string, args ...interface{}) {
-	fmt.Fprintf(owners.WarningBuffer, format, args...)
+	fmt.Fprintf(WarningBuffer, format, args...)
 }
 
 func init() {
@@ -86,7 +96,7 @@ func main() {
 	owner := repoSplit[0]
 	repo := repoSplit[1]
 
-	client := owners.NewGithubClient(owner, repo, *gh_token)
+	client := gh.NewClient(owner, repo, *gh_token)
 
 	err := client.InitPR(*pr)
 	if err != nil {
@@ -94,12 +104,12 @@ func main() {
 	}
 	printDebug("PR: %d\n", client.PR.GetNumber())
 
-	conf, err := owners.ReadCodeownersConfig(*repo_dir)
+	conf, err := owners.ReadConfig(*repo_dir)
 	if err != nil {
 		printWarning("Error reading codeowners.toml - using default config\n")
 	}
 
-	diffContext := owners.DiffContext{
+	diffContext := git.DiffContext{
 		Base:       client.PR.Base.GetSHA(),
 		Head:       client.PR.Head.GetSHA(),
 		Dir:        *repo_dir,
@@ -107,13 +117,14 @@ func main() {
 	}
 
 	// Get the diff of the PR
-	diff, err := owners.NewGitDiff(diffContext)
+	printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
+	gitDiff, err := git.NewDiff(diffContext)
 	if err != nil {
 		errorAndExit(true, "NewGitDiff Error: %v\n", err)
 	}
 
 	// Based on the diff, get the codeowner teams by traversing the directory tree upwards and map against Github users/teams
-	codeOwners, err := owners.NewCodeOwners(*repo_dir, diff.GetAllChanges())
+	codeOwners, err := codeowners.New(*repo_dir, gitDiff.AllChanges(), WarningBuffer)
 	if err != nil {
 		errorAndExit(true, "NewCodeOwners Error: %v\n", err)
 	}
@@ -126,21 +137,26 @@ func main() {
 
 	// Print the file owners
 	if *verbose {
-		fileReviewers := codeOwners.FileReviewers()
+		fileRequired := codeOwners.FileRequired()
 		printDebug("File Reviewers:\n")
-		for file, reviewers := range fileReviewers {
+		for file, reviewers := range fileRequired {
+			printDebug("- %s: %+v\n", file, reviewers.Flatten())
+		}
+		fileOptional := codeOwners.FileOptional()
+		printDebug("File Optional:\n")
+		for file, reviewers := range fileOptional {
 			printDebug("- %s: %+v\n", file, reviewers.Flatten())
 		}
 	}
 
 	// Get all required owners - before filtering by approvals
-	allRequiredOwners := codeOwners.AllRequiredReviewers()
+	allRequiredOwners := codeOwners.AllRequired()
 	allRequiredOwnerNames := allRequiredOwners.Flatten()
 	printDebug("All Required Owners: %s\n", allRequiredOwnerNames)
 
 	// Get all optional reviewers - filter out required owners as its redundant
-	allOptionalReviewerNames := codeOwners.AllOptionalReviewers().Flatten()
-	allOptionalReviewerNames = owners.Filtered(allOptionalReviewerNames, func(name string) bool {
+	allOptionalReviewerNames := codeOwners.AllOptional().Flatten()
+	allOptionalReviewerNames = f.Filtered(allOptionalReviewerNames, func(name string) bool {
 		return !slices.Contains(allRequiredOwnerNames, name)
 	})
 	printDebug("All Optional Reviewers: %s\n", allOptionalReviewerNames)
@@ -157,7 +173,7 @@ func main() {
 	}
 	printDebug("Current Approvals: %+v\n", ghApprovals)
 
-	var tokenOwnerApproval *owners.CurrentApproval
+	var tokenOwnerApproval *gh.CurrentApproval
 	if conf.Enforcement.Approval {
 		// Get the token owner login
 		tokenOwner, err := client.GetTokenUser()
@@ -174,7 +190,9 @@ func main() {
 	}
 
 	// Mark reviewers as approved if there have been no changes in owned files since the approval. Otherwise, dismiss as stale.
-	approvalsToDismiss := codeOwners.ApplyApprovals(ghApprovals, diff)
+	fileReviewers := f.MapMap(codeOwners.FileRequired(), func(reviewers codeowners.ReviewerGroups) []string { return reviewers.Flatten() })
+	approvers, approvalsToDismiss := client.CheckApprovals(fileReviewers, ghApprovals, gitDiff)
+	codeOwners.ApplyApprovals(approvers)
 	if len(approvalsToDismiss) > 0 {
 		printDebug("Dismissing Stale Approvals: %+v\n", approvalsToDismiss)
 		err = client.DismissStaleReviews(approvalsToDismiss)
@@ -185,7 +203,7 @@ func main() {
 	validApprovalCount := len(ghApprovals) - len(approvalsToDismiss)
 
 	// Get all required owners - after filtering by approvals
-	unapprovedOwners := codeOwners.AllRequiredReviewers()
+	unapprovedOwners := codeOwners.AllRequired()
 	unapprovedOwnerNames := unapprovedOwners.Flatten()
 	printDebug("Remaining Required Owners: %s\n", unapprovedOwnerNames)
 
@@ -201,6 +219,7 @@ func main() {
 	if err != nil {
 		errorAndExit(true, "GetAlreadyReviewed Error: %v\n", err)
 	}
+	printDebug("Already Reviewed Owners: %s\n", previousReviewers)
 
 	// Request reviews from the required owners not already requested
 	filteredOwners := unapprovedOwners.FilterOut(currentlyRequestedOwners...)
@@ -216,7 +235,7 @@ func main() {
 
 	maxReviewsMet := false
 	if conf.MaxReviews != nil && *conf.MaxReviews > 0 {
-		if validApprovalCount >= *conf.MaxReviews && len(owners.Intersection(unapprovedOwners.Flatten(), conf.UnskippableReviewers)) == 0 {
+		if validApprovalCount >= *conf.MaxReviews && len(f.Intersection(unapprovedOwners.Flatten(), conf.UnskippableReviewers)) == 0 {
 			maxReviewsMet = true
 		}
 	}
@@ -243,7 +262,7 @@ func main() {
 	}
 	if len(allOptionalReviewerNames) > 0 {
 		// Add CC comment to the PR with the optional reviewers that have not already been mentioned in the PR comments
-		viewersToPing := owners.Filtered(allOptionalReviewerNames, func(name string) bool {
+		viewersToPing := f.Filtered(allOptionalReviewerNames, func(name string) bool {
 			found, err := client.IsSubstringInComments(name, nil)
 			if err != nil {
 				errorAndExit(true, "IsInComments Error: %v\n", err)
@@ -262,11 +281,11 @@ func main() {
 	// Exit if there are any unapproved codeowner teams
 	if len(unapprovedOwners) > 0 && !maxReviewsMet {
 		// Return failed status if any codeowner team has not approved the PR
-		unapprovedCommentStrings := owners.Map(unapprovedOwners, func(s *owners.ReviewerGroup) string {
+		unapprovedCommentStrings := f.Map(unapprovedOwners, func(s *codeowners.ReviewerGroup) string {
 			return s.ToCommentString()
 		})
 		if conf.Enforcement.Approval && tokenOwnerApproval != nil {
-			_ = client.DismissStaleReviews([]*owners.CurrentApproval{tokenOwnerApproval})
+			_ = client.DismissStaleReviews([]*gh.CurrentApproval{tokenOwnerApproval})
 		}
 		errorAndExit(
 			conf.Enforcement.FailCheck,
@@ -292,12 +311,12 @@ func main() {
 		}
 	}
 
-	_, err = owners.WarningBuffer.WriteTo(os.Stderr)
+	_, err = WarningBuffer.WriteTo(os.Stderr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing warning buffer: %v\n", err)
 	}
 	if *verbose {
-		_, err = owners.InfoBuffer.WriteTo(os.Stdout)
+		_, err = InfoBuffer.WriteTo(os.Stdout)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing info buffer: %v\n", err)
 		}

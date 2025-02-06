@@ -13,7 +13,7 @@ before:
 builds:
   # You can have multiple builds defined as a yaml list
   - id: "cli"
-    main: ./cmd/cli
+    main: ./tools/cli
     binary: codeowners-cli
     env:
       - CGO_ENABLED=0

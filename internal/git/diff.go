@@ -1,4 +1,4 @@
-package owners
+package git
 
 import (
 	"bufio"
@@ -9,21 +9,23 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/sourcegraph/go-diff/diff"
 )
 
 type Diff interface {
-	GetAllChanges() []DiffFile
-	GetChangesSince(ref string) ([]DiffFile, error)
+	AllChanges() []codeowners.DiffFile
+	ChangesSince(ref string) ([]codeowners.DiffFile, error)
+	Context() DiffContext
 }
 
 type GitDiff struct {
 	context DiffContext
 	diff    []*diff.FileDiff
-	files   []DiffFile
+	files   []codeowners.DiffFile
 }
 
-func NewGitDiff(context DiffContext) (Diff, error) {
+func NewDiff(context DiffContext) (Diff, error) {
 	gitDiff, err := getGitDiff(context)
 	if err != nil {
 		return nil, err
@@ -40,11 +42,11 @@ func NewGitDiff(context DiffContext) (Diff, error) {
 	}, nil
 }
 
-func (gd *GitDiff) GetAllChanges() []DiffFile {
+func (gd *GitDiff) AllChanges() []codeowners.DiffFile {
 	return gd.files
 }
 
-func (gd *GitDiff) GetChangesSince(ref string) ([]DiffFile, error) {
+func (gd *GitDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 	olderDiffContext := DiffContext{
 		Base:       gd.context.Base,
 		Head:       ref,
@@ -59,11 +61,15 @@ func (gd *GitDiff) GetChangesSince(ref string) ([]DiffFile, error) {
 		newerDiff: gd.diff,
 		olderDiff: olderDiff,
 	}
-	diffFiles, err := getChangesSince(changesContext)
+	diffFiles, err := changesSince(changesContext)
 	if err != nil {
 		return nil, err
 	}
 	return diffFiles, nil
+}
+
+func (gd *GitDiff) Context() DiffContext {
+	return gd.context
 }
 
 type DiffContext struct {
@@ -73,32 +79,22 @@ type DiffContext struct {
 	IgnoreDirs []string
 }
 
-type HunkRange struct {
-	Start int
-	End   int
-}
-
-type DiffFile struct {
-	FileName string
-	Hunks    []HunkRange
-}
-
 type changesSinceContext struct {
 	newerDiff []*diff.FileDiff
 	olderDiff []*diff.FileDiff
 }
 
 // Parse the diff output to get the file names and hunks
-func toDiffFiles(fileDiffs []*diff.FileDiff) ([]DiffFile, error) {
-	diffFiles := make([]DiffFile, 0, len(fileDiffs))
+func toDiffFiles(fileDiffs []*diff.FileDiff) ([]codeowners.DiffFile, error) {
+	diffFiles := make([]codeowners.DiffFile, 0, len(fileDiffs))
 
 	for _, d := range fileDiffs {
-		newDiffFile := DiffFile{
+		newDiffFile := codeowners.DiffFile{
 			FileName: d.NewName[2:],
-			Hunks:    make([]HunkRange, 0, len(d.Hunks)),
+			Hunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
 		}
 		for _, hunk := range d.Hunks {
-			newHunkRange := HunkRange{
+			newHunkRange := codeowners.HunkRange{
 				Start: int(hunk.NewStartLine),
 				End:   int(hunk.NewStartLine + hunk.NewLines - 1),
 			}
@@ -110,7 +106,7 @@ func toDiffFiles(fileDiffs []*diff.FileDiff) ([]DiffFile, error) {
 }
 
 // Get Changes between two diffs
-func getChangesSince(context changesSinceContext) ([]DiffFile, error) {
+func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 	// Get hash of hunks in both diffs
 	// For each file, filter out hunks that are in oldDiff
 	// if len(hunks) > 0, add to diffFiles
@@ -121,16 +117,16 @@ func getChangesSince(context changesSinceContext) ([]DiffFile, error) {
 		}
 	}
 
-	diffFiles := make([]DiffFile, 0, len(context.newerDiff))
+	diffFiles := make([]codeowners.DiffFile, 0, len(context.newerDiff))
 
 	for _, d := range context.newerDiff {
-		newDiffFile := DiffFile{
+		newDiffFile := codeowners.DiffFile{
 			FileName: d.NewName[2:],
-			Hunks:    make([]HunkRange, 0, len(d.Hunks)),
+			Hunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
 		}
 		for _, hunk := range d.Hunks {
 			if !oldHunkHashes[hunkHash(hunk)] {
-				newHunkRange := HunkRange{
+				newHunkRange := codeowners.HunkRange{
 					Start: int(hunk.NewStartLine),
 					End:   int(hunk.NewStartLine + hunk.NewLines - 1),
 				}
@@ -145,7 +141,6 @@ func getChangesSince(context changesSinceContext) ([]DiffFile, error) {
 }
 
 func getGitDiff(data DiffContext) ([]*diff.FileDiff, error) {
-	fmt.Fprintln(InfoBuffer, "Getting diff for", data.Base, "...", data.Head)
 	cmd := exec.Command("git", "diff", "-U0", fmt.Sprintf("%s...%s", data.Base, data.Head))
 	cmd.Dir = data.Dir
 	cmdOutput, err := cmd.CombinedOutput()

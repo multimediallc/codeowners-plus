@@ -1,11 +1,13 @@
-package owners
+package codeowners
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 var commentPrefix = "Codeowners approval required for this PR:\n"
@@ -48,13 +50,13 @@ func (rgs ReviewerGroups) Flatten() []string {
 	for _, rg := range rgs {
 		names = append(names, rg.Names...)
 	}
-	names = RemoveDuplicates(names)
+	names = f.RemoveDuplicates(names)
 	slices.Sort(names)
 	return names
 }
 
 func (rgs ReviewerGroups) FilterOut(names ...string) ReviewerGroups {
-	return Filtered(rgs, func(rg *ReviewerGroup) bool {
+	return f.Filtered(rgs, func(rg *ReviewerGroup) bool {
 		found := false
 		for _, name := range rg.Names {
 			if slices.Contains(names, name) {
@@ -67,7 +69,7 @@ func (rgs ReviewerGroups) FilterOut(names ...string) ReviewerGroups {
 }
 
 func (rgs ReviewerGroups) ToCommentString() string {
-	ownersList := Map(rgs, func(s *ReviewerGroup) string {
+	ownersList := f.Map(rgs, func(s *ReviewerGroup) string {
 		return "- " + s.ToCommentString()
 	})
 	slices.Sort(ownersList)
@@ -87,7 +89,7 @@ func newFileOwners() *fileOwners {
 
 // Returns the required reviewers, excluding those who have already approved
 func (fo *fileOwners) RequiredReviewers() ReviewerGroups {
-	owners := NewSet[*ReviewerGroup]()
+	owners := f.NewSet[*ReviewerGroup]()
 	for _, reviewers := range fo.requiredReviewers {
 		if !reviewers.Approved {
 			owners.Add(reviewers)
@@ -98,7 +100,7 @@ func (fo *fileOwners) RequiredReviewers() ReviewerGroups {
 
 // Returns the optional reviewers
 func (fo *fileOwners) OptionalReviewers() ReviewerGroups {
-	owners := NewSet[*ReviewerGroup]()
+	owners := f.NewSet[*ReviewerGroup]()
 	for _, reviewers := range fo.optionalReviewers {
 		owners.Add(reviewers)
 	}
@@ -120,10 +122,10 @@ type reviewerTest struct {
 	Reviewer *ReviewerGroup
 }
 
-func (rt *reviewerTest) Matches(path string) bool {
+func (rt *reviewerTest) Matches(path string, warningBuffer io.Writer) bool {
 	match, err := doublestar.Match(rt.Match, path)
 	if err != nil {
-		fmt.Fprintf(WarningBuffer, "WARNING: PatternError for pattern '%s': %s", rt.Match, err)
+		fmt.Fprintf(warningBuffer, "WARNING: PatternError for pattern '%s': %s", rt.Match, err)
 	}
 	return match
 }

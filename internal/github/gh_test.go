@@ -1,8 +1,9 @@
-package owners
+package gh
 
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,9 +12,10 @@ import (
 	"time"
 
 	"github.com/google/go-github/v63/github"
+	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
-func setupReviews() *GitHubClient {
+func setupReviews() *Client {
 	reviews := []*github.PullRequestReview{
 		{User: &github.User{Login: github.String("reviewer1")}, State: github.String("APPROVED"), ID: github.Int64(1), CommitID: github.String("commit1")},
 		{User: &github.User{Login: github.String("reviewer2")}, State: github.String("REQUEST_CHANGES"), ID: github.Int64(2), CommitID: github.String("commit2")},
@@ -25,7 +27,7 @@ func setupReviews() *GitHubClient {
 		"reviewer2": []string{"@c"},
 		"reviewer4": []string{"@e"},
 	}
-	gh := &GitHubClient{
+	gh := &Client{
 		reviews:         reviews,
 		userReviewerMap: userReviewerMap,
 		PR:              &github.PullRequest{Number: github.Int(1)},
@@ -79,7 +81,7 @@ func TestCurrentApprovalsFromReviews(t *testing.T) {
 	seen := make(map[int]bool)
 	for _, approval := range currentApprovals {
 		for i, expected := range expectedApprovals {
-			if approval.CommitID == expected.CommitID && SlicesItemsMatch(approval.Reviewers, expected.Reviewers) {
+			if approval.CommitID == expected.CommitID && f.SlicesItemsMatch(approval.Reviewers, expected.Reviewers) {
 				seen[i] = true
 			}
 		}
@@ -111,7 +113,7 @@ func TestAllApprovals(t *testing.T) {
 	seen := make(map[int]bool)
 	for _, approval := range currentApprovals {
 		for i, expected := range expectedApprovals {
-			if approval.CommitID == expected.CommitID && SlicesItemsMatch(approval.Reviewers, expected.Reviewers) {
+			if approval.CommitID == expected.CommitID && f.SlicesItemsMatch(approval.Reviewers, expected.Reviewers) {
 				seen[i] = true
 			}
 		}
@@ -148,7 +150,7 @@ func TestGetAlreadyReviewed(t *testing.T) {
 	if len(alreadyReviewed) != len(expected) {
 		t.Errorf("Expected %d reviewers, got %d", len(expected), len(alreadyReviewed))
 	}
-	if !SlicesItemsMatch(alreadyReviewed, expected) {
+	if !f.SlicesItemsMatch(alreadyReviewed, expected) {
 		t.Errorf("Expected reviewers to be %v, got %v", expected, alreadyReviewed)
 	}
 }
@@ -172,7 +174,7 @@ func TestCurrentlyRequested(t *testing.T) {
 		},
 	}
 
-	gh := &GitHubClient{
+	gh := &Client{
 		PR:              pr,
 		owner:           "org",
 		userReviewerMap: userReviewerMap,
@@ -188,7 +190,7 @@ func TestCurrentlyRequested(t *testing.T) {
 	if len(requested) != len(expected) {
 		t.Errorf("Expected %d requested reviewers, got %d", len(expected), len(requested))
 	}
-	if !SlicesItemsMatch(requested, expected) {
+	if !f.SlicesItemsMatch(requested, expected) {
 		t.Errorf("Expected requested reviewers to be %v, got %v", expected, requested)
 	}
 }
@@ -196,10 +198,10 @@ func TestCurrentlyRequested(t *testing.T) {
 func TestSplitReviewers(t *testing.T) {
 	reviewers := []string{"@user1", "@user2", "@user3", "@org/team1", "@org/team2"}
 	individuals, teams := splitReviewers(reviewers)
-	if !SlicesItemsMatch(individuals, []string{"user1", "user2", "user3"}) {
+	if !f.SlicesItemsMatch(individuals, []string{"user1", "user2", "user3"}) {
 		t.Errorf("Expected individuals to be [user1, user2, user3], got %v", individuals)
 	}
-	if !SlicesItemsMatch(teams, []string{"team1", "team2"}) {
+	if !f.SlicesItemsMatch(teams, []string{"team1", "team2"}) {
 		t.Errorf("Expected teams to be [team1, team2], got %v", teams)
 	}
 }
@@ -235,7 +237,7 @@ func TestMakeGHUserReviewerMap(t *testing.T) {
 }
 
 func TestIsInComments(t *testing.T) {
-	gh := &GitHubClient{
+	gh := &Client{
 		PR: &github.PullRequest{Number: github.Int(1)},
 		comments: []*github.IssueComment{
 			{Body: github.String("comment1"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -2)}},
@@ -270,7 +272,7 @@ func TestIsInComments(t *testing.T) {
 }
 
 func TestIsSubstringInComments(t *testing.T) {
-	gh := &GitHubClient{
+	gh := &Client{
 		PR: &github.PullRequest{Number: github.Int(1)},
 		comments: []*github.IssueComment{
 			{Body: github.String("part1 part4"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -2)}},
@@ -311,7 +313,7 @@ func TestIsSubstringInComments(t *testing.T) {
 }
 
 func TestNewGithubClient(t *testing.T) {
-	client := NewGithubClient("owner", "repo", "token")
+	client := NewClient("owner", "repo", "token")
 	if client.owner != "owner" {
 		t.Errorf("Expected owner to be owner, got %s", client.owner)
 	}
@@ -330,7 +332,7 @@ func TestNewGithubClient(t *testing.T) {
 }
 
 func TestNilPRErr(t *testing.T) {
-	gh := &GitHubClient{}
+	gh := &Client{}
 	tt := []func() (string, error){
 		func() (string, error) {
 			_, err := gh.GetCurrentReviewerApprovals()
@@ -393,7 +395,7 @@ func TestNilPRErr(t *testing.T) {
 }
 
 func TestNilUserReviewerMapErr(t *testing.T) {
-	gh := &GitHubClient{
+	gh := &Client{
 		PR: &github.PullRequest{Number: github.Int(1)},
 	}
 	tt := []func() (string, error){
@@ -487,7 +489,7 @@ func TestNilCommentsErr(t *testing.T) {
 	}
 }
 
-func mockServerAndClient(t *testing.T) (*http.ServeMux, *httptest.Server, *GitHubClient) {
+func mockServerAndClient(t *testing.T) (*http.ServeMux, *httptest.Server, *Client) {
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 	client := github.NewClient(nil)
@@ -496,11 +498,13 @@ func mockServerAndClient(t *testing.T) (*http.ServeMux, *httptest.Server, *GitHu
 		t.Fatalf("unexpected error: %v", err)
 	}
 	client.BaseURL = baseURL
-	gh := &GitHubClient{
-		ctx:    context.Background(),
-		owner:  "test-owner",
-		repo:   "test-repo",
-		client: client,
+	gh := &Client{
+		ctx:           context.Background(),
+		owner:         "test-owner",
+		repo:          "test-repo",
+		client:        client,
+		infoBuffer:    io.Discard,
+		warningBuffer: io.Discard,
 	}
 	return mux, server, gh
 
@@ -600,8 +604,8 @@ func TestInitReviewsSuccess(t *testing.T) {
 
 	gh.PR = &github.PullRequest{Number: github.Int(123)}
 	mockReviews := []*github.PullRequestReview{
-		{ID: github.Int64(1)},
-		{ID: github.Int64(2)},
+		{User: &github.User{Login: github.String("test")}, ID: github.Int64(1)},
+		{User: &github.User{Login: github.String("test")}, ID: github.Int64(2)},
 	}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
@@ -931,7 +935,7 @@ func TestInitUserReviewerMap(t *testing.T) {
 	}
 
 	for user := range expectedMap {
-		if !SlicesItemsMatch(gh.userReviewerMap[user], expectedMap[user]) {
+		if !f.SlicesItemsMatch(gh.userReviewerMap[user], expectedMap[user]) {
 			t.Errorf("expected user %s to be in userReviewerMap", user)
 		}
 	}
