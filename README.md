@@ -2,7 +2,7 @@
 
 Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus?1)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus)
+[![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
 ![Coverage](https://img.shields.io/badge/Coverage-59.8%25-yellow)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
