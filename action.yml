@@ -19,5 +19,4 @@ inputs:
 
 runs:
   using: 'docker'
-  # image: 'docker://ghcr.io/multimediallc/mm-codeowners:v0.1.0'  # uncomment for v0.1 release
-  image: 'Dockerfile'
+  image: 'docker://ghcr.io/multimediallc/codeowners-plus:v0.1.0'
