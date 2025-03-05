@@ -21,7 +21,7 @@ jobs:
       - name: 'Build & Publish'
         uses: elgohr/Publish-Docker-Github-Action@eb53b3ec07136a6ebaed78d8135806da64f7c7e2  # v5
         with:
-          name: multimediallc/mm-codeowners
+          name: multimediallc/codeowners-plus
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: ghcr.io

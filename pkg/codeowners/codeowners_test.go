@@ -119,7 +119,7 @@ func TestGetOwnersFail(t *testing.T) {
 	rgMan := NewReviewerGroupMemo()
 	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, io.Discard)
 	testMap := tree.BuildFromFiles(files, rgMan)
-	files = append(files, "non_existant_file")
+	files = append(files, "non_existent_file")
 	_, err := testMap.getOwners(files)
 	if err == nil {
 		t.Errorf("Expected error getting owners: %v", err)
