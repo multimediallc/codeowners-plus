@@ -19,4 +19,4 @@ inputs:
 
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/multimediallc/codeowners-plus:v0.1.0'
+  image: 'docker://ghcr.io/multimediallc/codeowners-plus:latest'
