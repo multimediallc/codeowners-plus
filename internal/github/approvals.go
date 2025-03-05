@@ -60,9 +60,6 @@ func checkStale(
 		// for each file in the changes since approval
 		// if the file is owned by the approval owner, mark stale
 		// else, mark all overlapping owners as satisfied
-		if len(approval.Diff) == 0 {
-			continue
-		}
 		stale := false
 		for _, diffFile := range approval.Diff {
 			fileOwners, ok := fileReviewerMap[diffFile.FileName]
