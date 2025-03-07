@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -120,12 +121,22 @@ func (gh *Client) InitReviews() error {
 	allReviews = f.Filtered(allReviews, func(review *github.PullRequestReview) bool {
 		return review.User.GetLogin() != gh.PR.User.GetLogin()
 	})
+	// use descending chronological order (default ascending)
+	slices.Reverse(allReviews)
 	gh.reviews = allReviews
 	return nil
 }
 
 func (gh *Client) approvals() []*github.PullRequestReview {
+	seen := make(map[string]bool, 0)
 	approvals := f.Filtered(gh.reviews, func(approval *github.PullRequestReview) bool {
+		userName := approval.GetUser().GetLogin()
+		if _, ok := seen[userName]; ok {
+			// we only care about the most recent reviews for each user
+			return false
+		} else {
+			seen[userName] = true
+		}
 		return approval.GetState() == "APPROVED"
 	})
 	return approvals
@@ -206,15 +217,17 @@ func (gh *Client) GetAlreadyReviewed() ([]string, error) {
 }
 
 func reviewerAlreadyReviewed(reviews []*github.PullRequestReview, userReviewerMap ghUserReviewerMap) []string {
-	reviewsReviewers := make([]string, 0, len(reviews))
+	reviewsReviewers := make(map[string]bool, len(reviews))
 	for _, review := range reviews {
 		reviewingUser := review.GetUser().GetLogin()
 		if reviewers, ok := userReviewerMap[reviewingUser]; ok {
-			reviewsReviewers = append(reviewsReviewers, reviewers...)
+			for _, reviewer := range reviewers {
+				reviewsReviewers[reviewer] = true
+			}
 		}
 	}
 
-	return reviewsReviewers
+	return slices.Collect(maps.Keys(reviewsReviewers))
 }
 
 func (gh *Client) GetCurrentlyRequested() ([]string, error) {
