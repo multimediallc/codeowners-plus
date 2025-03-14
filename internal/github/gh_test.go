@@ -15,7 +15,7 @@ import (
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
-func setupReviews() *Client {
+func setupReviews() *GHClient {
 	reviews := []*github.PullRequestReview{
 		{User: &github.User{Login: github.String("reviewer1")}, State: github.String("APPROVED"), ID: github.Int64(1), CommitID: github.String("commit1")},
 		{User: &github.User{Login: github.String("reviewer2")}, State: github.String("REQUEST_CHANGES"), ID: github.Int64(2), CommitID: github.String("commit2")},
@@ -27,10 +27,10 @@ func setupReviews() *Client {
 		"reviewer2": []string{"@c"},
 		"reviewer4": []string{"@e"},
 	}
-	gh := &Client{
+	gh := &GHClient{
 		reviews:         reviews,
 		userReviewerMap: userReviewerMap,
-		PR:              &github.PullRequest{Number: github.Int(1)},
+		pr:              &github.PullRequest{Number: github.Int(1)},
 	}
 	return gh
 }
@@ -174,8 +174,8 @@ func TestCurrentlyRequested(t *testing.T) {
 		},
 	}
 
-	gh := &Client{
-		PR:              pr,
+	gh := &GHClient{
+		pr:              pr,
 		owner:           "org",
 		userReviewerMap: userReviewerMap,
 	}
@@ -237,8 +237,8 @@ func TestMakeGHUserReviewerMap(t *testing.T) {
 }
 
 func TestIsInComments(t *testing.T) {
-	gh := &Client{
-		PR: &github.PullRequest{Number: github.Int(1)},
+	gh := &GHClient{
+		pr: &github.PullRequest{Number: github.Int(1)},
 		comments: []*github.IssueComment{
 			{Body: github.String("comment1"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -2)}},
 			{Body: github.String("comment2"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -1)}},
@@ -272,8 +272,8 @@ func TestIsInComments(t *testing.T) {
 }
 
 func TestIsSubstringInComments(t *testing.T) {
-	gh := &Client{
-		PR: &github.PullRequest{Number: github.Int(1)},
+	gh := &GHClient{
+		pr: &github.PullRequest{Number: github.Int(1)},
 		comments: []*github.IssueComment{
 			{Body: github.String("part1 part4"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -2)}},
 			{Body: github.String("part2 part5"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -1)}},
@@ -313,7 +313,10 @@ func TestIsSubstringInComments(t *testing.T) {
 }
 
 func TestNewGithubClient(t *testing.T) {
-	client := NewClient("owner", "repo", "token")
+	client, ok := NewClient("owner", "repo", "token").(*GHClient)
+	if !ok {
+		t.Fatalf("Expected client to be of type *GHClient, got %T", client)
+	}
 	if client.owner != "owner" {
 		t.Errorf("Expected owner to be owner, got %s", client.owner)
 	}
@@ -323,7 +326,7 @@ func TestNewGithubClient(t *testing.T) {
 	if client.client == nil {
 		t.Error("Expected client to be non-nil")
 	}
-	if client.PR != nil {
+	if client.pr != nil {
 		t.Error("Expected PR to be nil")
 	}
 	if client.userReviewerMap != nil {
@@ -332,7 +335,7 @@ func TestNewGithubClient(t *testing.T) {
 }
 
 func TestNilPRErr(t *testing.T) {
-	gh := &Client{}
+	gh := &GHClient{}
 	tt := []func() (string, error){
 		func() (string, error) {
 			_, err := gh.GetCurrentReviewerApprovals()
@@ -395,8 +398,8 @@ func TestNilPRErr(t *testing.T) {
 }
 
 func TestNilUserReviewerMapErr(t *testing.T) {
-	gh := &Client{
-		PR: &github.PullRequest{Number: github.Int(1)},
+	gh := &GHClient{
+		pr: &github.PullRequest{Number: github.Int(1)},
 	}
 	tt := []func() (string, error){
 		func() (string, error) {
@@ -423,7 +426,7 @@ func TestNilReviewsErr(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(1)}
+	gh.pr = &github.PullRequest{Number: github.Int(1)}
 	gh.userReviewerMap = make(ghUserReviewerMap)
 
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
@@ -460,7 +463,7 @@ func TestNilCommentsErr(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(1)}
+	gh.pr = &github.PullRequest{Number: github.Int(1)}
 	gh.userReviewerMap = make(ghUserReviewerMap)
 
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -489,7 +492,7 @@ func TestNilCommentsErr(t *testing.T) {
 	}
 }
 
-func mockServerAndClient(t *testing.T) (*http.ServeMux, *httptest.Server, *Client) {
+func mockServerAndClient(t *testing.T) (*http.ServeMux, *httptest.Server, *GHClient) {
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 	client := github.NewClient(nil)
@@ -498,7 +501,7 @@ func mockServerAndClient(t *testing.T) (*http.ServeMux, *httptest.Server, *Clien
 		t.Fatalf("unexpected error: %v", err)
 	}
 	client.BaseURL = baseURL
-	gh := &Client{
+	gh := &GHClient{
 		ctx:           context.Background(),
 		owner:         "test-owner",
 		repo:          "test-repo",
@@ -530,10 +533,10 @@ func TestInitPRSuccess(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if gh.PR == nil {
+	if gh.pr == nil {
 		t.Error("expected PR to be initialized, got nil")
-	} else if gh.PR.GetNumber() != prID {
-		t.Errorf("expected PR number %d, got %d", prID, gh.PR.GetNumber())
+	} else if gh.pr.GetNumber() != prID {
+		t.Errorf("expected PR number %d, got %d", prID, gh.pr.GetNumber())
 	}
 }
 
@@ -541,7 +544,7 @@ func TestInitPRFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = nil // Reset PR
+	gh.pr = nil // Reset PR
 
 	prID := 999
 
@@ -553,8 +556,8 @@ func TestInitPRFailure(t *testing.T) {
 	if err == nil {
 		t.Error("expected an error, got nil")
 	}
-	if gh.PR != nil {
-		t.Errorf("expected PR to be nil, got %+v", gh.PR)
+	if gh.pr != nil {
+		t.Errorf("expected PR to be nil, got %+v", gh.pr)
 	}
 }
 
@@ -602,7 +605,7 @@ func TestInitReviewsSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 	mockReviews := []*github.PullRequestReview{
 		{User: &github.User{Login: github.String("test")}, ID: github.Int64(1)},
 		{User: &github.User{Login: github.String("test")}, ID: github.Int64(2)},
@@ -629,7 +632,7 @@ func TestInitReviewsFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -648,7 +651,7 @@ func TestDismissStaleReviewsSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	staleApprovals := []*CurrentApproval{
 		{ReviewID: 1},
@@ -679,7 +682,7 @@ func TestDismissStaleReviewsFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 	staleApprovals := []*CurrentApproval{
 		{ReviewID: 1},
 	}
@@ -699,7 +702,7 @@ func TestRequestReviewersSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	reviewers := []string{"@reviewer1", "@org/team1"}
 
@@ -734,7 +737,7 @@ func TestRequestReviewersFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	reviewers := []string{"@reviewer1", "@org/team1"}
 
@@ -753,7 +756,7 @@ func TestApprovePRSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	// Mock the GitHub API endpoint
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
@@ -786,7 +789,7 @@ func TestApprovePRFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	// Mock the GitHub API to simulate an error
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
@@ -803,7 +806,7 @@ func TestInitCommentsSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	mockComments := []*github.IssueComment{
 		{ID: github.Int64(1), Body: github.String("Comment 1")},
@@ -831,7 +834,7 @@ func TestInitCommentsFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -847,7 +850,7 @@ func TestAddCommentSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	// Mock the GitHub API endpoint
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -877,7 +880,7 @@ func TestAddCommentFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	// Mock the GitHub API to simulate an error
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -894,7 +897,7 @@ func TestInitUserReviewerMap(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.PR = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Int(123)}
 
 	// Mock the GitHub API endpoint
 	reviewers := []string{"@org1/team1", "@user1", "@org2/team2"}
