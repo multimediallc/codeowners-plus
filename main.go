@@ -101,10 +101,10 @@ func NewApp(cfg AppConfig) (*App, error) {
 }
 
 // Run executes the application logic
-func (a *App) Run() (bool, error) {
+func (a *App) Run() (bool, string, error) {
 	// Initialize PR
 	if err := a.client.InitPR(a.config.PR); err != nil {
-		return false, fmt.Errorf("InitPR Error: %v", err)
+		return false, "", fmt.Errorf("InitPR Error: %v", err)
 	}
 	printDebug("PR: %d\n", a.client.PR().GetNumber())
 
@@ -127,14 +127,14 @@ func (a *App) Run() (bool, error) {
 	printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
 	gitDiff, err := git.NewDiff(diffContext)
 	if err != nil {
-		return false, fmt.Errorf("NewGitDiff Error: %v", err)
+		return false, "", fmt.Errorf("NewGitDiff Error: %v", err)
 	}
 	a.gitDiff = gitDiff
 
 	// Initialize codeowners
 	codeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), WarningBuffer)
 	if err != nil {
-		return false, fmt.Errorf("NewCodeOwners Error: %v", err)
+		return false, "", fmt.Errorf("NewCodeOwners Error: %v", err)
 	}
 	a.codeowners = codeOwners
 
@@ -156,7 +156,8 @@ func (a *App) Run() (bool, error) {
 	return a.processApprovalsAndReviewers()
 }
 
-func (a *App) processApprovalsAndReviewers() (bool, error) {
+func (a *App) processApprovalsAndReviewers() (bool, string, error) {
+	message := ""
 	// Get all required owners before filtering
 	allRequiredOwners := a.codeowners.AllRequired()
 	allRequiredOwnerNames := allRequiredOwners.Flatten()
@@ -171,13 +172,13 @@ func (a *App) processApprovalsAndReviewers() (bool, error) {
 
 	// Initialize user reviewer map
 	if err := a.client.InitUserReviewerMap(allRequiredOwnerNames); err != nil {
-		return false, fmt.Errorf("InitUserReviewerMap Error: %v", err)
+		return false, message, fmt.Errorf("InitUserReviewerMap Error: %v", err)
 	}
 
 	// Get current approvals
 	ghApprovals, err := a.client.GetCurrentReviewerApprovals()
 	if err != nil {
-		return false, fmt.Errorf("GetCurrentApprovals Error: %v", err)
+		return false, message, fmt.Errorf("GetCurrentApprovals Error: %v", err)
 	}
 	printDebug("Current Approvals: %+v\n", ghApprovals)
 
@@ -186,20 +187,20 @@ func (a *App) processApprovalsAndReviewers() (bool, error) {
 	if a.conf.Enforcement.Approval {
 		tokenOwnerApproval, err = a.processTokenOwnerApproval()
 		if err != nil {
-			return false, err
+			return false, message, err
 		}
 	}
 
 	// Process approvals and dismiss stale ones
 	validApprovalCount, err := a.processApprovals(ghApprovals)
 	if err != nil {
-		return false, err
+		return false, message, err
 	}
 
 	// Request reviews from required owners
 	unapprovedOwners, err := a.requestReviews()
 	if err != nil {
-		return false, err
+		return false, message, err
 	}
 
 	maxReviewsMet := false
@@ -220,12 +221,12 @@ func (a *App) processApprovalsAndReviewers() (bool, error) {
 		fiveDaysAgo := time.Now().AddDate(0, 0, -5)
 		found, err := a.client.IsInComments(comment, &fiveDaysAgo)
 		if err != nil {
-			return false, fmt.Errorf("IsInComments Error: %v\n", err)
+			return false, message, fmt.Errorf("IsInComments Error: %v\n", err)
 		}
 		if !found {
 			err = a.client.AddComment(comment)
 			if err != nil {
-				return false, fmt.Errorf("AddComment Error: %v\n", err)
+				return false, message, fmt.Errorf("AddComment Error: %v\n", err)
 			}
 		}
 	}
@@ -240,13 +241,13 @@ func (a *App) processApprovalsAndReviewers() (bool, error) {
 			return !found
 		})
 		if isInCommentsError != nil {
-			return false, fmt.Errorf("IsInComments Error: %v\n", err)
+			return false, message, fmt.Errorf("IsInComments Error: %v\n", err)
 		}
 		if len(viewersToPing) > 0 {
 			comment := fmt.Sprintf("cc %s", strings.Join(viewersToPing, " "))
 			err = a.client.AddComment(comment)
 			if err != nil {
-				return false, fmt.Errorf("AddComment Error: %v\n", err)
+				return false, message, fmt.Errorf("AddComment Error: %v\n", err)
 			}
 		}
 	}
@@ -260,29 +261,30 @@ func (a *App) processApprovalsAndReviewers() (bool, error) {
 		if a.conf.Enforcement.Approval && tokenOwnerApproval != nil {
 			_ = a.client.DismissStaleReviews([]*gh.CurrentApproval{tokenOwnerApproval})
 		}
-		printWarning(
-			"FAIL: Codeowners reviews not satisfied\nStill required:\n - %s\n",
+		message = fmt.Sprintf(
+			"FAIL: Codeowners reviews not satisfied\nStill required:\n - %s",
 			strings.Join(unapprovedCommentStrings, "\n - "),
 		)
-		return false, nil
+		return false, message, nil
 	}
 
 	// Exit if there are not enough reviews
 	if a.conf.MinReviews != nil && *a.conf.MinReviews > 0 {
 		if validApprovalCount < *a.conf.MinReviews {
-			printWarning("FAIL: Min Reviews not satisfied. Need %d, found %d\n", *a.conf.MinReviews, validApprovalCount)
-			return false, nil
+			message = fmt.Sprintf("FAIL: Min Reviews not satisfied. Need %d, found %d", *a.conf.MinReviews, validApprovalCount)
+			return false, message, nil
 		}
 	}
 
+	message = "Codeowners reviews satisfied"
 	if a.conf.Enforcement.Approval && tokenOwnerApproval == nil {
 		// Approve the PR since all codeowner teams have approved
 		err = a.client.ApprovePR()
 		if err != nil {
-			return true, fmt.Errorf("ApprovePR Error: %v\n", err)
+			return true, message, fmt.Errorf("ApprovePR Error: %v\n", err)
 		}
 	}
-	return true, nil
+	return true, message, nil
 }
 
 func (a *App) processTokenOwnerApproval() (*gh.CurrentApproval, error) {
@@ -423,7 +425,7 @@ func main() {
 		errorAndExit(true, "Failed to initialize app: %v\n", err)
 	}
 
-	success, err := app.Run()
+	success, message, err := app.Run()
 	if err != nil {
 		errorAndExit(true, "%v\n", err)
 	}
@@ -438,8 +440,11 @@ func main() {
 		}
 	}
 	if success {
-		fmt.Println("Codeowners reviews satisfied")
-	} else if app.conf.Enforcement.FailCheck {
+		fmt.Fprintln(os.Stdout, message)
+	} else {
+		fmt.Fprintln(os.Stderr, message)
+	}
+	if !success && app.conf.Enforcement.FailCheck {
 		os.Exit(1)
 	}
 }
