@@ -21,6 +21,12 @@ Thank you for considering contributing to Codeowners Plus! We welcome contributi
 go run main.go -token <your_gh_token> -dir ../chaturbate -pr <pr_num> -repo multimediallc/chaturbate -v true
 ```
 
+#### Running the CLI tool Locally
+
+```bash
+go run tools/cli/main.go <command> [flags]
+```
+
 #### Submitting Changes
 
 * Fork the repository
@@ -33,6 +39,7 @@ go run main.go -token <your_gh_token> -dir ../chaturbate -pr <pr_num> -repo mult
 ### Code Style and Standards
 
 * Follow [Go best practices](https://go.dev/doc/effective_go).
+* Follow additional rules in [styleguide](styleguide/) markdown files.
 * Write clear, concise, and well-documented code.
 * Include unit tests for any new functionality.
 

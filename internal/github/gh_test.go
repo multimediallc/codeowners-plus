@@ -247,27 +247,30 @@ func TestIsInComments(t *testing.T) {
 	}
 
 	tt := []struct {
+		name   string
 		string string
 		since  *time.Time
 		found  bool
 	}{
-		{"comment1", nil, true},
-		{"comment2", nil, true},
-		{"comment3", nil, true},
-		{"comment4", nil, false},
-		{"comment1", &gh.comments[1].CreatedAt.Time, false},
-		{"comment2", &gh.comments[1].CreatedAt.Time, true},
-		{"comment3", &gh.comments[1].CreatedAt.Time, true},
+		{name: "find comment1 with no time filter", string: "comment1", since: nil, found: true},
+		{name: "find comment2 with no time filter", string: "comment2", since: nil, found: true},
+		{name: "find comment3 with no time filter", string: "comment3", since: nil, found: true},
+		{name: "non-existent comment", string: "comment4", since: nil, found: false},
+		{name: "comment1 filtered by time", string: "comment1", since: &gh.comments[1].CreatedAt.Time, found: false},
+		{name: "comment2 filtered by time", string: "comment2", since: &gh.comments[1].CreatedAt.Time, found: true},
+		{name: "comment3 filtered by time", string: "comment3", since: &gh.comments[1].CreatedAt.Time, found: true},
 	}
 
-	for i, tc := range tt {
-		found, err := gh.IsInComments(tc.string, tc.since)
-		if err != nil {
-			t.Errorf("Case %d: Unexpected error: %v", i, err)
-		}
-		if found != tc.found {
-			t.Errorf("Case %d: Expected %t, got %t", i, tc.found, found)
-		}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			found, err := gh.IsInComments(tc.string, tc.since)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if found != tc.found {
+				t.Errorf("Expected found to be %t, got %t", tc.found, found)
+			}
+		})
 	}
 }
 
@@ -282,33 +285,36 @@ func TestIsSubstringInComments(t *testing.T) {
 	}
 
 	tt := []struct {
+		name   string
 		string string
 		since  *time.Time
 		found  bool
 	}{
-		{"part1", nil, true},
-		{"part2", nil, true},
-		{"part3", nil, true},
-		{"part4", nil, true},
-		{"part5", nil, true},
-		{"part6", nil, true},
-		{"part7", nil, false},
-		{"part1", &gh.comments[1].CreatedAt.Time, false},
-		{"part4", &gh.comments[1].CreatedAt.Time, false},
-		{"part2", &gh.comments[1].CreatedAt.Time, true},
-		{"part5", &gh.comments[1].CreatedAt.Time, true},
-		{"part3", &gh.comments[1].CreatedAt.Time, true},
-		{"part6", &gh.comments[1].CreatedAt.Time, true},
+		{name: "find part1 with no time filter", string: "part1", since: nil, found: true},
+		{name: "find part2 with no time filter", string: "part2", since: nil, found: true},
+		{name: "find part3 with no time filter", string: "part3", since: nil, found: true},
+		{name: "find part4 with no time filter", string: "part4", since: nil, found: true},
+		{name: "find part5 with no time filter", string: "part5", since: nil, found: true},
+		{name: "find part6 with no time filter", string: "part6", since: nil, found: true},
+		{name: "non-existent part", string: "part7", since: nil, found: false},
+		{name: "part1 filtered by time", string: "part1", since: &gh.comments[1].CreatedAt.Time, found: false},
+		{name: "part4 filtered by time", string: "part4", since: &gh.comments[1].CreatedAt.Time, found: false},
+		{name: "part2 filtered by time", string: "part2", since: &gh.comments[1].CreatedAt.Time, found: true},
+		{name: "part5 filtered by time", string: "part5", since: &gh.comments[1].CreatedAt.Time, found: true},
+		{name: "part3 filtered by time", string: "part3", since: &gh.comments[1].CreatedAt.Time, found: true},
+		{name: "part6 filtered by time", string: "part6", since: &gh.comments[1].CreatedAt.Time, found: true},
 	}
 
-	for i, tc := range tt {
-		found, err := gh.IsSubstringInComments(tc.string, tc.since)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if found != tc.found {
-			t.Errorf("Case %d: Expected found to be %t, got %t", i, tc.found, found)
-		}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			found, err := gh.IsSubstringInComments(tc.string, tc.since)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if found != tc.found {
+				t.Errorf("Expected found to be %t, got %t", tc.found, found)
+			}
+		})
 	}
 }
 
@@ -336,64 +342,99 @@ func TestNewGithubClient(t *testing.T) {
 
 func TestNilPRErr(t *testing.T) {
 	gh := &GHClient{}
-	tt := []func() (string, error){
-		func() (string, error) {
-			_, err := gh.GetCurrentReviewerApprovals()
-			return "GetCurrentApprovals", err
+	tt := []struct {
+		name   string
+		testFn func() error
+	}{
+		{
+			name: "GetCurrentApprovals",
+			testFn: func() error {
+				_, err := gh.GetCurrentReviewerApprovals()
+				return err
+			},
 		},
-		func() (string, error) {
-			_, err := gh.AllApprovals()
-			return "IsSubstringInComments", err
+		{
+			name: "AllApprovals",
+			testFn: func() error {
+				_, err := gh.AllApprovals()
+				return err
+			},
 		},
-		func() (string, error) {
-			err := gh.ApprovePR()
-			return "ApprovePR", err
+		{
+			name: "ApprovePR",
+			testFn: func() error {
+				return gh.ApprovePR()
+			},
 		},
-		func() (string, error) {
-			_, err := gh.FindUserApproval("user")
-			return "FindUserApproval", err
+		{
+			name: "FindUserApproval",
+			testFn: func() error {
+				_, err := gh.FindUserApproval("user")
+				return err
+			},
 		},
-		func() (string, error) {
-			_, err := gh.GetCurrentlyRequested()
-			return "GetCurrentlyRequested", err
+		{
+			name: "GetCurrentlyRequested",
+			testFn: func() error {
+				_, err := gh.GetCurrentlyRequested()
+				return err
+			},
 		},
-		func() (string, error) {
-			err := gh.InitReviews()
-			return "InitReviews", err
+		{
+			name: "InitReviews",
+			testFn: func() error {
+				return gh.InitReviews()
+			},
 		},
-		func() (string, error) {
-			err := gh.InitComments()
-			return "InitComments", err
+		{
+			name: "InitComments",
+			testFn: func() error {
+				return gh.InitComments()
+			},
 		},
-		func() (string, error) {
-			err := gh.DismissStaleReviews([]*CurrentApproval{})
-			return "DismissStaleReviews", err
+		{
+			name: "DismissStaleReviews",
+			testFn: func() error {
+				return gh.DismissStaleReviews([]*CurrentApproval{})
+			},
 		},
-		func() (string, error) {
-			err := gh.RequestReviewers([]string{})
-			return "RequestReviewers", err
+		{
+			name: "RequestReviewers",
+			testFn: func() error {
+				return gh.RequestReviewers([]string{})
+			},
 		},
-		func() (string, error) {
-			err := gh.AddComment("comment")
-			return "AddComment", err
+		{
+			name: "AddComment",
+			testFn: func() error {
+				return gh.AddComment("comment")
+			},
 		},
-		func() (string, error) {
-			_, err := gh.IsInComments("comment", nil)
-			return "IsInComments", err
+		{
+			name: "IsInComments",
+			testFn: func() error {
+				_, err := gh.IsInComments("comment", nil)
+				return err
+			},
 		},
-		func() (string, error) {
-			_, err := gh.IsSubstringInComments("comment", nil)
-			return "IsSubstringInComments", err
+		{
+			name: "IsSubstringInComments",
+			testFn: func() error {
+				_, err := gh.IsSubstringInComments("comment", nil)
+				return err
+			},
 		},
 	}
 	for _, tc := range tt {
-		s, err := tc()
-		if err == nil {
-			t.Errorf("%s: Expected error for nil user reviewer map", s)
-		}
-		if _, ok := err.(*NoPRError); !ok {
-			t.Errorf("%s: Expected NoPRError, got %T", s, err)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.testFn()
+			if err == nil {
+				t.Error("Expected error for nil PR")
+			}
+			if _, ok := err.(*NoPRError); !ok {
+				t.Errorf("Expected NoPRError, got %T", err)
+			}
+		})
 	}
 }
 
@@ -401,24 +442,35 @@ func TestNilUserReviewerMapErr(t *testing.T) {
 	gh := &GHClient{
 		pr: &github.PullRequest{Number: github.Int(1)},
 	}
-	tt := []func() (string, error){
-		func() (string, error) {
-			_, err := gh.GetCurrentReviewerApprovals()
-			return "GetCurrentApprovals", err
+	tt := []struct {
+		name   string
+		testFn func() error
+	}{
+		{
+			name: "GetCurrentApprovals",
+			testFn: func() error {
+				_, err := gh.GetCurrentReviewerApprovals()
+				return err
+			},
 		},
-		func() (string, error) {
-			_, err := gh.GetCurrentlyRequested()
-			return "GetCurrentlyRequested", err
+		{
+			name: "GetCurrentlyRequested",
+			testFn: func() error {
+				_, err := gh.GetCurrentlyRequested()
+				return err
+			},
 		},
 	}
 	for _, tc := range tt {
-		s, err := tc()
-		if err == nil {
-			t.Errorf("%s: Expected error for nil user reviewer map", s)
-		}
-		if _, ok := err.(*UserReviewerMapNotInitError); !ok {
-			t.Errorf("%s: Expected NoUserReviewerMapError, got %T", s, err)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.testFn()
+			if err == nil {
+				t.Error("Expected error for nil user reviewer map")
+			}
+			if _, ok := err.(*UserReviewerMapNotInitError); !ok {
+				t.Errorf("Expected NoUserReviewerMapError, got %T", err)
+			}
+		})
 	}
 }
 
@@ -433,29 +485,43 @@ func TestNilReviewsErr(t *testing.T) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 
-	tt := []func() (string, error){
-		func() (string, error) {
-			_, err := gh.AllApprovals()
-			return "AllApprovals", err
+	tt := []struct {
+		name   string
+		testFn func() error
+	}{
+		{
+			name: "AllApprovals",
+			testFn: func() error {
+				_, err := gh.AllApprovals()
+				return err
+			},
 		},
-		func() (string, error) {
-			_, err := gh.GetCurrentReviewerApprovals()
-			return "GetCurrentReviewerApprovals", err
+		{
+			name: "GetCurrentReviewerApprovals",
+			testFn: func() error {
+				_, err := gh.GetCurrentReviewerApprovals()
+				return err
+			},
 		},
-		func() (string, error) {
-			_, err := gh.FindUserApproval("user")
-			return "FindUserApproval", err
+		{
+			name: "FindUserApproval",
+			testFn: func() error {
+				_, err := gh.FindUserApproval("user")
+				return err
+			},
 		},
 	}
 	for _, tc := range tt {
-		gh.reviews = nil
-		s, err := tc()
-		if err == nil {
-			t.Errorf("%s: Expected error for nil reviews", s)
-		}
-		if _, ok := err.(*github.ErrorResponse); !ok {
-			t.Errorf("%s: Expected ErrorResponse, got %T", s, err)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			gh.reviews = nil
+			err := tc.testFn()
+			if err == nil {
+				t.Error("Expected error for nil reviews")
+			}
+			if _, ok := err.(*github.ErrorResponse); !ok {
+				t.Errorf("Expected ErrorResponse, got %T", err)
+			}
+		})
 	}
 }
 
@@ -470,25 +536,35 @@ func TestNilCommentsErr(t *testing.T) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 
-	tt := []func() (string, bool, error){
-		func() (string, bool, error) {
-			found, err := gh.IsInComments("", nil)
-			return "IsInComments", found, err
+	tt := []struct {
+		name   string
+		testFn func() (bool, error)
+	}{
+		{
+			name: "IsInComments",
+			testFn: func() (bool, error) {
+				return gh.IsInComments("", nil)
+			},
 		},
-		func() (string, bool, error) {
-			found, err := gh.IsSubstringInComments("", nil)
-			return "IsSubstringInComments", found, err
+		{
+			name: "IsSubstringInComments",
+			testFn: func() (bool, error) {
+				return gh.IsSubstringInComments("", nil)
+			},
 		},
 	}
+
 	for _, tc := range tt {
-		gh.comments = nil
-		s, exists, err := tc()
-		if err != nil {
-			t.Errorf("%s: Expected error for nil comments", s)
-		}
-		if exists {
-			t.Errorf("%s: Expected no comment found", s)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			gh.comments = nil
+			exists, err := tc.testFn()
+			if err != nil {
+				t.Errorf("Expected no error for nil comments, got: %v", err)
+			}
+			if exists {
+				t.Error("Expected no comment found")
+			}
+		})
 	}
 }
 

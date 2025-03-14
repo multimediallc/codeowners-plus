@@ -12,32 +12,54 @@ func TestToReviewers(t *testing.T) {
 	rgMan := NewReviewerGroupMemo()
 	existing := rgMan.ToReviewerGroup("@a")
 	tt := []struct {
+		name          string
 		input         []string
-		output        []string
+		expected      []string
 		checkExisting bool
-		failMessage   string
 	}{
-		{[]string{}, []string{}, false, "Empty input should return empty output"},
-		{[]string{"@a"}, []string{"@a"}, true, "Single input should return single output"},
-		{[]string{"@a", "@b"}, []string{"@a", "@b"}, false, "Multiple inputs should return multiple outputs"},
-		{[]string{"@b", "@a"}, []string{"@b", "@a"}, false, "Multiple inputs should maintain input order"},
+		{
+			name:          "empty input",
+			input:         []string{},
+			expected:      []string{},
+			checkExisting: false,
+		},
+		{
+			name:          "single input",
+			input:         []string{"@a"},
+			expected:      []string{"@a"},
+			checkExisting: true,
+		},
+		{
+			name:          "multiple inputs",
+			input:         []string{"@a", "@b"},
+			expected:      []string{"@a", "@b"},
+			checkExisting: false,
+		},
+		{
+			name:          "maintain order",
+			input:         []string{"@b", "@a"},
+			expected:      []string{"@b", "@a"},
+			checkExisting: false,
+		},
 	}
 
-	for i, tc := range tt {
-		r := rgMan.ToReviewerGroup(tc.input...)
-		if r == nil {
-			t.Errorf("Case %d: ToReviewers should never return nil", i)
-			continue
-		}
-		if r.Approved {
-			t.Errorf("Case %d: ToReviewers should always initialize not Approved", i)
-		}
-		if !f.SlicesItemsMatch(r.Names, tc.output) {
-			t.Error(tc.failMessage)
-		}
-		if tc.checkExisting && r != existing {
-			t.Error("ToReviewers should memoize reviewers")
-		}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			r := rgMan.ToReviewerGroup(tc.input...)
+			if r == nil {
+				t.Error("ToReviewers should never return nil")
+				return
+			}
+			if r.Approved {
+				t.Error("ToReviewers should always initialize not Approved")
+			}
+			if !f.SlicesItemsMatch(r.Names, tc.expected) {
+				t.Error("Expected reviewer names do not match")
+			}
+			if tc.checkExisting && r != existing {
+				t.Error("ToReviewers should memoize reviewers")
+			}
+		})
 	}
 }
 
