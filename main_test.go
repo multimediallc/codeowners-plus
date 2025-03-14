@@ -124,7 +124,6 @@ type mockGitHubClient struct {
 	warningBuffer           io.Writer
 	infoBuffer              io.Writer
 	comments                []*github.IssueComment
-	reviews                 []*github.PullRequestReview
 	initPRError             error
 	initReviewsError        error
 	initCommentsError       error
