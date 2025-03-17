@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"io"
 	"os"
 	"testing"
@@ -8,6 +9,26 @@ import (
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/sourcegraph/go-diff/diff"
 )
+
+// mockGitExecutor implements GitCommandExecutor for testing
+type mockGitExecutor struct {
+	output string
+	err    error
+}
+
+func NewMockGitExecutor(output string, err error) *mockGitExecutor {
+	return &mockGitExecutor{
+		output: output,
+		err:    err,
+	}
+}
+
+func (e *mockGitExecutor) execute(command string, args ...string) ([]byte, error) {
+	if e.err != nil {
+		return nil, e.err
+	}
+	return []byte(e.output), nil
+}
 
 func readFile(path string) ([]byte, error) {
 	file, err := os.Open(path)
@@ -17,6 +38,395 @@ func readFile(path string) ([]byte, error) {
 	defer file.Close()
 
 	return io.ReadAll(file)
+}
+
+// Test fixtures
+const sampleGitDiff = `diff --git a/file1.go b/file1.go
+index abc..def 100644
+--- a/file1.go
++++ b/file1.go
+@@ -10,0 +11 @@ func Example() {
++       fmt.Println("New line")
+diff --git a/file2.go b/file2.go
+index ghi..jkl 100644
+--- a/file2.go
++++ b/file2.go
+@@ -20,0 +21,2 @@ func AnotherExample() {
++       fmt.Println("First new line")
++       fmt.Println("Second new line")`
+
+func TestNewDiff(t *testing.T) {
+	tt := []struct {
+		name          string
+		context       DiffContext
+		mockOutput    string
+		mockError     error
+		expectedErr   bool
+		expectedFiles int
+		expectedHunks map[string]int // filename -> number of hunks
+	}{
+		{
+			name: "successful diff",
+			context: DiffContext{
+				Base: "main",
+				Head: "feature",
+				Dir:  ".",
+			},
+			mockOutput:    sampleGitDiff,
+			expectedErr:   false,
+			expectedFiles: 2,
+			expectedHunks: map[string]int{
+				"file1.go": 1,
+				"file2.go": 1,
+			},
+		},
+		{
+			name: "git command error",
+			context: DiffContext{
+				Base: "main",
+				Head: "feature",
+				Dir:  ".",
+			},
+			mockError:   errors.New("git command failed"),
+			expectedErr: true,
+		},
+		{
+			name: "ignore directories",
+			context: DiffContext{
+				Base:       "main",
+				Head:       "feature",
+				Dir:        ".",
+				IgnoreDirs: []string{"file1"},
+			},
+			mockOutput:    sampleGitDiff,
+			expectedErr:   false,
+			expectedFiles: 1,
+			expectedHunks: map[string]int{
+				"file2.go": 1,
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set up mock executor
+			executor := NewMockGitExecutor(tc.mockOutput, tc.mockError)
+
+			// Run the test
+			diff, err := NewDiffWithExecutor(tc.context, executor)
+
+			if tc.expectedErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			if diff == nil {
+				t.Error("expected non-nil diff")
+				return
+			}
+
+			changes := diff.AllChanges()
+			if len(changes) != tc.expectedFiles {
+				t.Errorf("expected %d files, got %d", tc.expectedFiles, len(changes))
+			}
+
+			for _, file := range changes {
+				expectedHunks, ok := tc.expectedHunks[file.FileName]
+				if !ok {
+					t.Errorf("unexpected file: %s", file.FileName)
+					continue
+				}
+				if len(file.Hunks) != expectedHunks {
+					t.Errorf("file %s: expected %d hunks, got %d", file.FileName, expectedHunks, len(file.Hunks))
+				}
+			}
+		})
+	}
+}
+
+func TestChangesSince(t *testing.T) {
+	const olderDiff = `diff --git a/file1.go b/file1.go
+index abc..def 100644
+--- a/file1.go
++++ b/file1.go
+@@ -5,0 +6 @@ func Example() {
++       fmt.Println("Old change")`
+
+	tt := []struct {
+		name             string
+		context          DiffContext
+		ref              string
+		currentDiff      string
+		olderDiff        string
+		mockError        error
+		expectedErr      bool
+		expectedFiles    int
+		expectedNewHunks map[string]int // filename -> number of new hunks
+	}{
+		{
+			name: "new changes detected",
+			context: DiffContext{
+				Base: "main",
+				Head: "feature",
+				Dir:  ".",
+			},
+			ref:           "old-ref",
+			currentDiff:   sampleGitDiff,
+			olderDiff:     olderDiff,
+			expectedErr:   false,
+			expectedFiles: 2,
+			expectedNewHunks: map[string]int{
+				"file1.go": 1,
+				"file2.go": 1,
+			},
+		},
+		{
+			name: "error getting older diff",
+			context: DiffContext{
+				Base: "main",
+				Head: "feature",
+				Dir:  ".",
+			},
+			ref:         "old-ref",
+			mockError:   errors.New("git command failed"),
+			expectedErr: true,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create initial diff with current changes
+			executor := NewMockGitExecutor(tc.currentDiff, nil)
+			diff, err := NewDiffWithExecutor(tc.context, executor)
+			if err != nil {
+				t.Fatalf("failed to create initial diff: %v", err)
+			}
+
+			// Set up mock executor for older diff
+			executor = NewMockGitExecutor(tc.olderDiff, tc.mockError)
+			diff.(*GitDiff).executor = executor // Update the executor in the diff
+
+			// Run the test
+			changes, err := diff.ChangesSince(tc.ref)
+
+			if tc.expectedErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(changes) != tc.expectedFiles {
+				t.Errorf("expected %d files, got %d", tc.expectedFiles, len(changes))
+			}
+
+			for _, file := range changes {
+				expectedHunks, ok := tc.expectedNewHunks[file.FileName]
+				if !ok {
+					t.Errorf("unexpected file: %s", file.FileName)
+					continue
+				}
+				if len(file.Hunks) != expectedHunks {
+					t.Errorf("file %s: expected %d hunks, got %d", file.FileName, expectedHunks, len(file.Hunks))
+				}
+			}
+		})
+	}
+}
+
+func TestHunkHash(t *testing.T) {
+	tt := []struct {
+		name         string
+		hunkBody     []byte
+		hunk2Body    []byte
+		expectedSame bool
+	}{
+		{
+			name: "same content different context",
+			hunkBody: []byte(`-old line
++new line
+ context line 1`),
+			hunk2Body: []byte(`-old line
++new line
+ different context`),
+			expectedSame: true,
+		},
+		{
+			name: "different content",
+			hunkBody: []byte(`-old line
++different line
+ context line 1`),
+			hunk2Body: []byte(`-old line
++another different line
+ context line 1`),
+			expectedSame: false,
+		},
+		{
+			name:         "empty hunk",
+			hunkBody:     []byte(``),
+			hunk2Body:    []byte(``),
+			expectedSame: true,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			hunk1 := &diff.Hunk{Body: tc.hunkBody}
+			hunk2 := &diff.Hunk{Body: tc.hunk2Body}
+
+			hash1 := hunkHash(hunk1)
+			hash2 := hunkHash(hunk2)
+
+			if tc.expectedSame {
+				if hash1 != hash2 {
+					t.Error("hashes should be equal")
+				}
+			} else {
+				if hash1 == hash2 {
+					t.Error("hashes should be different")
+				}
+			}
+		})
+	}
+}
+
+func TestToDiffFiles(t *testing.T) {
+	tt := []struct {
+		name        string
+		fileDiffs   []*diff.FileDiff
+		expected    []codeowners.DiffFile
+		expectedErr bool
+	}{
+		{
+			name: "single file single hunk",
+			fileDiffs: []*diff.FileDiff{
+				{
+					NewName: "b/file1.go",
+					Hunks: []*diff.Hunk{
+						{
+							NewStartLine: 10,
+							NewLines:     1,
+						},
+					},
+				},
+			},
+			expected: []codeowners.DiffFile{
+				{
+					FileName: "file1.go",
+					Hunks: []codeowners.HunkRange{
+						{
+							Start: 10,
+							End:   10,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "multiple files multiple hunks",
+			fileDiffs: []*diff.FileDiff{
+				{
+					NewName: "b/file1.go",
+					Hunks: []*diff.Hunk{
+						{
+							NewStartLine: 10,
+							NewLines:     2,
+						},
+					},
+				},
+				{
+					NewName: "b/file2.go",
+					Hunks: []*diff.Hunk{
+						{
+							NewStartLine: 20,
+							NewLines:     3,
+						},
+						{
+							NewStartLine: 30,
+							NewLines:     1,
+						},
+					},
+				},
+			},
+			expected: []codeowners.DiffFile{
+				{
+					FileName: "file1.go",
+					Hunks: []codeowners.HunkRange{
+						{
+							Start: 10,
+							End:   11,
+						},
+					},
+				},
+				{
+					FileName: "file2.go",
+					Hunks: []codeowners.HunkRange{
+						{
+							Start: 20,
+							End:   22,
+						},
+						{
+							Start: 30,
+							End:   30,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := toDiffFiles(tc.fileDiffs)
+
+			if tc.expectedErr {
+				if err == nil {
+					t.Error("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(got) != len(tc.expected) {
+				t.Errorf("expected %d files, got %d", len(tc.expected), len(got))
+				return
+			}
+
+			for i, expectedFile := range tc.expected {
+				gotFile := got[i]
+				if gotFile.FileName != expectedFile.FileName {
+					t.Errorf("file %d: expected name %s, got %s", i, expectedFile.FileName, gotFile.FileName)
+				}
+				if len(gotFile.Hunks) != len(expectedFile.Hunks) {
+					t.Errorf("file %s: expected %d hunks, got %d", gotFile.FileName, len(expectedFile.Hunks), len(gotFile.Hunks))
+				}
+				for j, expectedHunk := range expectedFile.Hunks {
+					gotHunk := gotFile.Hunks[j]
+					if gotHunk.Start != expectedHunk.Start {
+						t.Errorf("file %s, hunk %d: expected start %d, got %d", gotFile.FileName, j, expectedHunk.Start, gotHunk.Start)
+					}
+					if gotHunk.End != expectedHunk.End {
+						t.Errorf("file %s, hunk %d: expected end %d, got %d", gotFile.FileName, j, expectedHunk.End, gotHunk.End)
+					}
+				}
+			}
+		})
+	}
 }
 
 func TestDiff(t *testing.T) {

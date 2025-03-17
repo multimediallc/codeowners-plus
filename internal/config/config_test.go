@@ -1,47 +1,194 @@
 package owners
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
-func TestReadCodeownersConfig(t *testing.T) {
-	conf, err := ReadConfig("../../test_project/")
+func TestReadConfig(t *testing.T) {
+	tt := []struct {
+		name          string
+		configContent string
+		path          string
+		expected      *Config
+		expectedErr   bool
+	}{
+		{
+			name: "default config when no file exists",
+			path: "nonexistent/",
+			expected: &Config{
+				MaxReviews:           nil,
+				MinReviews:           nil,
+				UnskippableReviewers: []string{},
+				Ignore:               []string{},
+				Enforcement:          &Enforcement{Approval: false, FailCheck: true},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "valid config with all fields",
+			configContent: `
+max_reviews = 2
+min_reviews = 1
+unskippable_reviewers = ["@user1", "@user2"]
+ignore = ["ignored/"]
+[enforcement]
+approval = true
+fail_check = false
+`,
+			path: "testdata/",
+			expected: &Config{
+				MaxReviews:           intPtr(2),
+				MinReviews:           intPtr(1),
+				UnskippableReviewers: []string{"@user1", "@user2"},
+				Ignore:               []string{"ignored/"},
+				Enforcement:          &Enforcement{Approval: true, FailCheck: false},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "partial config with defaults",
+			configContent: `
+max_reviews = 3
+unskippable_reviewers = ["@user1"]
+`,
+			path: "testdata/",
+			expected: &Config{
+				MaxReviews:           intPtr(3),
+				MinReviews:           nil,
+				UnskippableReviewers: []string{"@user1"},
+				Ignore:               []string{},
+				Enforcement:          &Enforcement{Approval: false, FailCheck: true},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "invalid toml",
+			configContent: `
+max_reviews = invalid
+`,
+			path:        "testdata/",
+			expectedErr: true,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create test directory
+			testDir := t.TempDir()
+			configPath := filepath.Join(testDir, tc.path)
+
+			// Create config file if content is provided
+			if tc.configContent != "" {
+				err := os.MkdirAll(configPath, 0755)
+				if err != nil {
+					t.Fatalf("failed to create test directory: %v", err)
+				}
+				err = os.WriteFile(filepath.Join(configPath, "codeowners.toml"), []byte(tc.configContent), 0644)
+				if err != nil {
+					t.Fatalf("failed to write test config: %v", err)
+				}
+			}
+
+			// Test with and without trailing slash
+			paths := []string{configPath, configPath + "/"}
+			for _, path := range paths {
+				got, err := ReadConfig(path)
+				if tc.expectedErr {
+					if err == nil {
+						t.Error("expected error but got none")
+					}
+					continue
+				}
+
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+					continue
+				}
+
+				if got == nil {
+					t.Error("got nil config")
+					continue
+				}
+
+				// Compare fields
+				if tc.expected.MaxReviews != nil {
+					if got.MaxReviews == nil {
+						t.Error("expected MaxReviews to be set")
+					} else if *got.MaxReviews != *tc.expected.MaxReviews {
+						t.Errorf("MaxReviews: expected %d, got %d", *tc.expected.MaxReviews, *got.MaxReviews)
+					}
+				} else if got.MaxReviews != nil {
+					t.Errorf("MaxReviews: expected nil, got %d", *got.MaxReviews)
+				}
+
+				if tc.expected.MinReviews != nil {
+					if got.MinReviews == nil {
+						t.Error("expected MinReviews to be set")
+					} else if *got.MinReviews != *tc.expected.MinReviews {
+						t.Errorf("MinReviews: expected %d, got %d", *tc.expected.MinReviews, *got.MinReviews)
+					}
+				} else if got.MinReviews != nil {
+					t.Errorf("MinReviews: expected nil, got %d", *got.MinReviews)
+				}
+
+				if !sliceEqual(got.UnskippableReviewers, tc.expected.UnskippableReviewers) {
+					t.Errorf("UnskippableReviewers: expected %v, got %v", tc.expected.UnskippableReviewers, got.UnskippableReviewers)
+				}
+
+				if !sliceEqual(got.Ignore, tc.expected.Ignore) {
+					t.Errorf("Ignore: expected %v, got %v", tc.expected.Ignore, got.Ignore)
+				}
+
+				if tc.expected.Enforcement != nil {
+					if got.Enforcement == nil {
+						t.Error("expected Enforcement to be set")
+					} else {
+						if got.Enforcement.Approval != tc.expected.Enforcement.Approval {
+							t.Errorf("Enforcement.Approval: expected %v, got %v", tc.expected.Enforcement.Approval, got.Enforcement.Approval)
+						}
+						if got.Enforcement.FailCheck != tc.expected.Enforcement.FailCheck {
+							t.Errorf("Enforcement.FailCheck: expected %v, got %v", tc.expected.Enforcement.FailCheck, got.Enforcement.FailCheck)
+						}
+					}
+				} else if got.Enforcement != nil {
+					t.Error("Enforcement: expected nil, got non-nil")
+				}
+			}
+		})
+	}
+}
+
+func TestReadConfigFileError(t *testing.T) {
+	// Create a directory with no read permissions
+	testDir := t.TempDir()
+	configPath := filepath.Join(testDir, "test/")
+	err := os.MkdirAll(configPath, 0000)
 	if err != nil {
-		t.Errorf("Error reading codeowners config: %v", err)
-		return
+		t.Fatalf("failed to create test directory: %v", err)
 	}
-	if conf == nil {
-		t.Errorf("Error reading codeowners config")
-		return
+
+	// Try to read config from directory with no permissions
+	_, err = ReadConfig(configPath)
+	if err == nil {
+		t.Error("expected error when reading from directory with no permissions")
 	}
-	// if *conf.MaxReviews != 2 {
-	// 	t.Errorf("Expected max reviews 2, got %d", *conf.MaxReviews)
-	// }
-	if conf.MaxReviews != nil {
-		t.Errorf("Expected max reviews to be nil, got %d", *conf.MaxReviews)
+}
+
+// Helper functions
+func intPtr(i int) *int {
+	return &i
+}
+
+func sliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
 	}
-	if len(conf.UnskippableReviewers) != 2 {
-		t.Errorf("Expected 2 unskippable reviewers, got %d", len(conf.UnskippableReviewers))
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
 	}
-	if conf.UnskippableReviewers[0] != "@user1" {
-		t.Errorf("Expected unskippable reviewer @user1, got %s", conf.UnskippableReviewers[0])
-	}
-	if conf.UnskippableReviewers[1] != "@user2" {
-		t.Errorf("Expected unskippable reviewer @user2, got %s", conf.UnskippableReviewers[0])
-	}
-	if len(conf.Ignore) != 1 {
-		t.Errorf("Expected 1 ignore dir, got %d", len(conf.Ignore))
-	}
-	if conf.Ignore[0] != "ignored" {
-		t.Errorf("Expected ignore dir ignored, got %s", conf.Ignore[0])
-	}
-	if conf.Enforcement == nil {
-		t.Errorf("Expected enforcement to be set")
-	}
-	if conf.Enforcement.Approval != false {
-		t.Errorf("Expected Approval to be false")
-	}
-	if conf.Enforcement.FailCheck != true {
-		t.Errorf("Expected FailCheck to be true")
-	}
+	return true
 }

@@ -13,6 +13,26 @@ import (
 	"github.com/sourcegraph/go-diff/diff"
 )
 
+// gitCommandExecutor defines the interface for executing git commands
+type gitCommandExecutor interface {
+	execute(command string, args ...string) ([]byte, error)
+}
+
+// realGitExecutor implements GitCommandExecutor using os/exec
+type realGitExecutor struct {
+	dir string
+}
+
+func newRealGitExecutor(dir string) *realGitExecutor {
+	return &realGitExecutor{dir: dir}
+}
+
+func (e *realGitExecutor) execute(command string, args ...string) ([]byte, error) {
+	cmd := exec.Command(command, args...)
+	cmd.Dir = e.dir
+	return cmd.CombinedOutput()
+}
+
 type Diff interface {
 	AllChanges() []codeowners.DiffFile
 	ChangesSince(ref string) ([]codeowners.DiffFile, error)
@@ -20,13 +40,19 @@ type Diff interface {
 }
 
 type GitDiff struct {
-	context DiffContext
-	diff    []*diff.FileDiff
-	files   []codeowners.DiffFile
+	context  DiffContext
+	diff     []*diff.FileDiff
+	files    []codeowners.DiffFile
+	executor gitCommandExecutor
 }
 
 func NewDiff(context DiffContext) (Diff, error) {
-	gitDiff, err := getGitDiff(context)
+	executor := newRealGitExecutor(context.Dir)
+	return NewDiffWithExecutor(context, executor)
+}
+
+func NewDiffWithExecutor(context DiffContext, executor gitCommandExecutor) (Diff, error) {
+	gitDiff, err := getGitDiff(context, executor)
 	if err != nil {
 		return nil, err
 	}
@@ -36,9 +62,10 @@ func NewDiff(context DiffContext) (Diff, error) {
 	}
 
 	return &GitDiff{
-		context: context,
-		diff:    gitDiff,
-		files:   diffFiles,
+		context:  context,
+		diff:     gitDiff,
+		files:    diffFiles,
+		executor: executor,
 	}, nil
 }
 
@@ -53,9 +80,9 @@ func (gd *GitDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 		Dir:        gd.context.Dir,
 		IgnoreDirs: gd.context.IgnoreDirs,
 	}
-	olderDiff, err := getGitDiff(olderDiffContext)
+	olderDiff, err := getGitDiff(olderDiffContext, gd.executor)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get older diff: %w", err)
 	}
 	changesContext := changesSinceContext{
 		newerDiff: gd.diff,
@@ -63,7 +90,7 @@ func (gd *GitDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 	}
 	diffFiles, err := changesSince(changesContext)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to compute changes since: %w", err)
 	}
 	return diffFiles, nil
 }
@@ -140,10 +167,8 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 	return diffFiles, nil
 }
 
-func getGitDiff(data DiffContext) ([]*diff.FileDiff, error) {
-	cmd := exec.Command("git", "diff", "-U0", fmt.Sprintf("%s...%s", data.Base, data.Head))
-	cmd.Dir = data.Dir
-	cmdOutput, err := cmd.CombinedOutput()
+func getGitDiff(data DiffContext, executor gitCommandExecutor) ([]*diff.FileDiff, error) {
+	cmdOutput, err := executor.execute("git", "diff", "-U0", fmt.Sprintf("%s...%s", data.Base, data.Head))
 	if err != nil {
 		return nil, fmt.Errorf("Diff Error: %s\n%s\n", err, cmdOutput)
 	}
@@ -166,6 +191,10 @@ func hunkHash(hunk *diff.Hunk) [32]byte {
 	// Generate a hash for a hunk based on its added and removed lines.
 	var lines []byte
 	data := hunk.Body
+
+	if len(data) == 0 {
+		return sha256.Sum256(nil)
+	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 
