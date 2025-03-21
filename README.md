@@ -257,7 +257,6 @@ When a PR has any of these labels, the comment will look like this:
 Codeowners approval required for this PR:
 - @user1
 - @user2
-
 ❗High Prio❗
 ```
 
