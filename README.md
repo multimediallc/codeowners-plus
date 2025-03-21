@@ -254,10 +254,11 @@ high_priority_labels = ["high-priority", "urgent"]
 
 When a PR has any of these labels, the comment will look like this:
 ```
+❗High Prio❗ 
+
 Codeowners approval required for this PR:
 - @user1
 - @user2
-❗High Prio❗
 ```
 
 ## CLI Tool

@@ -218,7 +218,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 		if err != nil {
 			fmt.Fprintf(WarningBuffer, "WARNING: Error checking high priority labels: %v\n", err)
 		} else if hasHighPriority {
-			comment += "\n❗High Prio❗"
+			comment = "❗High Prio❗\n\n" + comment
 		}
 		if maxReviewsMet {
 			comment += "\n\n"
