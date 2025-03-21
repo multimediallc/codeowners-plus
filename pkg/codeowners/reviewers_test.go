@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/multimediallc/codeowners-plus/pkg/functional"
+	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 func TestToReviewers(t *testing.T) {

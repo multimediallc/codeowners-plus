@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/go-github/v63/github"
-	"github.com/multimediallc/codeowners-plus/internal/config"
+	owners "github.com/multimediallc/codeowners-plus/internal/config"
 	"github.com/multimediallc/codeowners-plus/internal/git"
-	"github.com/multimediallc/codeowners-plus/internal/github"
+	gh "github.com/multimediallc/codeowners-plus/internal/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
@@ -257,6 +257,23 @@ func (m *mockGitHubClient) IsSubstringInComments(substring string, since *time.T
 		}
 		if strings.Contains(c.GetBody(), substring) {
 			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *mockGitHubClient) IsInLabels(labels []string) (bool, error) {
+	if m.pr == nil {
+		return false, &gh.NoPRError{}
+	}
+	if len(labels) == 0 {
+		return false, nil
+	}
+	for _, label := range m.pr.Labels {
+		for _, targetLabel := range labels {
+			if label.GetName() == targetLabel {
+				return true, nil
+			}
 		}
 	}
 	return false, nil

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/multimediallc/codeowners-plus/pkg/functional"
+	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 func TestInitOwnerTree(t *testing.T) {

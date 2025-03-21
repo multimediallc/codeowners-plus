@@ -58,7 +58,7 @@ concurrency:
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
 
 jobs:
   codeowners:
@@ -242,6 +242,23 @@ To prevent ownership rules from being checked or applied for certain directories
 ```toml
 # `ignore` (default empty) allows you to specify directories that should be ignored by the codeowners check
 ignore = ["test_project"]
+```
+
+### High Priority Labels
+
+You can configure labels that indicate a high priority PR. When a PR has any of these labels, the comment will include a high priority indicator:
+
+```toml
+high_priority_labels = ["high-priority", "urgent"]
+```
+
+When a PR has any of these labels, the comment will look like this:
+```
+❗High Prio❗ 
+
+Codeowners approval required for this PR:
+- @user1
+- @user2
 ```
 
 ## CLI Tool

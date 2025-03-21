@@ -14,6 +14,7 @@ type Config struct {
 	UnskippableReviewers []string     `toml:"unskippable_reviewers"`
 	Ignore               []string     `toml:"ignore"`
 	Enforcement          *Enforcement `toml:"enforcement"`
+	HighPriorityLabels   []string     `toml:"high_priority_labels"`
 }
 
 type Enforcement struct {
@@ -32,6 +33,7 @@ func ReadConfig(path string) (*Config, error) {
 		UnskippableReviewers: []string{},
 		Ignore:               []string{},
 		Enforcement:          &Enforcement{Approval: false, FailCheck: true},
+		HighPriorityLabels:   []string{},
 	}
 
 	fileName := path + "codeowners.toml"

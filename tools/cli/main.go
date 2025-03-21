@@ -11,7 +11,7 @@ import (
 
 	"github.com/boyter/gocodewalker"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
-	"github.com/multimediallc/codeowners-plus/pkg/functional"
+	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 	"github.com/urfave/cli/v2"
 )
 
