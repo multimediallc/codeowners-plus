@@ -58,7 +58,7 @@ concurrency:
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
 
 jobs:
   codeowners:
