@@ -36,6 +36,7 @@ ignore = ["ignored/"]
 [enforcement]
 approval = true
 fail_check = false
+high_priority_labels = ["high-priority", "urgent"]
 `,
 			path: "testdata/",
 			expected: &Config{
@@ -44,6 +45,7 @@ fail_check = false
 				UnskippableReviewers: []string{"@user1", "@user2"},
 				Ignore:               []string{"ignored/"},
 				Enforcement:          &Enforcement{Approval: true, FailCheck: false},
+				HighPriorityLabels:   []string{"high-priority", "urgent"},
 			},
 			expectedErr: false,
 		},
@@ -60,6 +62,7 @@ unskippable_reviewers = ["@user1"]
 				UnskippableReviewers: []string{"@user1"},
 				Ignore:               []string{},
 				Enforcement:          &Enforcement{Approval: false, FailCheck: true},
+				HighPriorityLabels:   []string{},
 			},
 			expectedErr: false,
 		},

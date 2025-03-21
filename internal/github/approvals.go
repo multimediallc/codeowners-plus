@@ -7,7 +7,7 @@ import (
 
 	"github.com/multimediallc/codeowners-plus/internal/git"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
-	"github.com/multimediallc/codeowners-plus/pkg/functional"
+	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 type approvalWithDiff struct {

@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/multimediallc/codeowners-plus/internal/config"
+	owners "github.com/multimediallc/codeowners-plus/internal/config"
 	"github.com/multimediallc/codeowners-plus/internal/git"
-	"github.com/multimediallc/codeowners-plus/internal/github"
+	gh "github.com/multimediallc/codeowners-plus/internal/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
-	"github.com/multimediallc/codeowners-plus/pkg/functional"
+	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 // AppConfig holds the application configuration
@@ -214,6 +214,12 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	if len(unapprovedOwners) > 0 {
 		// Comment on the PR with the codeowner teams that have not approved the PR
 		comment := allRequiredOwners.ToCommentString()
+		hasHighPriority, err := a.client.IsInLabels(a.conf.HighPriorityLabels)
+		if err != nil {
+			fmt.Fprintf(WarningBuffer, "WARNING: Error checking high priority labels: %v\n", err)
+		} else if hasHighPriority {
+			comment += "\n❗High Prio❗"
+		}
 		if maxReviewsMet {
 			comment += "\n\n"
 			comment += "The PR has received the max number of required reviews.  No further action is required."

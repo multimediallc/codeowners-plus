@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v63/github"
-	"github.com/multimediallc/codeowners-plus/pkg/functional"
+	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 func setupReviews() *GHClient {
@@ -421,6 +421,13 @@ func TestNilPRErr(t *testing.T) {
 			name: "IsSubstringInComments",
 			testFn: func() error {
 				_, err := gh.IsSubstringInComments("comment", nil)
+				return err
+			},
+		},
+		{
+			name: "IsInLabels",
+			testFn: func() error {
+				_, err := gh.IsInLabels([]string{"label"})
 				return err
 			},
 		},
@@ -1017,5 +1024,96 @@ func TestInitUserReviewerMap(t *testing.T) {
 		if !f.SlicesItemsMatch(gh.userReviewerMap[user], expectedMap[user]) {
 			t.Errorf("expected user %s to be in userReviewerMap", user)
 		}
+	}
+}
+
+func TestIsInLabels(t *testing.T) {
+	tt := []struct {
+		name        string
+		pr          *github.PullRequest
+		labels      []string
+		expected    bool
+		expectError bool
+		failMessage string
+	}{
+		{
+			name: "has matching label",
+			pr: &github.PullRequest{
+				Labels: []*github.Label{
+					{Name: github.String("high-priority")},
+				},
+			},
+			labels:      []string{"high-priority"},
+			expected:    true,
+			expectError: false,
+			failMessage: "Should detect matching label",
+		},
+		{
+			name: "has multiple labels but no match",
+			pr: &github.PullRequest{
+				Labels: []*github.Label{
+					{Name: github.String("bug")},
+					{Name: github.String("enhancement")},
+				},
+			},
+			labels:      []string{"high-priority"},
+			expected:    false,
+			expectError: false,
+			failMessage: "Should not detect label when not present",
+		},
+		{
+			name: "empty labels list",
+			pr: &github.PullRequest{
+				Labels: []*github.Label{
+					{Name: github.String("high-priority")},
+				},
+			},
+			labels:      []string{},
+			expected:    false,
+			expectError: false,
+			failMessage: "Should return false for empty labels list",
+		},
+		{
+			name: "multiple target labels",
+			pr: &github.PullRequest{
+				Labels: []*github.Label{
+					{Name: github.String("urgent")},
+				},
+			},
+			labels:      []string{"high-priority", "urgent"},
+			expected:    true,
+			expectError: false,
+			failMessage: "Should detect any of the target labels",
+		},
+		{
+			name:        "nil PR",
+			pr:          nil,
+			labels:      []string{"high-priority"},
+			expected:    false,
+			expectError: true,
+			failMessage: "Should return error for nil PR",
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &GHClient{pr: tc.pr}
+			hasLabel, err := client.IsInLabels(tc.labels)
+			if tc.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+				if _, ok := err.(*NoPRError); !ok {
+					t.Errorf("Expected NoPRError, got %T", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if hasLabel != tc.expected {
+				t.Error(tc.failMessage)
+			}
+		})
 	}
 }

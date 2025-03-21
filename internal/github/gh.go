@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/go-github/v63/github"
 	"github.com/multimediallc/codeowners-plus/internal/git"
-	"github.com/multimediallc/codeowners-plus/pkg/functional"
+	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 type NoPRError struct{}
@@ -47,6 +47,7 @@ type Client interface {
 	IsInComments(comment string, since *time.Time) (bool, error)
 	IsSubstringInComments(substring string, since *time.Time) (bool, error)
 	CheckApprovals(fileReviewerMap map[string][]string, approvals []*CurrentApproval, originalDiff git.Diff) (approvers []string, staleApprovals []*CurrentApproval)
+	IsInLabels(labels []string) (bool, error)
 }
 
 type GHClient struct {
@@ -409,6 +410,24 @@ func (gh *GHClient) IsSubstringInComments(substring string, since *time.Time) (b
 		}
 		if strings.Contains(c.GetBody(), substring) {
 			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// IsInLabels checks if the PR has any of the given labels
+func (gh *GHClient) IsInLabels(labels []string) (bool, error) {
+	if gh.pr == nil {
+		return false, &NoPRError{}
+	}
+	if len(labels) == 0 {
+		return false, nil
+	}
+	for _, label := range gh.pr.Labels {
+		for _, targetLabel := range labels {
+			if label.GetName() == targetLabel {
+				return true, nil
+			}
 		}
 	}
 	return false, nil

@@ -244,6 +244,23 @@ To prevent ownership rules from being checked or applied for certain directories
 ignore = ["test_project"]
 ```
 
+### High Priority Labels
+
+You can configure labels that indicate a high priority PR. When a PR has any of these labels, the comment will include a high priority indicator:
+
+```toml
+high_priority_labels = ["high-priority", "urgent"]
+```
+
+When a PR has any of these labels, the comment will look like this:
+```
+Codeowners approval required for this PR:
+- @user1
+- @user2
+
+❗High Prio❗
+```
+
 ## CLI Tool
 
 A CLI tool is available which provides some utilities for working with `.codeowners` files.
