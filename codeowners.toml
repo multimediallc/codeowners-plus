@@ -7,7 +7,7 @@ unskippable_reviewers = ["@BakerNet"]
 # `ignore` allows you to specify directories that should be ignored by the codeowners check
 ignore = ["test_project"]
 # `high_priority_lables` allows you to specify labels that should be considered high priority
-high_priority_lables = ["P0"]
+high_priority_labels = ["P0"]
 
 # `enforcement` allows you to specify how the codeowners check should be enforced
 [enforcement]
