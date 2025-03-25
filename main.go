@@ -20,11 +20,12 @@ import (
 
 // AppConfig holds the application configuration
 type AppConfig struct {
-	Token   string
-	RepoDir string
-	PR      int
-	Repo    string
-	Verbose bool
+	Token       string
+	RepoDir     string
+	PR          int
+	Repo        string
+	Verbose     bool
+	AddComments bool
 }
 
 // App represents the application with its dependencies
@@ -38,20 +39,22 @@ type App struct {
 
 // Flags holds the command line flags
 type Flags struct {
-	Token   *string
-	RepoDir *string
-	PR      *int
-	Repo    *string
-	Verbose *bool
+	Token       *string
+	RepoDir     *string
+	PR          *int
+	Repo        *string
+	Verbose     *bool
+	AddComments *bool
 }
 
 var (
 	flags = &Flags{
-		Token:   flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
-		RepoDir: flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
-		PR:      flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
-		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
-		Verbose: flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
+		Token:       flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
+		RepoDir:     flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
+		PR:          flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
+		Repo:        flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
+		Verbose:     flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
+		AddComments: flag.Bool("comments", ignoreError(strconv.ParseBool(getEnv("INPUT_ADD_COMMENTS", "1"))), "Add comments to Pull Request"),
 	}
 	WarningBuffer   = bytes.NewBuffer([]byte{})
 	InfoBuffer      = bytes.NewBuffer([]byte{})
@@ -212,51 +215,49 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	}
 
 	// Add comments to the PR if necessary
-	if !QUIET_MODE_TEST {
-		if len(unapprovedOwners) > 0 {
-			// Comment on the PR with the codeowner teams that have not approved the PR
-			comment := allRequiredOwners.ToCommentString()
-			hasHighPriority, err := a.client.IsInLabels(a.conf.HighPriorityLabels)
+	if a.config.AddComments && len(unapprovedOwners) > 0 {
+		// Comment on the PR with the codeowner teams that have not approved the PR
+		comment := allRequiredOwners.ToCommentString()
+		hasHighPriority, err := a.client.IsInLabels(a.conf.HighPriorityLabels)
+		if err != nil {
+			fmt.Fprintf(WarningBuffer, "WARNING: Error checking high priority labels: %v\n", err)
+		} else if hasHighPriority {
+			comment = "❗High Prio❗\n\n" + comment
+		}
+		if maxReviewsMet {
+			comment += "\n\n"
+			comment += "The PR has received the max number of required reviews.  No further action is required."
+		}
+		fiveDaysAgo := time.Now().AddDate(0, 0, -5)
+		found, err := a.client.IsInComments(comment, &fiveDaysAgo)
+		if err != nil {
+			return false, message, fmt.Errorf("IsInComments Error: %v\n", err)
+		}
+		if !found {
+			err = a.client.AddComment(comment)
 			if err != nil {
-				fmt.Fprintf(WarningBuffer, "WARNING: Error checking high priority labels: %v\n", err)
-			} else if hasHighPriority {
-				comment = "❗High Prio❗\n\n" + comment
-			}
-			if maxReviewsMet {
-				comment += "\n\n"
-				comment += "The PR has received the max number of required reviews.  No further action is required."
-			}
-			fiveDaysAgo := time.Now().AddDate(0, 0, -5)
-			found, err := a.client.IsInComments(comment, &fiveDaysAgo)
-			if err != nil {
-				return false, message, fmt.Errorf("IsInComments Error: %v\n", err)
-			}
-			if !found {
-				err = a.client.AddComment(comment)
-				if err != nil {
-					return false, message, fmt.Errorf("AddComment Error: %v\n", err)
-				}
+				return false, message, fmt.Errorf("AddComment Error: %v\n", err)
 			}
 		}
-		if len(allOptionalReviewerNames) > 0 {
-			var isInCommentsError error = nil
-			// Add CC comment to the PR with the optional reviewers that have not already been mentioned in the PR comments
-			viewersToPing := f.Filtered(allOptionalReviewerNames, func(name string) bool {
-				found, err := a.client.IsSubstringInComments(name, nil)
-				if err != nil {
-					isInCommentsError = err
-				}
-				return !found
-			})
-			if isInCommentsError != nil {
-				return false, message, fmt.Errorf("IsInComments Error: %v\n", err)
+	}
+	if a.config.AddComments && len(allOptionalReviewerNames) > 0 {
+		var isInCommentsError error = nil
+		// Add CC comment to the PR with the optional reviewers that have not already been mentioned in the PR comments
+		viewersToPing := f.Filtered(allOptionalReviewerNames, func(name string) bool {
+			found, err := a.client.IsSubstringInComments(name, nil)
+			if err != nil {
+				isInCommentsError = err
 			}
-			if len(viewersToPing) > 0 {
-				comment := fmt.Sprintf("cc %s", strings.Join(viewersToPing, " "))
-				err = a.client.AddComment(comment)
-				if err != nil {
-					return false, message, fmt.Errorf("AddComment Error: %v\n", err)
-				}
+			return !found
+		})
+		if isInCommentsError != nil {
+			return false, message, fmt.Errorf("IsInComments Error: %v\n", err)
+		}
+		if len(viewersToPing) > 0 {
+			comment := fmt.Sprintf("cc %s", strings.Join(viewersToPing, " "))
+			err = a.client.AddComment(comment)
+			if err != nil {
+				return false, message, fmt.Errorf("AddComment Error: %v\n", err)
 			}
 		}
 	}
@@ -422,11 +423,12 @@ func main() {
 	}
 
 	cfg := AppConfig{
-		Token:   *flags.Token,
-		RepoDir: *flags.RepoDir,
-		PR:      *flags.PR,
-		Repo:    *flags.Repo,
-		Verbose: *flags.Verbose,
+		Token:       *flags.Token,
+		RepoDir:     *flags.RepoDir,
+		PR:          *flags.PR,
+		Repo:        *flags.Repo,
+		Verbose:     *flags.Verbose,
+		AddComments: *flags.AddComments,
 	}
 
 	app, err := NewApp(cfg)
