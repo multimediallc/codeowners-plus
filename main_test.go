@@ -129,6 +129,8 @@ type mockGitHubClient struct {
 	initCommentsError       error
 	addCommentError         error
 	approvePRError          error
+	AddCommentCalled        bool
+	AddCommentInput         string
 }
 
 func (m *mockGitHubClient) PR() *github.PullRequest {
@@ -218,6 +220,8 @@ func (m *mockGitHubClient) InitComments() error {
 }
 
 func (m *mockGitHubClient) AddComment(comment string) error {
+	m.AddCommentCalled = true
+	m.AddCommentInput = comment
 	if m.addCommentError != nil {
 		return m.addCommentError
 	}
@@ -245,6 +249,11 @@ func (m *mockGitHubClient) IsInComments(comment string, since *time.Time) (bool,
 		}
 	}
 	return false, nil
+}
+
+func (m *mockGitHubClient) ResetCommentCallTracking() {
+	m.AddCommentCalled = false
+	m.AddCommentInput = ""
 }
 
 func (m *mockGitHubClient) IsSubstringInComments(substring string, since *time.Time) (bool, error) {
@@ -376,11 +385,12 @@ func TestNewApp(t *testing.T) {
 		{
 			name: "valid config",
 			config: AppConfig{
-				Token:   "test-token",
-				RepoDir: "/test/dir",
-				PR:      123,
-				Repo:    "owner/repo",
-				Verbose: true,
+				Token:       "test-token",
+				RepoDir:     "/test/dir",
+				PR:          123,
+				Repo:        "owner/repo",
+				Verbose:     true,
+				AddComments: false,
 			},
 			expectError: false,
 		},
@@ -431,6 +441,9 @@ func TestNewApp(t *testing.T) {
 			}
 			if app.config.Verbose != tc.config.Verbose {
 				t.Errorf("expected verbose %v, got %v", tc.config.Verbose, app.config.Verbose)
+			}
+			if app.config.AddComments != tc.config.AddComments {
+				t.Errorf("expected AddComments %v, got %v", tc.config.AddComments, app.config.AddComments)
 			}
 		})
 	}
@@ -625,6 +638,110 @@ func TestInitFlags(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+func setupAppForCommentTest(t *testing.T, addComments bool) (*App, *mockGitHubClient) {
+	t.Helper()
+
+	mockGH := &mockGitHubClient{}
+	mockGH.ResetCommentCallTracking()
+
+	cfg := AppConfig{
+		AddComments: addComments,
+	}
+
+	conf := &owners.Config{
+		HighPriorityLabels: []string{"high-prio"},
+	}
+
+	app := &App{
+		config:     cfg,
+		client:     mockGH,
+		conf:       conf,
+		codeowners: &mockCodeOwners{},
+		gitDiff:    mockGitDiff{},
+	}
+
+	return app, mockGH
+}
+
+func TestAddReviewStatusComment_ShortCircuit(t *testing.T) {
+	app, mockClient := setupAppForCommentTest(t, false) // AddComments = false
+
+	// Prepare some data that *would* trigger a comment if AddComments were true
+	unapproved := codeowners.ReviewerGroups{
+		&codeowners.ReviewerGroup{Names: []string{"@pending-reviewer"}},
+	}
+	allRequired := codeowners.ReviewerGroups{
+		&codeowners.ReviewerGroup{Names: []string{"@pending-reviewer"}},
+	}
+
+	err := app.addReviewStatusComment(allRequired, unapproved, false)
+	if err != nil {
+		t.Errorf("Expected no error when AddComments is false, but got: %v", err)
+	}
+
+	if mockClient.AddCommentCalled {
+		t.Error("Expected AddComment not to be called when AddComments is false")
+	}
+}
+
+func TestAddOptionalCcComment_ShortCircuit(t *testing.T) {
+	app, mockClient := setupAppForCommentTest(t, false) // AddComments = false
+
+	// Prepare some data that *would* trigger a comment if AddComments were true
+	optionalReviewers := []string{"@optional-cc"}
+
+	err := app.addOptionalCcComment(optionalReviewers)
+	if err != nil {
+		t.Errorf("Expected no error when AddComments is false, but got: %v", err)
+	}
+
+	if mockClient.AddCommentCalled {
+		t.Error("Expected AddComment not to be called when AddComments is false")
+	}
+}
+
+func TestAddReviewStatusComment_AddsComment(t *testing.T) {
+	app, mockClient := setupAppForCommentTest(t, true) // AddComments = true
+
+	unapproved := codeowners.ReviewerGroups{
+		&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+	}
+	allRequired := codeowners.ReviewerGroups{
+		&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+	}
+	expectedComment := allRequired.ToCommentString()
+
+	err := app.addReviewStatusComment(allRequired, unapproved, false)
+
+	if err != nil {
+		t.Errorf("Unexpected error when adding comment: %v", err)
+	}
+	if !mockClient.AddCommentCalled {
+		t.Error("Expected AddComment to be called when AddComments is true and unapproved exist")
+	}
+	if mockClient.AddCommentInput != expectedComment {
+		t.Errorf("Expected comment body %q, got %q", expectedComment, mockClient.AddCommentInput)
+	}
+}
+
+func TestAddOptionalCcComment_AddsComment(t *testing.T) {
+	app, mockClient := setupAppForCommentTest(t, true) // AddComments = true
+
+	optionalReviewers := []string{"@cc-user1", "@cc-user2"}
+	expectedComment := "cc @cc-user1 @cc-user2"
+
+	err := app.addOptionalCcComment(optionalReviewers)
+	if err != nil {
+		t.Errorf("Unexpected error when adding comment: %v", err)
+	}
+	if !mockClient.AddCommentCalled {
+		t.Error("Expected AddComment to be called when AddComments is true and viewers need pinging")
+	}
+	if mockClient.AddCommentInput != expectedComment {
+		t.Errorf("Expected comment body %q, got %q", expectedComment, mockClient.AddCommentInput)
 	}
 }
 
