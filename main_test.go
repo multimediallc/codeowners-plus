@@ -556,7 +556,7 @@ func TestErrorAndExit(t *testing.T) {
 			InfoBuffer.WriteString(tc.info)
 			*flags.Verbose = tc.verbose
 
-			errorAndExit(tc.shouldFail, tc.format, tc.args...)
+			outputAndExit(io.Discard, tc.shouldFail, fmt.Sprintf(tc.format, tc.args...))
 		})
 	}
 }
