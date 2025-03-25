@@ -162,7 +162,7 @@ func (gh *GHClient) approvals() []*github.PullRequestReview {
 		if _, ok := seen[userName]; ok {
 			// we only care about the most recent reviews for each user
 			return false
-		} else {
+		} else if approval.GetState() == "APPROVED" {
 			seen[userName] = true
 		}
 		return approval.GetState() == "APPROVED"
