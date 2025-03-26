@@ -388,12 +388,12 @@ func TestNewApp(t *testing.T) {
 		{
 			name: "valid config",
 			config: AppConfig{
-				Token:       "test-token",
-				RepoDir:     "/test/dir",
-				PR:          123,
-				Repo:        "owner/repo",
-				Verbose:     true,
-				AddComments: false,
+				Token:   "test-token",
+				RepoDir: "/test/dir",
+				PR:      123,
+				Repo:    "owner/repo",
+				Verbose: true,
+				Quiet:   true,
 			},
 			expectError: false,
 		},
@@ -445,8 +445,8 @@ func TestNewApp(t *testing.T) {
 			if app.config.Verbose != tc.config.Verbose {
 				t.Errorf("expected verbose %v, got %v", tc.config.Verbose, app.config.Verbose)
 			}
-			if app.config.AddComments != tc.config.AddComments {
-				t.Errorf("expected AddComments %v, got %v", tc.config.AddComments, app.config.AddComments)
+			if app.config.Quiet != tc.config.Quiet {
+				t.Errorf("expected Quiet %v, got %v", tc.config.Quiet, app.config.Quiet)
 			}
 		})
 	}
@@ -644,14 +644,14 @@ func TestInitFlags(t *testing.T) {
 	}
 }
 
-func setupAppForTest(t *testing.T, addComments bool) (*App, *mockGitHubClient) {
+func setupAppForTest(t *testing.T, quiet bool) (*App, *mockGitHubClient) {
 	t.Helper()
 
 	mockGH := &mockGitHubClient{}
 	mockGH.ResetGHClientTracking()
 
 	cfg := AppConfig{
-		AddComments: addComments,
+		Quiet: quiet,
 	}
 
 	conf := &owners.Config{
@@ -675,9 +675,9 @@ func setupAppForTest(t *testing.T, addComments bool) (*App, *mockGitHubClient) {
 }
 
 func TestAddReviewStatusComment_ShortCircuit(t *testing.T) {
-	app, mockClient := setupAppForTest(t, false) // AddComments = false
+	app, mockClient := setupAppForTest(t, true) // Quiet = true
 
-	// Prepare some data that *would* trigger a comment if AddComments were true
+	// Prepare some data that *would* trigger a comment if Quiet were false
 	unapproved := codeowners.ReviewerGroups{
 		&codeowners.ReviewerGroup{Names: []string{"@pending-reviewer"}},
 	}
@@ -687,32 +687,32 @@ func TestAddReviewStatusComment_ShortCircuit(t *testing.T) {
 
 	err := app.addReviewStatusComment(allRequired, unapproved, false)
 	if err != nil {
-		t.Errorf("Expected no error when AddComments is false, but got: %v", err)
+		t.Errorf("Expected no error when Quiet is true, but got: %v", err)
 	}
 
 	if mockClient.AddCommentCalled {
-		t.Error("Expected AddComment not to be called when AddComments is false")
+		t.Error("Expected AddComment not to be called when Quiet is true")
 	}
 }
 
 func TestAddOptionalCcComment_ShortCircuit(t *testing.T) {
-	app, mockClient := setupAppForTest(t, false) // AddComments = false
+	app, mockClient := setupAppForTest(t, true) // Quiet = true
 
-	// Prepare some data that *would* trigger a comment if AddComments were true
+	// Prepare some data that *would* trigger a comment if Quiet were false
 	optionalReviewers := []string{"@optional-cc"}
 
 	err := app.addOptionalCcComment(optionalReviewers)
 	if err != nil {
-		t.Errorf("Expected no error when AddComments is false, but got: %v", err)
+		t.Errorf("Expected no error when Quiet is true, but got: %v", err)
 	}
 
 	if mockClient.AddCommentCalled {
-		t.Error("Expected AddComment not to be called when AddComments is false")
+		t.Error("Expected AddComment not to be called when Quiet is true")
 	}
 }
 
 func TestAddReviewStatusComment_AddsComment(t *testing.T) {
-	app, mockClient := setupAppForTest(t, true) // AddComments = true
+	app, mockClient := setupAppForTest(t, false) // Quiet = false
 
 	unapproved := codeowners.ReviewerGroups{
 		&codeowners.ReviewerGroup{Names: []string{"@user1"}},
@@ -728,7 +728,7 @@ func TestAddReviewStatusComment_AddsComment(t *testing.T) {
 		t.Errorf("Unexpected error when adding comment: %v", err)
 	}
 	if !mockClient.AddCommentCalled {
-		t.Error("Expected AddComment to be called when AddComments is true and unapproved exist")
+		t.Error("Expected AddComment to be called when Quiet is false and unapproved exist")
 	}
 	if mockClient.AddCommentInput != expectedComment {
 		t.Errorf("Expected comment body %q, got %q", expectedComment, mockClient.AddCommentInput)
@@ -736,7 +736,7 @@ func TestAddReviewStatusComment_AddsComment(t *testing.T) {
 }
 
 func TestAddOptionalCcComment_AddsComment(t *testing.T) {
-	app, mockClient := setupAppForTest(t, true) // AddComments = true
+	app, mockClient := setupAppForTest(t, false) // Quiet = false
 
 	optionalReviewers := []string{"@cc-user1", "@cc-user2"}
 	expectedComment := "cc @cc-user1 @cc-user2"
@@ -746,7 +746,7 @@ func TestAddOptionalCcComment_AddsComment(t *testing.T) {
 		t.Errorf("Unexpected error when adding comment: %v", err)
 	}
 	if !mockClient.AddCommentCalled {
-		t.Error("Expected AddComment to be called when AddComments is true and viewers need pinging")
+		t.Error("Expected AddComment to be called when Quiet is false and viewers need to be pinged")
 	}
 	if mockClient.AddCommentInput != expectedComment {
 		t.Errorf("Expected comment body %q, got %q", expectedComment, mockClient.AddCommentInput)
@@ -754,18 +754,18 @@ func TestAddOptionalCcComment_AddsComment(t *testing.T) {
 }
 
 func TestRequestReviews_ShortCircuit(t *testing.T) {
-	app, mockClient := setupAppForTest(t, false) // AddComments = false
+	app, mockClient := setupAppForTest(t, true) // Quiet = true
 
 	mockClient.currentlyRequested = []string{}
 	mockClient.alreadyReviewed = []string{}
 
 	err := app.requestReviews()
 	if err != nil {
-		t.Errorf("Expected no error when AddComments is false, but got: %v", err)
+		t.Errorf("Expected no error when Quiet is true, but got: %v", err)
 	}
 
 	if mockClient.RequestReviewersCalled {
-		t.Error("Expected client.RequestReviewers not to be called when AddComments is false")
+		t.Error("Expected client.RequestReviewers not to be called when Quiet is true")
 	}
 }
 
@@ -1017,7 +1017,7 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 
 			app := &App{
 				config: AppConfig{
-					AddComments: true,
+					Quiet: false,
 				},
 				client:     mockGH,
 				codeowners: mockOwners,

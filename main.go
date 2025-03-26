@@ -20,12 +20,12 @@ import (
 
 // AppConfig holds the application configuration
 type AppConfig struct {
-	Token       string
-	RepoDir     string
-	PR          int
-	Repo        string
-	Verbose     bool
-	AddComments bool
+	Token   string
+	RepoDir string
+	PR      int
+	Repo    string
+	Verbose bool
+	Quiet   bool
 }
 
 // App represents the application with its dependencies
@@ -39,26 +39,25 @@ type App struct {
 
 // Flags holds the command line flags
 type Flags struct {
-	Token       *string
-	RepoDir     *string
-	PR          *int
-	Repo        *string
-	Verbose     *bool
-	AddComments *bool
+	Token   *string
+	RepoDir *string
+	PR      *int
+	Repo    *string
+	Verbose *bool
+	Quiet   *bool
 }
 
 var (
 	flags = &Flags{
-		Token:       flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
-		RepoDir:     flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
-		PR:          flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
-		Repo:        flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
-		Verbose:     flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
-		AddComments: flag.Bool("comments", ignoreError(strconv.ParseBool(getEnv("INPUT_ADD_COMMENTS", "1"))), "Add comments to Pull Request"),
+		Token:   flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
+		RepoDir: flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
+		PR:      flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
+		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
+		Verbose: flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
+		Quiet:   flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Prevents addition of comments to PR and requesting reviews from unapproved owners"),
 	}
-	WarningBuffer   = bytes.NewBuffer([]byte{})
-	InfoBuffer      = bytes.NewBuffer([]byte{})
-	QUIET_MODE_TEST = true
+	WarningBuffer = bytes.NewBuffer([]byte{})
+	InfoBuffer    = bytes.NewBuffer([]byte{})
 )
 
 // initFlags initializes and parses command line flags
@@ -263,7 +262,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeowners.ReviewerGroups, maxReviewsMet bool) error {
 	// Comment on the PR with the codeowner teams that have not approved the PR
 
-	if !a.config.AddComments || len(unapprovedOwners) == 0 {
+	if a.config.Quiet || len(unapprovedOwners) == 0 {
 		printDebug("Skipping review status comment (disabled or no unapproved owners).\n")
 		return nil
 	}
@@ -303,7 +302,7 @@ func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeown
 func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 	// Add CC comment to the PR with the optional reviewers that have not already been mentioned in the PR comments
 
-	if !a.config.AddComments || len(allOptionalReviewerNames) == 0 {
+	if a.config.Quiet || len(allOptionalReviewerNames) == 0 {
 		printDebug("Skipping optional CC comment (disabled or no optional reviewers).\n")
 		return nil
 	}
@@ -372,7 +371,7 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 }
 
 func (a *App) requestReviews() error {
-	if !a.config.AddComments {
+	if a.config.Quiet {
 		printDebug("Skipping review requests (disabled in quiet mode).\n")
 		return nil
 	}
@@ -472,12 +471,12 @@ func main() {
 	}
 
 	cfg := AppConfig{
-		Token:       *flags.Token,
-		RepoDir:     *flags.RepoDir,
-		PR:          *flags.PR,
-		Repo:        *flags.Repo,
-		Verbose:     *flags.Verbose,
-		AddComments: *flags.AddComments,
+		Token:   *flags.Token,
+		RepoDir: *flags.RepoDir,
+		PR:      *flags.PR,
+		Repo:    *flags.Repo,
+		Verbose: *flags.Verbose,
+		Quiet:   *flags.Quiet,
 	}
 
 	app, err := NewApp(cfg)
