@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strconv"
@@ -89,7 +90,7 @@ func initFlags(flags *Flags) error {
 func NewApp(cfg AppConfig) (*App, error) {
 	repoSplit := strings.Split(cfg.Repo, "/")
 	if len(repoSplit) != 2 {
-		return nil, fmt.Errorf("invalid repo name: %s", cfg.Repo)
+		return nil, fmt.Errorf("Invalid repo name: %s", cfg.Repo)
 	}
 	owner := repoSplit[0]
 	repo := repoSplit[1]
@@ -431,19 +432,19 @@ func ignoreError[V any, E error](res V, _ E) V {
 	return res
 }
 
-func errorAndExit(shouldFail bool, format string, args ...interface{}) {
-	_, err := WarningBuffer.WriteTo(os.Stderr)
+func outputAndExit(w io.Writer, shouldFail bool, message string) {
+	_, err := WarningBuffer.WriteTo(w)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing warning buffer: %v\n", err)
 	}
 	if *flags.Verbose {
-		_, err := InfoBuffer.WriteTo(os.Stderr)
+		_, err := InfoBuffer.WriteTo(w)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing info buffer: %v\n", err)
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, format, args...)
+	fmt.Fprint(w, message)
 	if testing.Testing() {
 		return
 	}
@@ -467,7 +468,7 @@ func printWarning(format string, args ...interface{}) {
 func main() {
 	err := initFlags(flags)
 	if err != nil {
-		errorAndExit(true, "%v\n", err)
+		outputAndExit(os.Stderr, true, fmt.Sprintln(err))
 	}
 
 	cfg := AppConfig{
@@ -481,29 +482,19 @@ func main() {
 
 	app, err := NewApp(cfg)
 	if err != nil {
-		errorAndExit(true, "Failed to initialize app: %v\n", err)
+		outputAndExit(os.Stderr, true, fmt.Sprintf("Failed to initialize app: %v\n", err))
 	}
 
 	success, message, err := app.Run()
 	if err != nil {
-		errorAndExit(true, "%v\n", err)
+		outputAndExit(os.Stderr, true, fmt.Sprintln(err))
 	}
-	_, err = WarningBuffer.WriteTo(os.Stderr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing warning buffer: %v\n", err)
-	}
-	if *flags.Verbose {
-		_, err = InfoBuffer.WriteTo(os.Stdout)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing info buffer: %v\n", err)
-		}
-	}
+	var w io.Writer
 	if success {
-		fmt.Fprintln(os.Stdout, message)
+		w = os.Stdout
 	} else {
-		fmt.Fprintln(os.Stderr, message)
+		w = os.Stderr
 	}
-	if !success && app.conf.Enforcement.FailCheck {
-		os.Exit(1)
-	}
+	shouldFail := !success && app.conf.Enforcement.FailCheck
+	outputAndExit(w, shouldFail, message)
 }
