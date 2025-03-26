@@ -529,7 +529,7 @@ func TestPrintWarning(t *testing.T) {
 	}
 }
 
-func TestErrorAndExit(t *testing.T) {
+func TestOuputAndExit(t *testing.T) {
 	// Note: This test can't actually verify the exit behavior
 	// It only verifies that the buffers are written correctly
 	tt := []struct {
@@ -674,98 +674,148 @@ func setupAppForTest(t *testing.T, quiet bool) (*App, *mockGitHubClient) {
 	return app, mockGH
 }
 
-func TestAddReviewStatusComment_ShortCircuit(t *testing.T) {
-	app, mockClient := setupAppForTest(t, true) // Quiet = true
-
-	// Prepare some data that *would* trigger a comment if Quiet were false
-	unapproved := codeowners.ReviewerGroups{
-		&codeowners.ReviewerGroup{Names: []string{"@pending-reviewer"}},
+func TestAddReviewStatusComment(t *testing.T) {
+	user1Group := codeowners.ReviewerGroups{
+		&codeowners.ReviewerGroup{Names: []string{"@user1"}},
 	}
-	allRequired := codeowners.ReviewerGroups{
+	pendingReviewerGroup := codeowners.ReviewerGroups{
 		&codeowners.ReviewerGroup{Names: []string{"@pending-reviewer"}},
 	}
 
-	err := app.addReviewStatusComment(allRequired, unapproved, false)
-	if err != nil {
-		t.Errorf("Expected no error when Quiet is true, but got: %v", err)
+	tt := []struct {
+		name               string
+		quiet              bool
+		unapproved         codeowners.ReviewerGroups
+		allRequired        codeowners.ReviewerGroups
+		expectedShouldCall bool
+		expectedComment    string
+	}{
+		{
+			name:               "short circuits in quiet mode",
+			quiet:              true,
+			unapproved:         pendingReviewerGroup,
+			allRequired:        pendingReviewerGroup,
+			expectedShouldCall: false,
+			expectedComment:    "",
+		},
+		{
+			name:               "adds comment when not in quiet mode and a required reviewer has not approved",
+			quiet:              false,
+			unapproved:         user1Group,
+			allRequired:        user1Group,
+			expectedShouldCall: true,
+			expectedComment:    user1Group.ToCommentString(),
+		},
 	}
 
-	if mockClient.AddCommentCalled {
-		t.Error("Expected AddComment not to be called when Quiet is true")
-	}
-}
-
-func TestAddOptionalCcComment_ShortCircuit(t *testing.T) {
-	app, mockClient := setupAppForTest(t, true) // Quiet = true
-
-	// Prepare some data that *would* trigger a comment if Quiet were false
-	optionalReviewers := []string{"@optional-cc"}
-
-	err := app.addOptionalCcComment(optionalReviewers)
-	if err != nil {
-		t.Errorf("Expected no error when Quiet is true, but got: %v", err)
-	}
-
-	if mockClient.AddCommentCalled {
-		t.Error("Expected AddComment not to be called when Quiet is true")
-	}
-}
-
-func TestAddReviewStatusComment_AddsComment(t *testing.T) {
-	app, mockClient := setupAppForTest(t, false) // Quiet = false
-
-	unapproved := codeowners.ReviewerGroups{
-		&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-	}
-	allRequired := codeowners.ReviewerGroups{
-		&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-	}
-	expectedComment := allRequired.ToCommentString()
-
-	err := app.addReviewStatusComment(allRequired, unapproved, false)
-
-	if err != nil {
-		t.Errorf("Unexpected error when adding comment: %v", err)
-	}
-	if !mockClient.AddCommentCalled {
-		t.Error("Expected AddComment to be called when Quiet is false and unapproved exist")
-	}
-	if mockClient.AddCommentInput != expectedComment {
-		t.Errorf("Expected comment body %q, got %q", expectedComment, mockClient.AddCommentInput)
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			app, mockClient := setupAppForTest(t, tc.quiet)
+			err := app.addReviewStatusComment(tc.allRequired, tc.unapproved, false)
+			if err != nil {
+				t.Errorf("Unexpected error when adding comment: %v", err)
+			}
+			if mockClient.AddCommentCalled != tc.expectedShouldCall {
+				t.Errorf("Expected mockClient.AddCommentCalled to be %t, but got %t", tc.expectedShouldCall, mockClient.AddCommentCalled)
+			}
+			if mockClient.AddCommentInput != tc.expectedComment {
+				t.Errorf("Expected comment body %q, got %q", tc.expectedComment, mockClient.AddCommentInput)
+			}
+		})
 	}
 }
 
-func TestAddOptionalCcComment_AddsComment(t *testing.T) {
-	app, mockClient := setupAppForTest(t, false) // Quiet = false
+func TestAddOptionalCcComment(t *testing.T) {
+	optionalSingle := []string{"@optional-cc"}
+	optionalMultiple := []string{"@cc-user1", "@cc-user2"}
 
-	optionalReviewers := []string{"@cc-user1", "@cc-user2"}
-	expectedComment := "cc @cc-user1 @cc-user2"
+	tt := []struct {
+		name               string
+		quiet              bool
+		optionalReviewers  []string
+		expectedShouldCall bool
+		expectedComment    string
+	}{
+		{
+			name:               "short circuits in quiet mode",
+			quiet:              true,
+			optionalReviewers:  optionalSingle,
+			expectedShouldCall: false,
+			expectedComment:    "",
+		},
+		{
+			name:               "adds comment when not in quiet mode",
+			quiet:              false,
+			optionalReviewers:  optionalMultiple,
+			expectedShouldCall: true,
+			expectedComment:    fmt.Sprintf("cc %s", strings.Join(optionalMultiple, " ")),
+		},
+	}
 
-	err := app.addOptionalCcComment(optionalReviewers)
-	if err != nil {
-		t.Errorf("Unexpected error when adding comment: %v", err)
-	}
-	if !mockClient.AddCommentCalled {
-		t.Error("Expected AddComment to be called when Quiet is false and viewers need to be pinged")
-	}
-	if mockClient.AddCommentInput != expectedComment {
-		t.Errorf("Expected comment body %q, got %q", expectedComment, mockClient.AddCommentInput)
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			app, mockClient := setupAppForTest(t, tc.quiet)
+			mockClient.ResetGHClientTracking()
+
+			err := app.addOptionalCcComment(tc.optionalReviewers)
+			if err != nil {
+				t.Errorf("Unexpected error when adding optional cc comment: %v", err)
+			}
+			if mockClient.AddCommentCalled != tc.expectedShouldCall {
+				t.Errorf("Expected mockClient.AddCommentCalled to be %t, but got %t", tc.expectedShouldCall, mockClient.AddCommentCalled)
+			}
+			if tc.expectedShouldCall && mockClient.AddCommentInput != tc.expectedComment {
+				t.Errorf("Expected comment body %q, got %q", tc.expectedComment, mockClient.AddCommentInput)
+			}
+			if !tc.expectedShouldCall && mockClient.AddCommentInput != "" {
+				t.Errorf("Expected empty comment body when AddCommentCalled is false, but got %q", mockClient.AddCommentInput)
+			}
+		})
 	}
 }
 
-func TestRequestReviews_ShortCircuit(t *testing.T) {
-	app, mockClient := setupAppForTest(t, true) // Quiet = true
-
-	mockClient.currentlyRequested = []string{}
-	mockClient.alreadyReviewed = []string{}
-
-	err := app.requestReviews()
-	if err != nil {
-		t.Errorf("Expected no error when Quiet is true, but got: %v", err)
+func TestRequestReviews(t *testing.T) {
+	tt := []struct {
+		name                   string
+		quiet                  bool
+		mockCurrentlyRequested []string
+		mockAlreadyReviewed    []string
+		expectedShouldCall     bool
+	}{
+		{
+			name:                   "short circuits in quiet mode",
+			quiet:                  true,
+			mockCurrentlyRequested: []string{},
+			mockAlreadyReviewed:    []string{},
+			expectedShouldCall:     false,
+		},
+		{
+			name:                   "sends requests when not in quiet mode",
+			quiet:                  false,
+			mockCurrentlyRequested: []string{},
+			mockAlreadyReviewed:    []string{},
+			expectedShouldCall:     true,
+		},
 	}
 
-	if mockClient.RequestReviewersCalled {
-		t.Error("Expected client.RequestReviewers not to be called when Quiet is true")
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			app, mockClient := setupAppForTest(t, tc.quiet)
+			mockClient.ResetGHClientTracking()
+
+			mockClient.currentlyRequested = tc.mockCurrentlyRequested
+			mockClient.alreadyReviewed = tc.mockAlreadyReviewed
+
+			err := app.requestReviews()
+
+			if err != nil {
+				t.Errorf("Unexpected error during requestReviews: %v", err)
+			}
+
+			if mockClient.RequestReviewersCalled != tc.expectedShouldCall {
+				t.Errorf("Expected mockClient.RequestReviewersCalled to be %t, but got %t", tc.expectedShouldCall, mockClient.RequestReviewersCalled)
+			}
+		})
 	}
 }
 
