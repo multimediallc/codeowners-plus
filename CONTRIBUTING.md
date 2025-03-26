@@ -18,7 +18,7 @@ Thank you for considering contributing to Codeowners Plus! We welcome contributi
 > Running locally still requires real Github PRs to exist that you are testing against.
 
 ```bash
-go run main.go -token <your_gh_token> -dir ../chaturbate -pr <pr_num> -repo multimediallc/chaturbate -v true
+go run main.go -token <your_gh_token> -dir ../chaturbate -pr <pr_num> -repo multimediallc/chaturbate -v true -quiet=true
 ```
 
 #### Running the CLI tool Locally

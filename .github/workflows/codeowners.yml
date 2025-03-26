@@ -13,7 +13,6 @@ jobs:
   codeowners:
     name: 'Run Codeowners Plus'
     runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v4
@@ -31,4 +30,4 @@ jobs:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
           verbose: true
-          quiet: false
+          quiet: ${{ github.event.pull_request.draft }}

@@ -261,25 +261,25 @@ Codeowners approval required for this PR:
 - @user2
 ```
 
-### Quiet Mode
+## Quiet Mode
 
-You can run Codeowners Plus in a "quiet" mode using the `quiet` input in the GitHub Action or the `-quiet=true` flag in the CLI.
+You can run Codeowners Plus in a "quiet" mode using the `quiet` input in the GitHub Action.
 
-**When Quiet Mode is Enabled:**
+### When Quiet Mode is Enabled
 
 * **No Comments:** The action will **not** post the review status comment (listing required/unapproved reviewers) or the optional reviewer "cc" comment to the Pull Request.
 * **No Review Requests:** The action will **not** automatically request reviews from required owners who have not yet approved via the GitHub API.
 
-**Behavior:**
+### Behavior:
 
 Even in quiet mode, the tool still performs all its internal calculations: determining required/optional owners based on file changes, checking existing approvals, and determining if the ownership rules are satisfied. The primary outcome is still the success or failure status of the associated status check (unless you've configured `enforcement.fail_check = false`).
 
-**Use Cases:**
+### Use Cases:
 
 * **Draft Pull Requests:** This is a common use case. You might want the Codeowners Plus logic to run and report a status (e.g., pending or failed) on draft PRs, but without notifying reviewers prematurely by adding comments or requesting reviews until the PR is marked "Ready for review".
 * **Custom Notification Workflows:** You might prefer to handle notifications or review requests through a different mechanism and only use Codeowners Plus for the status check enforcement.
 
-**Activation:**
+### Activation:
 
 * **GitHub Action:** Set the `quiet` input to `'true'`.
     ```yaml
@@ -289,7 +289,6 @@ Even in quiet mode, the tool still performs all its internal calculations: deter
         # ... other inputs ...
         quiet: 'true'
     ```
-* **CLI:** Use the flag `-quiet=true`.
 
 **Default:** Quiet mode is **disabled** (`false`) by default.
 
