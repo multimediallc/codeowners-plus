@@ -202,11 +202,12 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	}
 
 	// Request reviews from required owners
-	unapprovedOwners, err := a.requestReviews()
+	err = a.requestReviews()
 	if err != nil {
 		return false, message, err
 	}
 
+	unapprovedOwners := a.codeowners.AllRequired()
 	maxReviewsMet := false
 	if a.conf.MaxReviews != nil && *a.conf.MaxReviews > 0 {
 		if validApprovalCount >= *a.conf.MaxReviews && len(f.Intersection(unapprovedOwners.Flatten(), a.conf.UnskippableReviewers)) == 0 {
@@ -370,20 +371,20 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 	return len(ghApprovals) - len(approvalsToDismiss), nil
 }
 
-func (a *App) requestReviews() (codeowners.ReviewerGroups, error) {
+func (a *App) requestReviews() error {
 	unapprovedOwners := a.codeowners.AllRequired()
 	unapprovedOwnerNames := unapprovedOwners.Flatten()
 	printDebug("Remaining Required Owners: %s\n", unapprovedOwnerNames)
 
 	currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()
 	if err != nil {
-		return nil, fmt.Errorf("GetCurrentlyRequested Error: %v", err)
+		return fmt.Errorf("GetCurrentlyRequested Error: %v", err)
 	}
 	printDebug("Currently Requested Owners: %s\n", currentlyRequestedOwners)
 
 	previousReviewers, err := a.client.GetAlreadyReviewed()
 	if err != nil {
-		return nil, fmt.Errorf("GetAlreadyReviewed Error: %v", err)
+		return fmt.Errorf("GetAlreadyReviewed Error: %v", err)
 	}
 	printDebug("Already Reviewed Owners: %s\n", previousReviewers)
 
@@ -394,11 +395,11 @@ func (a *App) requestReviews() (codeowners.ReviewerGroups, error) {
 	if len(filteredOwners) > 0 {
 		printDebug("Requesting Reviews from: %s\n", filteredOwnerNames)
 		if err := a.client.RequestReviewers(filteredOwnerNames); err != nil {
-			return nil, fmt.Errorf("RequestReviewers Error: %v", err)
+			return fmt.Errorf("RequestReviewers Error: %v", err)
 		}
 	}
 
-	return unapprovedOwners, nil
+	return nil
 }
 
 func printFileOwners(codeOwners codeowners.CodeOwners) {
