@@ -284,7 +284,7 @@ Even in quiet mode, the tool still performs all its internal calculations: deter
 * **GitHub Action:** Set the `quiet` input to `'true'`.
     ```yaml
     - name: 'Codeowners Plus (Quiet)'
-      uses: multimediallc/codeowners-plus@v0.1.0 # Or your desired version
+      uses: multimediallc/codeowners-plus@v0.1.0
       with:
         # ... other inputs ...
         quiet: 'true'
