@@ -1039,10 +1039,6 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 				},
 			}
 
-			var err error
-			if tc.name == "error getting currently requested" {
-				err = nil
-			}
 			success, _, err := app.processApprovalsAndReviewers()
 			if tc.expectError {
 				if err == nil {

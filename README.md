@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: 'Codeowners Plus'
         uses: multimediallc/codeowners-plus@v0.1.0
         with:
@@ -121,7 +121,7 @@ By default, each file will resolve to a single reviewer.  See [priority section]
 
 To instead require an owner as an additional reviewer (`AND` rule), put an `&` at the start of the line:
 ```
-# this rule will add `@task-auditor` as a required review in addition to the file owner's required review  
+# this rule will add `@task-auditor` as a required review in addition to the file owner's required review
 & **/task.go @task-auditor
 ```
 
@@ -219,7 +219,7 @@ If you want to allow PR authors to bypass some reviews when there are a large nu
 
 `codeowners.toml`
 ```toml
-# 
+#
 # `max_reviews` (default nil) allows you to skip some reviewers if the number of reviewers is greater than the max_reviewers
 max_reviews = 2
 ```
@@ -254,12 +254,44 @@ high_priority_labels = ["high-priority", "urgent"]
 
 When a PR has any of these labels, the comment will look like this:
 ```
-❗High Prio❗ 
+❗High Prio❗
 
 Codeowners approval required for this PR:
 - @user1
 - @user2
 ```
+
+### Quiet Mode
+
+You can run Codeowners Plus in a "quiet" mode using the `quiet` input in the GitHub Action or the `-quiet=true` flag in the CLI.
+
+**When Quiet Mode is Enabled:**
+
+* **No Comments:** The action will **not** post the review status comment (listing required/unapproved reviewers) or the optional reviewer "cc" comment to the Pull Request.
+* **No Review Requests:** The action will **not** automatically request reviews from required owners who have not yet approved via the GitHub API.
+
+**Behavior:**
+
+Even in quiet mode, the tool still performs all its internal calculations: determining required/optional owners based on file changes, checking existing approvals, and determining if the ownership rules are satisfied. The primary outcome is still the success or failure status of the associated status check (unless you've configured `enforcement.fail_check = false`).
+
+**Use Cases:**
+
+* **Draft Pull Requests:** This is a common use case. You might want the Codeowners Plus logic to run and report a status (e.g., pending or failed) on draft PRs, but without notifying reviewers prematurely by adding comments or requesting reviews until the PR is marked "Ready for review".
+* **Custom Notification Workflows:** You might prefer to handle notifications or review requests through a different mechanism and only use Codeowners Plus for the status check enforcement.
+
+**Activation:**
+
+* **GitHub Action:** Set the `quiet` input to `'true'`.
+    ```yaml
+    - name: 'Codeowners Plus (Quiet)'
+      uses: multimediallc/codeowners-plus@v0.1.0 # Or your desired version
+      with:
+        # ... other inputs ...
+        quiet: 'true'
+    ```
+* **CLI:** Use the flag `-quiet=true`.
+
+**Default:** Quiet mode is **disabled** (`false`) by default.
 
 ## CLI Tool
 
@@ -279,4 +311,3 @@ Available commands are:
 ## Future Features
 
 * Inline ownership comments for having owners for specific functions, classes, etc.
-
