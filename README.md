@@ -308,6 +308,10 @@ Available commands are:
 * `owner` to check who owns a specific file
 * `verify` to check for typos in a `.codeowners` file
 
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/multimediallc/codeowners-plus/blob/main/CONTRIBUTING.md)
+
 ## Future Features
 
 * Inline ownership comments for having owners for specific functions, classes, etc.
