@@ -372,6 +372,11 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 }
 
 func (a *App) requestReviews() error {
+	if !a.config.AddComments {
+		printDebug("Skipping review requests (disabled in quiet mode).\n")
+		return nil
+	}
+
 	unapprovedOwners := a.codeowners.AllRequired()
 	unapprovedOwnerNames := unapprovedOwners.Flatten()
 	printDebug("Remaining Required Owners: %s\n", unapprovedOwnerNames)

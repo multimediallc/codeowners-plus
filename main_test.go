@@ -131,6 +131,7 @@ type mockGitHubClient struct {
 	approvePRError          error
 	AddCommentCalled        bool
 	AddCommentInput         string
+	RequestReviewersCalled  bool
 }
 
 func (m *mockGitHubClient) PR() *github.PullRequest {
@@ -171,6 +172,7 @@ func (m *mockGitHubClient) DismissStaleReviews(approvals []*gh.CurrentApproval) 
 }
 
 func (m *mockGitHubClient) RequestReviewers(reviewers []string) error {
+	m.RequestReviewersCalled = true
 	return m.requestReviewersError
 }
 
@@ -251,9 +253,10 @@ func (m *mockGitHubClient) IsInComments(comment string, since *time.Time) (bool,
 	return false, nil
 }
 
-func (m *mockGitHubClient) ResetCommentCallTracking() {
+func (m *mockGitHubClient) ResetGHClientTracking() {
 	m.AddCommentCalled = false
 	m.AddCommentInput = ""
+	m.RequestReviewersCalled = false
 }
 
 func (m *mockGitHubClient) IsSubstringInComments(substring string, since *time.Time) (bool, error) {
@@ -641,11 +644,11 @@ func TestInitFlags(t *testing.T) {
 	}
 }
 
-func setupAppForCommentTest(t *testing.T, addComments bool) (*App, *mockGitHubClient) {
+func setupAppForTest(t *testing.T, addComments bool) (*App, *mockGitHubClient) {
 	t.Helper()
 
 	mockGH := &mockGitHubClient{}
-	mockGH.ResetCommentCallTracking()
+	mockGH.ResetGHClientTracking()
 
 	cfg := AppConfig{
 		AddComments: addComments,
@@ -654,12 +657,17 @@ func setupAppForCommentTest(t *testing.T, addComments bool) (*App, *mockGitHubCl
 	conf := &owners.Config{
 		HighPriorityLabels: []string{"high-prio"},
 	}
+	mockOwners := &mockCodeOwners{
+		requiredOwners: codeowners.ReviewerGroups{
+			&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+		},
+	}
 
 	app := &App{
 		config:     cfg,
 		client:     mockGH,
 		conf:       conf,
-		codeowners: &mockCodeOwners{},
+		codeowners: mockOwners,
 		gitDiff:    mockGitDiff{},
 	}
 
@@ -667,7 +675,7 @@ func setupAppForCommentTest(t *testing.T, addComments bool) (*App, *mockGitHubCl
 }
 
 func TestAddReviewStatusComment_ShortCircuit(t *testing.T) {
-	app, mockClient := setupAppForCommentTest(t, false) // AddComments = false
+	app, mockClient := setupAppForTest(t, false) // AddComments = false
 
 	// Prepare some data that *would* trigger a comment if AddComments were true
 	unapproved := codeowners.ReviewerGroups{
@@ -688,7 +696,7 @@ func TestAddReviewStatusComment_ShortCircuit(t *testing.T) {
 }
 
 func TestAddOptionalCcComment_ShortCircuit(t *testing.T) {
-	app, mockClient := setupAppForCommentTest(t, false) // AddComments = false
+	app, mockClient := setupAppForTest(t, false) // AddComments = false
 
 	// Prepare some data that *would* trigger a comment if AddComments were true
 	optionalReviewers := []string{"@optional-cc"}
@@ -704,7 +712,7 @@ func TestAddOptionalCcComment_ShortCircuit(t *testing.T) {
 }
 
 func TestAddReviewStatusComment_AddsComment(t *testing.T) {
-	app, mockClient := setupAppForCommentTest(t, true) // AddComments = true
+	app, mockClient := setupAppForTest(t, true) // AddComments = true
 
 	unapproved := codeowners.ReviewerGroups{
 		&codeowners.ReviewerGroup{Names: []string{"@user1"}},
@@ -728,7 +736,7 @@ func TestAddReviewStatusComment_AddsComment(t *testing.T) {
 }
 
 func TestAddOptionalCcComment_AddsComment(t *testing.T) {
-	app, mockClient := setupAppForCommentTest(t, true) // AddComments = true
+	app, mockClient := setupAppForTest(t, true) // AddComments = true
 
 	optionalReviewers := []string{"@cc-user1", "@cc-user2"}
 	expectedComment := "cc @cc-user1 @cc-user2"
@@ -742,6 +750,22 @@ func TestAddOptionalCcComment_AddsComment(t *testing.T) {
 	}
 	if mockClient.AddCommentInput != expectedComment {
 		t.Errorf("Expected comment body %q, got %q", expectedComment, mockClient.AddCommentInput)
+	}
+}
+
+func TestRequestReviews_ShortCircuit(t *testing.T) {
+	app, mockClient := setupAppForTest(t, false) // AddComments = false
+
+	mockClient.currentlyRequested = []string{}
+	mockClient.alreadyReviewed = []string{}
+
+	err := app.requestReviews()
+	if err != nil {
+		t.Errorf("Expected no error when AddComments is false, but got: %v", err)
+	}
+
+	if mockClient.RequestReviewersCalled {
+		t.Error("Expected client.RequestReviewers not to be called when AddComments is false")
 	}
 }
 
@@ -992,7 +1016,9 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 			}
 
 			app := &App{
-				config:     AppConfig{},
+				config: AppConfig{
+					AddComments: true,
+				},
 				client:     mockGH,
 				codeowners: mockOwners,
 				gitDiff: mockGitDiff{
@@ -1013,6 +1039,10 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 				},
 			}
 
+			var err error
+			if tc.name == "error getting currently requested" {
+				err = nil
+			}
 			success, _, err := app.processApprovalsAndReviewers()
 			if tc.expectError {
 				if err == nil {
