@@ -13,7 +13,6 @@ jobs:
   codeowners:
     name: 'Run Codeowners Plus'
     runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v4
@@ -24,10 +23,11 @@ jobs:
         run: |
           sed -i "s/image: .*/image: 'Dockerfile'/" action.yml
           cat action.yml
-      
+
       - name: 'Codeowners Plus'
         uses: ./
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
           verbose: true
+          quiet: ${{ github.event.pull_request.draft }}

@@ -26,6 +26,7 @@ type AppConfig struct {
 	PR      int
 	Repo    string
 	Verbose bool
+	Quiet   bool
 }
 
 // App represents the application with its dependencies
@@ -44,6 +45,7 @@ type Flags struct {
 	PR      *int
 	Repo    *string
 	Verbose *bool
+	Quiet   *bool
 }
 
 var (
@@ -53,6 +55,7 @@ var (
 		PR:      flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
 		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
 		Verbose: flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
+		Quiet:   flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Prevents addition of comments to PR and requesting reviews from unapproved owners"),
 	}
 	WarningBuffer = bytes.NewBuffer([]byte{})
 	InfoBuffer    = bytes.NewBuffer([]byte{})
@@ -199,11 +202,12 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	}
 
 	// Request reviews from required owners
-	unapprovedOwners, err := a.requestReviews()
+	err = a.requestReviews()
 	if err != nil {
 		return false, message, err
 	}
 
+	unapprovedOwners := a.codeowners.AllRequired()
 	maxReviewsMet := false
 	if a.conf.MaxReviews != nil && *a.conf.MaxReviews > 0 {
 		if validApprovalCount >= *a.conf.MaxReviews && len(f.Intersection(unapprovedOwners.Flatten(), a.conf.UnskippableReviewers)) == 0 {
@@ -212,51 +216,13 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	}
 
 	// Add comments to the PR if necessary
-	if len(unapprovedOwners) > 0 {
-		// Comment on the PR with the codeowner teams that have not approved the PR
-		comment := allRequiredOwners.ToCommentString()
-		hasHighPriority, err := a.client.IsInLabels(a.conf.HighPriorityLabels)
-		if err != nil {
-			fmt.Fprintf(WarningBuffer, "WARNING: Error checking high priority labels: %v\n", err)
-		} else if hasHighPriority {
-			comment = "❗High Prio❗\n\n" + comment
-		}
-		if maxReviewsMet {
-			comment += "\n\n"
-			comment += "The PR has received the max number of required reviews.  No further action is required."
-		}
-		fiveDaysAgo := time.Now().AddDate(0, 0, -5)
-		found, err := a.client.IsInComments(comment, &fiveDaysAgo)
-		if err != nil {
-			return false, message, fmt.Errorf("IsInComments Error: %v\n", err)
-		}
-		if !found {
-			err = a.client.AddComment(comment)
-			if err != nil {
-				return false, message, fmt.Errorf("AddComment Error: %v\n", err)
-			}
-		}
+	err = a.addReviewStatusComment(allRequiredOwners, unapprovedOwners, maxReviewsMet)
+	if err != nil {
+		return false, message, fmt.Errorf("failed to add review status comment: %w", err)
 	}
-	if len(allOptionalReviewerNames) > 0 {
-		var isInCommentsError error = nil
-		// Add CC comment to the PR with the optional reviewers that have not already been mentioned in the PR comments
-		viewersToPing := f.Filtered(allOptionalReviewerNames, func(name string) bool {
-			found, err := a.client.IsSubstringInComments(name, nil)
-			if err != nil {
-				isInCommentsError = err
-			}
-			return !found
-		})
-		if isInCommentsError != nil {
-			return false, message, fmt.Errorf("IsInComments Error: %v\n", err)
-		}
-		if len(viewersToPing) > 0 {
-			comment := fmt.Sprintf("cc %s", strings.Join(viewersToPing, " "))
-			err = a.client.AddComment(comment)
-			if err != nil {
-				return false, message, fmt.Errorf("AddComment Error: %v\n", err)
-			}
-		}
+	err = a.addOptionalCcComment(allOptionalReviewerNames)
+	if err != nil {
+		return false, message, fmt.Errorf("failed to add optional CC comment: %w", err)
 	}
 
 	// Exit if there are any unapproved codeowner teams
@@ -294,6 +260,87 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	return true, message, nil
 }
 
+func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeowners.ReviewerGroups, maxReviewsMet bool) error {
+	// Comment on the PR with the codeowner teams that have not approved the PR
+
+	if a.config.Quiet || len(unapprovedOwners) == 0 {
+		printDebug("Skipping review status comment (disabled or no unapproved owners).\n")
+		return nil
+	}
+
+	comment := allRequiredOwners.ToCommentString()
+	hasHighPriority, err := a.client.IsInLabels(a.conf.HighPriorityLabels)
+	if err != nil {
+		printWarning("WARNING: Error checking high priority labels: %v\n", err)
+	} else if hasHighPriority {
+		comment = "❗High Prio❗\n\n" + comment
+	}
+
+	if maxReviewsMet {
+		comment += "\n\nThe PR has received the max number of required reviews. No further action is required."
+	}
+
+	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
+	found, err := a.client.IsInComments(comment, &fiveDaysAgo)
+	if err != nil {
+		return fmt.Errorf("IsInComments Error: %v\n", err)
+	}
+
+	// Add the comment if it wasn't found recently
+	if !found {
+		printDebug("Adding review status comment: %q\n", comment)
+		err = a.client.AddComment(comment)
+		if err != nil {
+			return fmt.Errorf("AddComment Error: %v\n", err)
+		}
+	} else {
+		printDebug("Similar review status comment already exists.\n")
+	}
+
+	return nil
+}
+
+func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
+	// Add CC comment to the PR with the optional reviewers that have not already been mentioned in the PR comments
+
+	if a.config.Quiet || len(allOptionalReviewerNames) == 0 {
+		printDebug("Skipping optional CC comment (disabled or no optional reviewers).\n")
+		return nil
+	}
+
+	var isInCommentsError error
+	viewersToPing := f.Filtered(allOptionalReviewerNames, func(name string) bool {
+		if isInCommentsError != nil {
+			return false
+		}
+		found, err := a.client.IsSubstringInComments(name, nil)
+		if err != nil {
+			printWarning("WARNING: Error checking comments for substring '%s': %v\n", name, err)
+			isInCommentsError = err
+			return false
+		}
+		return !found
+	})
+
+	if isInCommentsError != nil {
+		return fmt.Errorf("IsInComments Error: %v\n", isInCommentsError)
+	}
+
+	// Add the CC comment if there are any viewers to ping
+	if len(viewersToPing) > 0 {
+		comment := fmt.Sprintf("cc %s", strings.Join(viewersToPing, " "))
+		printDebug("Adding CC comment: %q\n", comment)
+		err := a.client.AddComment(comment)
+		if err != nil {
+			return fmt.Errorf("AddComment Error: %v\n", err)
+		}
+	} else {
+		printDebug("No new optional reviewers to CC.\n")
+	}
+
+	return nil
+}
+
 func (a *App) processTokenOwnerApproval() (*gh.CurrentApproval, error) {
 	tokenOwner, err := a.client.GetTokenUser()
 	if err != nil {
@@ -324,20 +371,25 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 	return len(ghApprovals) - len(approvalsToDismiss), nil
 }
 
-func (a *App) requestReviews() (codeowners.ReviewerGroups, error) {
+func (a *App) requestReviews() error {
+	if a.config.Quiet {
+		printDebug("Skipping review requests (disabled in quiet mode).\n")
+		return nil
+	}
+
 	unapprovedOwners := a.codeowners.AllRequired()
 	unapprovedOwnerNames := unapprovedOwners.Flatten()
 	printDebug("Remaining Required Owners: %s\n", unapprovedOwnerNames)
 
 	currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()
 	if err != nil {
-		return nil, fmt.Errorf("GetCurrentlyRequested Error: %v", err)
+		return fmt.Errorf("GetCurrentlyRequested Error: %v", err)
 	}
 	printDebug("Currently Requested Owners: %s\n", currentlyRequestedOwners)
 
 	previousReviewers, err := a.client.GetAlreadyReviewed()
 	if err != nil {
-		return nil, fmt.Errorf("GetAlreadyReviewed Error: %v", err)
+		return fmt.Errorf("GetAlreadyReviewed Error: %v", err)
 	}
 	printDebug("Already Reviewed Owners: %s\n", previousReviewers)
 
@@ -348,11 +400,11 @@ func (a *App) requestReviews() (codeowners.ReviewerGroups, error) {
 	if len(filteredOwners) > 0 {
 		printDebug("Requesting Reviews from: %s\n", filteredOwnerNames)
 		if err := a.client.RequestReviewers(filteredOwnerNames); err != nil {
-			return nil, fmt.Errorf("RequestReviewers Error: %v", err)
+			return fmt.Errorf("RequestReviewers Error: %v", err)
 		}
 	}
 
-	return unapprovedOwners, nil
+	return nil
 }
 
 func printFileOwners(codeOwners codeowners.CodeOwners) {
@@ -425,6 +477,7 @@ func main() {
 		PR:      *flags.PR,
 		Repo:    *flags.Repo,
 		Verbose: *flags.Verbose,
+		Quiet:   *flags.Quiet,
 	}
 
 	app, err := NewApp(cfg)
