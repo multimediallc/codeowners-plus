@@ -72,6 +72,7 @@ func TestCurrentApprovalsFromReviews(t *testing.T) {
 	expectedApprovals := []*CurrentApproval{
 		{CommitID: "commit1", Reviewers: []string{"@a", "@b"}},
 		{CommitID: "commit3", Reviewers: []string{"@e"}},
+		{CommitID: "commit3", Reviewers: []string{}},
 	}
 
 	if len(currentApprovals) != len(expectedApprovals) {

@@ -228,6 +228,9 @@ func currentReviewerApprovalsFromReviews(approvals []*github.PullRequestReview, 
 		if reviewers, ok := userReviewerMap[reviewingUser]; ok {
 			newApproval := &CurrentApproval{reviewingUser, review.GetID(), reviewers, review.GetCommitID()}
 			filteredApprovals = append(filteredApprovals, newApproval)
+		} else {
+			newApproval := &CurrentApproval{reviewingUser, review.GetID(), []string{}, review.GetCommitID()}
+			filteredApprovals = append(filteredApprovals, newApproval)
 		}
 	}
 
