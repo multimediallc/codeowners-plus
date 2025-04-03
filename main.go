@@ -80,7 +80,7 @@ func initFlags(flags *Flags) error {
 		badFlags = append(badFlags, "repo")
 	}
 	if len(badFlags) > 0 {
-		return fmt.Errorf("Required flags or environment variables not set: %s", badFlags)
+		return fmt.Errorf("required flags or environment variables not set: %s", badFlags)
 	}
 
 	return nil
@@ -90,7 +90,7 @@ func initFlags(flags *Flags) error {
 func NewApp(cfg AppConfig) (*App, error) {
 	repoSplit := strings.Split(cfg.Repo, "/")
 	if len(repoSplit) != 2 {
-		return nil, fmt.Errorf("Invalid repo name: %s", cfg.Repo)
+		return nil, fmt.Errorf("invalid repo name: %s", cfg.Repo)
 	}
 	owner := repoSplit[0]
 	repo := repoSplit[1]
@@ -254,7 +254,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 		// Approve the PR since all codeowner teams have approved
 		err = a.client.ApprovePR()
 		if err != nil {
-			return true, message, fmt.Errorf("ApprovePR Error: %v\n", err)
+			return true, message, fmt.Errorf("ApprovePR Error: %v", err)
 		}
 	}
 	return true, message, nil
@@ -283,7 +283,7 @@ func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeown
 	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
 	found, err := a.client.IsInComments(comment, &fiveDaysAgo)
 	if err != nil {
-		return fmt.Errorf("IsInComments Error: %v\n", err)
+		return fmt.Errorf("IsInComments Error: %v", err)
 	}
 
 	// Add the comment if it wasn't found recently
@@ -291,7 +291,7 @@ func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeown
 		printDebug("Adding review status comment: %q\n", comment)
 		err = a.client.AddComment(comment)
 		if err != nil {
-			return fmt.Errorf("AddComment Error: %v\n", err)
+			return fmt.Errorf("AddComment Error: %v", err)
 		}
 	} else {
 		printDebug("Similar review status comment already exists.\n")
@@ -323,7 +323,7 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 	})
 
 	if isInCommentsError != nil {
-		return fmt.Errorf("IsInComments Error: %v\n", isInCommentsError)
+		return fmt.Errorf("IsInComments Error: %v", isInCommentsError)
 	}
 
 	// Add the CC comment if there are any viewers to ping
@@ -332,7 +332,7 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 		printDebug("Adding CC comment: %q\n", comment)
 		err := a.client.AddComment(comment)
 		if err != nil {
-			return fmt.Errorf("AddComment Error: %v\n", err)
+			return fmt.Errorf("AddComment Error: %v", err)
 		}
 	} else {
 		printDebug("No new optional reviewers to CC.\n")
@@ -433,18 +433,12 @@ func ignoreError[V any, E error](res V, _ E) V {
 }
 
 func outputAndExit(w io.Writer, shouldFail bool, message string) {
-	_, err := WarningBuffer.WriteTo(w)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing warning buffer: %v\n", err)
-	}
+	_, _ = WarningBuffer.WriteTo(w)
 	if *flags.Verbose {
-		_, err := InfoBuffer.WriteTo(w)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing info buffer: %v\n", err)
-		}
+		_, _ = InfoBuffer.WriteTo(w)
 	}
 
-	fmt.Fprint(w, message)
+	_, _ = fmt.Fprint(w, message)
 	if testing.Testing() {
 		return
 	}
@@ -457,12 +451,12 @@ func outputAndExit(w io.Writer, shouldFail bool, message string) {
 
 func printDebug(format string, args ...interface{}) {
 	if *flags.Verbose {
-		fmt.Fprintf(InfoBuffer, format, args...)
+		_, _ = fmt.Fprintf(InfoBuffer, format, args...)
 	}
 }
 
 func printWarning(format string, args ...interface{}) {
-	fmt.Fprintf(WarningBuffer, format, args...)
+	_, _ = fmt.Fprintf(WarningBuffer, format, args...)
 }
 
 func main() {

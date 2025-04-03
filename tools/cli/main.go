@@ -120,7 +120,7 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
 }
@@ -135,10 +135,10 @@ func depthCheck(path string, target string, depth int) bool {
 
 func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
-		return fmt.Errorf("Root is not a directory: %s", repo)
+		return fmt.Errorf("root is not a directory: %s", repo)
 	}
 	if gitStat, err := os.Stat(filepath.Join(repo, ".git")); err != nil || !gitStat.IsDir() {
-		return fmt.Errorf("Root is not a Git repository: %s", repo)
+		return fmt.Errorf("root is not a Git repository: %s", repo)
 	}
 
 	fileListQueue := make(chan *gocodewalker.File, 100)
@@ -168,12 +168,12 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 	}
 
 	if err := <-errChan; err != nil {
-		return fmt.Errorf("Error walking repo: %s", err)
+		return fmt.Errorf("error walking repo: %s", err)
 	}
 
 	ownersMap, err := codeowners.New(repo, files, io.Discard)
 	if err != nil {
-		return fmt.Errorf("Error reading codeowners config: %s", err)
+		return fmt.Errorf("error reading codeowners config: %s", err)
 	}
 
 	unowned := ownersMap.UnownedFiles()
@@ -192,21 +192,21 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 
 func fileOwner(repo string, target string) error {
 	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
-		return fmt.Errorf("Root is not a directory: %s", repo)
+		return fmt.Errorf("root is not a directory: %s", repo)
 	}
 	if gitStat, err := os.Stat(filepath.Join(repo, ".git")); err != nil || !gitStat.IsDir() {
-		return fmt.Errorf("Root is not a Git repository: %s", repo)
+		return fmt.Errorf("root is not a Git repository: %s", repo)
 	}
 	if target == "" {
-		return fmt.Errorf("Target file is required")
+		return fmt.Errorf("target file is required")
 	}
 	if targetStat, err := os.Stat(filepath.Join(repo, target)); err != nil || targetStat.IsDir() {
-		return fmt.Errorf("Target is not a file: %s", target)
+		return fmt.Errorf("target is not a file: %s", target)
 	}
 
 	ownersMap, err := codeowners.New(repo, []codeowners.DiffFile{{FileName: target}}, io.Discard)
 	if err != nil {
-		return fmt.Errorf("Error reading codeowners config: %s", err)
+		return fmt.Errorf("error reading codeowners config: %s", err)
 	}
 	fmt.Println(strings.Join(f.Map(ownersMap.AllRequired(), func(rg *codeowners.ReviewerGroup) string { return rg.ToCommentString() }), "\n"))
 	if len(ownersMap.AllOptional()) > 0 {
@@ -218,17 +218,17 @@ func fileOwner(repo string, target string) error {
 
 func verifyCodeowners(repo string, target string) error {
 	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
-		return fmt.Errorf("Root is not a directory: %s", repo)
+		return fmt.Errorf("root is not a directory: %s", repo)
 	}
 	if gitStat, err := os.Stat(filepath.Join(repo, ".git")); err != nil || !gitStat.IsDir() {
-		return fmt.Errorf("Root is not a Git repository: %s", repo)
+		return fmt.Errorf("root is not a Git repository: %s", repo)
 	}
 	target = filepath.Join(repo, target)
 	if targetStat, err := os.Stat(target); err != nil || !targetStat.IsDir() {
-		return fmt.Errorf("Target is not a directory: %s", target)
+		return fmt.Errorf("target is not a directory: %s", target)
 	}
 	if ownersStat, err := os.Stat(filepath.Join(target, ".codeowners")); err != nil || ownersStat.IsDir() {
-		return fmt.Errorf("Target does not contain a .codeowners file: %s", target)
+		return fmt.Errorf("target does not contain a .codeowners file: %s", target)
 	}
 	warningBuffer := bytes.NewBuffer([]byte{})
 
@@ -238,33 +238,33 @@ func verifyCodeowners(repo string, target string) error {
 	if codeowners.Fallback != nil {
 		for _, name := range codeowners.Fallback.Names {
 			if !strings.HasPrefix(name, "@") {
-				fmt.Fprintln(warningBuffer, "Fallback owner doesn't start with @: "+name)
+				_, _ = fmt.Fprintln(warningBuffer, "Fallback owner doesn't start with @: "+name)
 			}
 		}
 	}
 	for _, test := range codeowners.OwnerTests {
 		for _, name := range test.Reviewer.Names {
 			if !strings.HasPrefix(name, "@") {
-				fmt.Fprintf(warningBuffer, "Owner test (%s) name doesn't start with @: %s\n", test.Match, name)
+				_, _ = fmt.Fprintf(warningBuffer, "Owner test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}
 		}
 	}
 	for _, test := range codeowners.AdditionalReviewerTests {
 		for _, name := range test.Reviewer.Names {
 			if !strings.HasPrefix(name, "@") {
-				fmt.Fprintf(warningBuffer, "Additional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
+				_, _ = fmt.Fprintf(warningBuffer, "Additional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}
 		}
 	}
 	for _, test := range codeowners.OptionalReviewerTests {
 		for _, name := range test.Reviewer.Names {
 			if !strings.HasPrefix(name, "@") {
-				fmt.Fprintf(warningBuffer, "Optional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
+				_, _ = fmt.Fprintf(warningBuffer, "Optional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}
 		}
 	}
 	if warningBuffer.Len() > 0 {
-		return fmt.Errorf("\n%s", strings.Replace(warningBuffer.String(), "WARNING: ", "", -1))
+		return fmt.Errorf("\n%s", strings.ReplaceAll(warningBuffer.String(), "WARNING: ", ""))
 	}
 	return nil
 }

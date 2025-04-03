@@ -93,28 +93,32 @@ func (gh *GHClient) SetInfoBuffer(writer io.Writer) {
 
 func (gh *GHClient) InitPR(pr_id int) error {
 	pull, res, err := gh.client.PullRequests.Get(gh.ctx, gh.owner, gh.repo, pr_id)
-	defer res.Body.Close()
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
 	gh.pr = pull
 	return nil
 }
 
 func (gh *GHClient) InitUserReviewerMap(reviewers []string) error {
 	teamFetch := func(org, team string) []*github.User {
-		fmt.Fprintf(gh.infoBuffer, "Fetching team members for %s/%s\n", org, team)
+		_, _ = fmt.Fprintf(gh.infoBuffer, "Fetching team members for %s/%s\n", org, team)
 		allUsers := make([]*github.User, 0)
 		getMembers := func(page int) (*github.Response, error) {
 			listOptions := &github.TeamListTeamMembersOptions{ListOptions: github.ListOptions{PerPage: 100, Page: page}}
 			users, res, err := gh.client.Teams.ListTeamMembersBySlug(gh.ctx, org, team, listOptions)
-			defer res.Body.Close()
+			if err != nil {
+				_, _ = fmt.Fprintf(gh.warningBuffer, "WARNING: Error fetching team members for %s/%s: %v\n", org, team, err)
+			}
 			allUsers = append(allUsers, users...)
 			return res, err
 		}
 		err := walkPaginatedApi(getMembers)
 		if err != nil {
-			fmt.Fprintf(gh.warningBuffer, "WARNING: Error fetching team members for %s/%s: %v\n", org, team, err)
+			_, _ = fmt.Fprintf(gh.warningBuffer, "WARNING: Error fetching team members: %v\n", err)
 		}
 		return allUsers
 	}
@@ -138,7 +142,12 @@ func (gh *GHClient) InitReviews() error {
 	listReviews := func(page int) (*github.Response, error) {
 		listOptions := &github.ListOptions{PerPage: 100, Page: page}
 		reviews, res, err := gh.client.PullRequests.ListReviews(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), listOptions)
-		defer res.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			_ = res.Body.Close()
+		}()
 		allReviews = append(allReviews, reviews...)
 		return res, err
 	}
@@ -296,10 +305,12 @@ func (gh *GHClient) DismissStaleReviews(staleApprovals []*CurrentApproval) error
 	for _, approval := range staleApprovals {
 		dismissRequest := &github.PullRequestReviewDismissalRequest{Message: &staleMessage}
 		_, res, err := gh.client.PullRequests.DismissReview(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), approval.ReviewID, dismissRequest)
-		defer res.Body.Close()
 		if err != nil {
 			return err
 		}
+		defer func() {
+			_ = res.Body.Close()
+		}()
 	}
 	return nil
 }
@@ -314,7 +325,12 @@ func (gh *GHClient) RequestReviewers(reviewers []string) error {
 	indvidualReviewers, teamReviewers := splitReviewers(reviewers)
 	reviewersRequest := github.ReviewersRequest{Reviewers: indvidualReviewers, TeamReviewers: teamReviewers}
 	_, res, err := gh.client.PullRequests.RequestReviewers(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), reviewersRequest)
-	defer res.Body.Close()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
 	return err
 }
 
@@ -342,7 +358,12 @@ func (gh *GHClient) ApprovePR() error {
 		Body:  github.String("Codeowners reviews satisfied"),
 	}
 	_, res, err := gh.client.PullRequests.CreateReview(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), createReviewOptions)
-	defer res.Body.Close()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
 	return err
 }
 
@@ -354,7 +375,12 @@ func (gh *GHClient) InitComments() error {
 	listReviews := func(page int) (*github.Response, error) {
 		listOptions := &github.IssueListCommentsOptions{ListOptions: github.ListOptions{PerPage: 100, Page: page}}
 		comments, res, err := gh.client.Issues.ListComments(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), listOptions)
-		defer res.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			_ = res.Body.Close()
+		}()
 		allComments = append(allComments, comments...)
 		return res, err
 	}
@@ -374,7 +400,12 @@ func (gh *GHClient) AddComment(comment string) error {
 		Body: &comment,
 	}
 	_, res, err := gh.client.Issues.CreateComment(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), createCommentOptions)
-	defer res.Body.Close()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
 	return err
 }
 
@@ -384,7 +415,7 @@ func (gh *GHClient) IsInComments(comment string, since *time.Time) (bool, error)
 	}
 	if gh.comments == nil {
 		if err := gh.InitComments(); err != nil {
-			fmt.Fprintf(gh.warningBuffer, "WARNING: Error initializing comments: %v\n", err)
+			_, _ = fmt.Fprintf(gh.warningBuffer, "WARNING: Error initializing comments: %v\n", err)
 		}
 	}
 	for _, c := range gh.comments {
@@ -404,7 +435,7 @@ func (gh *GHClient) IsSubstringInComments(substring string, since *time.Time) (b
 	}
 	if gh.comments == nil {
 		if err := gh.InitComments(); err != nil {
-			fmt.Fprintf(gh.warningBuffer, "WARNING: Error initializing comments: %v\n", err)
+			_, _ = fmt.Fprintf(gh.warningBuffer, "WARNING: Error initializing comments: %v\n", err)
 		}
 	}
 	for _, c := range gh.comments {

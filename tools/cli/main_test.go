@@ -129,7 +129,10 @@ func TestUnownedFiles(t *testing.T) {
 			}
 
 			// Restore stdout and get output
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Errorf("failed to close pipe writer: %v", err)
+				return
+			}
 			os.Stdout = oldStdout
 			out, _ := io.ReadAll(r)
 			got := strings.Split(strings.TrimSpace(string(out)), "\n")
@@ -210,7 +213,10 @@ func TestFileOwner(t *testing.T) {
 			}
 
 			// Restore stdout and get output
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Errorf("failed to close pipe writer: %v", err)
+				return
+			}
 			os.Stdout = oldStdout
 			out, _ := io.ReadAll(r)
 			got := strings.Split(strings.TrimSpace(string(out)), "\n")
@@ -384,4 +390,3 @@ func TestDepthCheck(t *testing.T) {
 		})
 	}
 }
-

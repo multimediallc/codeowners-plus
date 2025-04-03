@@ -36,12 +36,12 @@ func TestGetApprovalDiffs(t *testing.T) {
 
 	approvalsWithDiff, badApprovals := getApprovalDiffs(approvals, diff, io.Discard, io.Discard)
 	if len(approvalsWithDiff) != 2 {
-		t.Errorf("Expected 2 approvals with diff, got %d", len(approvalsWithDiff))
+		t.Errorf("expected 2 approvals with diff, got %d", len(approvalsWithDiff))
 	}
 	if len(badApprovals) != 1 {
 		if badApprovals[0].CommitID != "bad" {
-			t.Errorf("Expected bad approval to have commit ID bad, got %s", badApprovals[0].CommitID)
+			t.Errorf("expected bad approval to have commit ID bad, got %s", badApprovals[0].CommitID)
 		}
-		t.Errorf("Expected 1 bad approval, got %d", len(badApprovals))
+		t.Errorf("expected 1 bad approval, got %d", len(badApprovals))
 	}
 }
