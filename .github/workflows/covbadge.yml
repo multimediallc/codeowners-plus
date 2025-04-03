@@ -6,10 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+permissions: {}
+
 jobs:
   build-test:
     name: 'Check Coverage Badge'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
     - uses: actions/checkout@v4
 

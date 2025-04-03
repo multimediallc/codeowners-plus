@@ -9,10 +9,15 @@ on:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
 
+permissions: {}
+
 jobs:
   codeowners:
     name: 'Run Codeowners Plus'
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
     steps:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v4
