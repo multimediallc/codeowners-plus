@@ -233,7 +233,7 @@ func (otfm ownerTestFileMap) getOwners(fileNames []string) (*ownersMap, error) {
 	for _, file := range fileNames {
 		node, ok := otfm[file]
 		if !ok {
-			return nil, errors.New("Path not found in owner tree")
+			return nil, errors.New("path not found in owner tree")
 		}
 		fileOwner := newFileOwners()
 		fileParts := strings.Split(file, "/")

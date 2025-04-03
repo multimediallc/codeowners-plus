@@ -20,7 +20,7 @@ func setupTestRepo(t *testing.T) (string, func()) {
 	// Create .git directory
 	err = os.Mkdir(filepath.Join(tmpDir, ".git"), 0755)
 	if err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 		t.Fatalf("Failed to create .git dir: %v", err)
 	}
 
@@ -60,18 +60,18 @@ func setupTestRepo(t *testing.T) (string, func()) {
 		fullPath := filepath.Join(tmpDir, path)
 		err := os.MkdirAll(filepath.Dir(fullPath), 0755)
 		if err != nil {
-			os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmpDir)
 			t.Fatalf("Failed to create directory %s: %v", filepath.Dir(fullPath), err)
 		}
 		err = os.WriteFile(fullPath, []byte(content), 0644)
 		if err != nil {
-			os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmpDir)
 			t.Fatalf("Failed to write file %s: %v", fullPath, err)
 		}
 	}
 
 	cleanup := func() {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	}
 
 	return tmpDir, cleanup
