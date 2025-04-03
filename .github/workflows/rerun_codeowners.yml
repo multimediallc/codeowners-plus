@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
       
       - name: 'Rerun Checks'
-        uses: shqear93/rerun-checks@57ea3adaf84bddd30ed8dda9f27aab0aba231f11  # @v2
+        uses: shqear93/rerun-checks@cafa5c1c11c880f9b23e6a73ad8628483fdae798  # @v3
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           check-names: 'Run Codeowners Plus'

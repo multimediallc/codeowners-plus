@@ -125,7 +125,7 @@ type reviewerTest struct {
 func (rt *reviewerTest) Matches(path string, warningBuffer io.Writer) bool {
 	match, err := doublestar.Match(rt.Match, path)
 	if err != nil {
-		fmt.Fprintf(warningBuffer, "WARNING: PatternError for pattern '%s': %s", rt.Match, err)
+		_, _ = fmt.Fprintf(warningBuffer, "WARNING: PatternError for pattern '%s': %s", rt.Match, err)
 	}
 	return match
 }

@@ -39,7 +39,11 @@ func Read(path string, reviewerGroupManager ReviewerGroupManager, warningWriter 
 	if err != nil {
 		return rules
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			_, _ = fmt.Fprintf(warningWriter, "WARNING: Error closing file: %v\n", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -65,17 +69,17 @@ func Read(path string, reviewerGroupManager ReviewerGroupManager, warningWriter 
 		line = strings.TrimSpace(line)
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
-			fmt.Fprintln(warningWriter, "WARNING: Invalid line in .codeowners file:", line)
+			_, _ = fmt.Fprintln(warningWriter, "WARNING: Invalid line in .codeowners file:", line)
 			continue
 		}
 		match := parts[0]
 		if strings.HasPrefix(match, "/") {
-			fmt.Fprintln(warningWriter, "WARNING: Leading `/` ignored by `.codeowners`:", match)
+			_, _ = fmt.Fprintln(warningWriter, "WARNING: Leading `/` ignored by `.codeowners`:", match)
 			// strip leading slash - all matches are relative to the current directory
 			match = match[1:]
 		}
 		if strings.HasSuffix(match, "/") {
-			fmt.Fprintln(warningWriter, "WARNING: Trailing `/` not supported by `.codeowners` - replacing with `/**`:", match)
+			_, _ = fmt.Fprintln(warningWriter, "WARNING: Trailing `/` not supported by `.codeowners` - replacing with `/**`:", match)
 			match = match + "**"
 		}
 		owner := parts[1:]

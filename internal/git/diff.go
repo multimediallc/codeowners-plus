@@ -170,7 +170,7 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 func getGitDiff(data DiffContext, executor gitCommandExecutor) ([]*diff.FileDiff, error) {
 	cmdOutput, err := executor.execute("git", "diff", "-U0", fmt.Sprintf("%s...%s", data.Base, data.Head))
 	if err != nil {
-		return nil, fmt.Errorf("Diff Error: %s\n%s\n", err, cmdOutput)
+		return nil, fmt.Errorf("diff Error: %s\n%s", err, cmdOutput)
 	}
 	gitDiff, err := diff.ParseMultiFileDiff(cmdOutput)
 	if err != nil {

@@ -2,6 +2,7 @@ package git
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -35,7 +36,11 @@ func readFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("WARNING: Error closing file: %v\n", err)
+		}
+	}()
 
 	return io.ReadAll(file)
 }

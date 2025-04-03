@@ -156,7 +156,7 @@ func (m *mockGitHubClient) FindUserApproval(user string) (*gh.CurrentApproval, e
 			return approval, nil
 		}
 	}
-	return nil, fmt.Errorf("Not found")
+	return nil, fmt.Errorf("not found")
 }
 
 func (m *mockGitHubClient) GetCurrentlyRequested() ([]string, error) {
@@ -336,8 +336,10 @@ func TestGetEnv(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.setEnv {
-				os.Setenv(tc.key, tc.envValue)
-				defer os.Unsetenv(tc.key)
+				_ = os.Setenv(tc.key, tc.envValue)
+				defer func() {
+					_ = os.Unsetenv(tc.key)
+				}()
 			}
 
 			got := getEnv(tc.key, tc.fallback)

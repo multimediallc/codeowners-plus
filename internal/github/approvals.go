@@ -35,12 +35,12 @@ func getApprovalDiffs(
 		if seenDiff, ok := seenDiffs[approval.CommitID]; ok {
 			diffFiles, err = seenDiff.diff, seenDiff.err
 		} else {
-			fmt.Fprintf(infoWriter, "Getting diff for %s...%s\n", originalDiff.Context().Base, approval.CommitID)
+			_, _ = fmt.Fprintf(infoWriter, "Getting diff for %s...%s\n", originalDiff.Context().Base, approval.CommitID)
 			diffFiles, err = originalDiff.ChangesSince(approval.CommitID)
 			seenDiffs[approval.CommitID] = previousDiffRes{diffFiles, err}
 		}
 		if err != nil {
-			fmt.Fprintf(warningWriter, "WARNING: Error getting changes since %s: %v\n", approval.CommitID, err)
+			_, _ = fmt.Fprintf(warningWriter, "WARNING: Error getting changes since %s: %v\n", approval.CommitID, err)
 			badApprovals = append(badApprovals, approval)
 			return nil
 		}
