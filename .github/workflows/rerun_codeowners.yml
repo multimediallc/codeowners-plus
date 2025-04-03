@@ -11,6 +11,7 @@ jobs:
     name: 'Rerun Codeowners Plus'
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       pull-requests: write
       contents: read
     steps:
