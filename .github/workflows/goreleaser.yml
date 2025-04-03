@@ -4,8 +4,7 @@ on:
   release:
     types: [draft, published]
 
-permissions:
-  contents: write
+permissions: {}
 
 env:
   DOCKER_BUILDKIT: 1
@@ -13,6 +12,9 @@ env:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
 
     steps:
       - name: Checkout

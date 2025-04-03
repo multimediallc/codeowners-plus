@@ -4,9 +4,14 @@ on:
   release:
     types: [published]
 
+permissions: {}
+
 jobs:
   update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v4

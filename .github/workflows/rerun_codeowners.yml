@@ -4,10 +4,15 @@ on:
   pull_request_review:
     types: [submitted]
 
+permissions: {}
+
 jobs:
   rerun-codeowners:
     name: 'Rerun Codeowners Plus'
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
     steps:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v4
