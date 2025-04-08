@@ -55,7 +55,7 @@ var (
 		PR:      flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
 		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
 		Verbose: flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
-		Quiet:   flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Prevents addition of comments to PR and requesting reviews from unapproved owners"),
+		Quiet:   flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Disable PR comments and review requests"),
 	}
 	WarningBuffer = bytes.NewBuffer([]byte{})
 	InfoBuffer    = bytes.NewBuffer([]byte{})
