@@ -16,6 +16,10 @@ inputs:
     description: 'Print debug info'
     required: false
     default: false
+  quiet:
+    description: 'Disable PR comments and review requests'
+    required: false
+    default: false
 
 runs:
   using: 'docker'
