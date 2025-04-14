@@ -52,7 +52,7 @@ func initFlags(flags *Flags) error {
 		badFlags = append(badFlags, "repo")
 	}
 	if len(badFlags) > 0 {
-		return fmt.Errorf("Required flags or environment variables not set: %s", badFlags)
+		return fmt.Errorf("required flags or environment variables not set: %s", badFlags)
 	}
 
 	return nil
@@ -82,7 +82,7 @@ func outputAndExit(w io.Writer, shouldFail bool, message string) {
 		}
 	}
 
-	fmt.Fprint(w, message)
+	_, _ = fmt.Fprint(w, message)
 	if testing.Testing() {
 		return
 	}

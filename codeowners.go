@@ -46,7 +46,7 @@ type App struct {
 func NewApp(cfg AppConfig) (*App, error) {
 	repoSplit := strings.Split(cfg.Repo, "/")
 	if len(repoSplit) != 2 {
-		return nil, fmt.Errorf("Invalid repo name: %s", cfg.Repo)
+		return nil, fmt.Errorf("invalid repo name: %s", cfg.Repo)
 	}
 	owner := repoSplit[0]
 	repo := repoSplit[1]
@@ -208,7 +208,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 		// Approve the PR since all codeowner teams have approved
 		err = a.client.ApprovePR()
 		if err != nil {
-			return true, message, fmt.Errorf("ApprovePR Error: %v\n", err)
+			return true, message, fmt.Errorf("ApprovePR Error: %v", err)
 		}
 	}
 	return true, message, nil
@@ -240,7 +240,7 @@ func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeown
 	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
 	existingComment, existingFound, err := a.client.FindExistingComment(commentPrefix, &fiveDaysAgo)
 	if err != nil {
-		return fmt.Errorf("FindExistingComment Error: %v\n", err)
+		return fmt.Errorf("FindExistingComment Error: %v", err)
 	}
 
 	if existingFound {
@@ -251,13 +251,13 @@ func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeown
 		printDebug("Updating existing review status comment\n")
 		err = a.client.UpdateComment(existingComment, comment)
 		if err != nil {
-			return fmt.Errorf("UpdateComment Error: %v\n", err)
+			return fmt.Errorf("UpdateComment Error: %v", err)
 		}
 	} else {
 		printDebug("Adding new review status comment: %q\n", comment)
 		err = a.client.AddComment(comment)
 		if err != nil {
-			return fmt.Errorf("AddComment Error: %v\n", err)
+			return fmt.Errorf("AddComment Error: %v", err)
 		}
 	}
 
@@ -287,7 +287,7 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 	})
 
 	if isInCommentsError != nil {
-		return fmt.Errorf("IsInComments Error: %v\n", isInCommentsError)
+		return fmt.Errorf("IsInComments Error: %v", isInCommentsError)
 	}
 
 	// Add the CC comment if there are any viewers to ping
@@ -296,7 +296,7 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 		printDebug("Adding CC comment: %q\n", comment)
 		err := a.client.AddComment(comment)
 		if err != nil {
-			return fmt.Errorf("AddComment Error: %v\n", err)
+			return fmt.Errorf("AddComment Error: %v", err)
 		}
 	} else {
 		printDebug("No new optional reviewers to CC.\n")
