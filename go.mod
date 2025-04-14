@@ -1,11 +1,12 @@
 module github.com/multimediallc/codeowners-plus
 
 go 1.23.1
+
 require (
 	github.com/bmatcuk/doublestar/v4 v4.8.1
 	github.com/boyter/gocodewalker v1.4.0
 	github.com/google/go-github/v63 v63.0.0
-	github.com/pelletier/go-toml/v2 v2.2.3
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/sourcegraph/go-diff v0.7.0
 	github.com/urfave/cli/v2 v2.27.6
 )
