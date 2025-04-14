@@ -33,8 +33,6 @@ type App struct {
 	client     gh.Client
 	codeowners codeowners.CodeOwners
 	gitDiff    git.Diff
-	infoBuffer io.Writer
-	warnBuffer io.Writer
 }
 
 // New creates a new App instance with the given configuration
@@ -57,12 +55,12 @@ func New(cfg Config) (*App, error) {
 
 func (a *App) printDebug(format string, args ...interface{}) {
 	if a.config.Verbose {
-		fmt.Fprintf(a.config.InfoBuffer, format, args...)
+		_, _ = fmt.Fprintf(a.config.InfoBuffer, format, args...)
 	}
 }
 
 func (a *App) printWarn(format string, args ...interface{}) {
-	fmt.Fprintf(a.config.WarningBuffer, format, args...)
+	_, _ = fmt.Fprintf(a.config.WarningBuffer, format, args...)
 }
 
 // Run executes the application logic
