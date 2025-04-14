@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"testing"
+
+	"github.com/multimediallc/codeowners-plus/internal/app"
 )
 
 // Flags holds the command line flags
@@ -99,16 +101,18 @@ func main() {
 		outputAndExit(os.Stderr, true, fmt.Sprintln(err))
 	}
 
-	cfg := AppConfig{
-		Token:   *flags.Token,
-		RepoDir: *flags.RepoDir,
-		PR:      *flags.PR,
-		Repo:    *flags.Repo,
-		Verbose: *flags.Verbose,
-		Quiet:   *flags.Quiet,
+	cfg := app.Config{
+		Token:         *flags.Token,
+		RepoDir:       *flags.RepoDir,
+		PR:            *flags.PR,
+		Repo:          *flags.Repo,
+		Verbose:       *flags.Verbose,
+		Quiet:         *flags.Quiet,
+		InfoBuffer:    InfoBuffer,
+		WarningBuffer: WarningBuffer,
 	}
 
-	app, err := NewApp(cfg)
+	app, err := app.New(cfg)
 	if err != nil {
 		outputAndExit(os.Stderr, true, fmt.Sprintf("Failed to initialize app: %v\n", err))
 	}
@@ -123,6 +127,6 @@ func main() {
 	} else {
 		w = os.Stderr
 	}
-	shouldFail := !success && app.conf.Enforcement.FailCheck
+	shouldFail := !success && app.Conf.Enforcement.FailCheck
 	outputAndExit(w, shouldFail, message)
 }

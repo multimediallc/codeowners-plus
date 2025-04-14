@@ -1,7 +1,8 @@
-package main
+package app
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"time"
@@ -13,37 +14,31 @@ import (
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
-func printDebug(format string, args ...interface{}) {
-	if *flags.Verbose {
-		fmt.Fprintf(InfoBuffer, format, args...)
-	}
-}
-
-func printWarning(format string, args ...interface{}) {
-	fmt.Fprintf(WarningBuffer, format, args...)
-}
-
-// AppConfig holds the application configuration
-type AppConfig struct {
-	Token   string
-	RepoDir string
-	PR      int
-	Repo    string
-	Verbose bool
-	Quiet   bool
+// Config holds the application configuration
+type Config struct {
+	Token         string
+	RepoDir       string
+	PR            int
+	Repo          string
+	Verbose       bool
+	Quiet         bool
+	InfoBuffer    io.Writer
+	WarningBuffer io.Writer
 }
 
 // App represents the application with its dependencies
 type App struct {
-	config     AppConfig
+	Conf       *owners.Config
+	config     *Config
 	client     gh.Client
 	codeowners codeowners.CodeOwners
 	gitDiff    git.Diff
-	conf       *owners.Config
+	infoBuffer io.Writer
+	warnBuffer io.Writer
 }
 
-// NewApp creates a new App instance with the given configuration
-func NewApp(cfg AppConfig) (*App, error) {
+// New creates a new App instance with the given configuration
+func New(cfg Config) (*App, error) {
 	repoSplit := strings.Split(cfg.Repo, "/")
 	if len(repoSplit) != 2 {
 		return nil, fmt.Errorf("invalid repo name: %s", cfg.Repo)
@@ -53,11 +48,21 @@ func NewApp(cfg AppConfig) (*App, error) {
 
 	client := gh.NewClient(owner, repo, cfg.Token)
 	app := &App{
-		config: cfg,
+		config: &cfg,
 		client: client,
 	}
 
 	return app, nil
+}
+
+func (a *App) printDebug(format string, args ...interface{}) {
+	if a.config.Verbose {
+		fmt.Fprintf(a.config.InfoBuffer, format, args...)
+	}
+}
+
+func (a *App) printWarn(format string, args ...interface{}) {
+	fmt.Fprintf(a.config.WarningBuffer, format, args...)
 }
 
 // Run executes the application logic
@@ -66,14 +71,14 @@ func (a *App) Run() (bool, string, error) {
 	if err := a.client.InitPR(a.config.PR); err != nil {
 		return false, "", fmt.Errorf("InitPR Error: %v", err)
 	}
-	printDebug("PR: %d\n", a.client.PR().GetNumber())
+	a.printDebug("PR: %d\n", a.client.PR().GetNumber())
 
 	// Read config
 	conf, err := owners.ReadConfig(a.config.RepoDir)
 	if err != nil {
-		printWarning("Error reading codeowners.toml - using default config\n")
+		a.printWarn("Error reading codeowners.toml - using default config\n")
 	}
-	a.conf = conf
+	a.Conf = conf
 
 	// Setup diff context
 	diffContext := git.DiffContext{
@@ -84,7 +89,7 @@ func (a *App) Run() (bool, string, error) {
 	}
 
 	// Get the diff of the PR
-	printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
+	a.printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
 	gitDiff, err := git.NewDiff(diffContext)
 	if err != nil {
 		return false, "", fmt.Errorf("NewGitDiff Error: %v", err)
@@ -92,7 +97,7 @@ func (a *App) Run() (bool, string, error) {
 	a.gitDiff = gitDiff
 
 	// Initialize codeowners
-	codeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), WarningBuffer)
+	codeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), a.config.WarningBuffer)
 	if err != nil {
 		return false, "", fmt.Errorf("NewCodeOwners Error: %v", err)
 	}
@@ -104,12 +109,12 @@ func (a *App) Run() (bool, string, error) {
 
 	// Warn about unowned files
 	for _, uFile := range codeOwners.UnownedFiles() {
-		printWarning("WARNING: Unowned File: %s\n", uFile)
+		a.printWarn("WARNING: Unowned File: %s\n", uFile)
 	}
 
 	// Print file owners if verbose
 	if a.config.Verbose {
-		printFileOwners(codeOwners)
+		a.printFileOwners(codeOwners)
 	}
 
 	// Process approvals and reviewers
@@ -121,14 +126,14 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	// Get all required owners before filtering
 	allRequiredOwners := a.codeowners.AllRequired()
 	allRequiredOwnerNames := allRequiredOwners.Flatten()
-	printDebug("All Required Owners: %s\n", allRequiredOwnerNames)
+	a.printDebug("All Required Owners: %s\n", allRequiredOwnerNames)
 
 	// Get optional reviewers
 	allOptionalReviewerNames := a.codeowners.AllOptional().Flatten()
 	allOptionalReviewerNames = f.Filtered(allOptionalReviewerNames, func(name string) bool {
 		return !slices.Contains(allRequiredOwnerNames, name)
 	})
-	printDebug("All Optional Reviewers: %s\n", allOptionalReviewerNames)
+	a.printDebug("All Optional Reviewers: %s\n", allOptionalReviewerNames)
 
 	// Initialize user reviewer map
 	if err := a.client.InitUserReviewerMap(allRequiredOwnerNames); err != nil {
@@ -140,11 +145,11 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	if err != nil {
 		return false, message, fmt.Errorf("GetCurrentApprovals Error: %v", err)
 	}
-	printDebug("Current Approvals: %+v\n", ghApprovals)
+	a.printDebug("Current Approvals: %+v\n", ghApprovals)
 
 	// Process token owner approval if enabled
 	var tokenOwnerApproval *gh.CurrentApproval
-	if a.conf.Enforcement.Approval {
+	if a.Conf.Enforcement.Approval {
 		tokenOwnerApproval, err = a.processTokenOwnerApproval()
 		if err != nil {
 			return false, message, err
@@ -165,8 +170,8 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 
 	unapprovedOwners := a.codeowners.AllRequired()
 	maxReviewsMet := false
-	if a.conf.MaxReviews != nil && *a.conf.MaxReviews > 0 {
-		if validApprovalCount >= *a.conf.MaxReviews && len(f.Intersection(unapprovedOwners.Flatten(), a.conf.UnskippableReviewers)) == 0 {
+	if a.Conf.MaxReviews != nil && *a.Conf.MaxReviews > 0 {
+		if validApprovalCount >= *a.Conf.MaxReviews && len(f.Intersection(unapprovedOwners.Flatten(), a.Conf.UnskippableReviewers)) == 0 {
 			maxReviewsMet = true
 		}
 	}
@@ -185,7 +190,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	if len(unapprovedOwners) > 0 && !maxReviewsMet {
 		// Return failed status if any codeowner team has not approved the PR
 		unapprovedCommentString := unapprovedOwners.ToCommentString(false)
-		if a.conf.Enforcement.Approval && tokenOwnerApproval != nil {
+		if a.Conf.Enforcement.Approval && tokenOwnerApproval != nil {
 			_ = a.client.DismissStaleReviews([]*gh.CurrentApproval{tokenOwnerApproval})
 		}
 		message = fmt.Sprintf(
@@ -196,15 +201,15 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	}
 
 	// Exit if there are not enough reviews
-	if a.conf.MinReviews != nil && *a.conf.MinReviews > 0 {
-		if validApprovalCount < *a.conf.MinReviews {
-			message = fmt.Sprintf("FAIL: Min Reviews not satisfied. Need %d, found %d", *a.conf.MinReviews, validApprovalCount)
+	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
+		if validApprovalCount < *a.Conf.MinReviews {
+			message = fmt.Sprintf("FAIL: Min Reviews not satisfied. Need %d, found %d", *a.Conf.MinReviews, validApprovalCount)
 			return false, message, nil
 		}
 	}
 
 	message = "Codeowners reviews satisfied"
-	if a.conf.Enforcement.Approval && tokenOwnerApproval == nil {
+	if a.Conf.Enforcement.Approval && tokenOwnerApproval == nil {
 		// Approve the PR since all codeowner teams have approved
 		err = a.client.ApprovePR()
 		if err != nil {
@@ -218,15 +223,15 @@ func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeown
 	// Comment on the PR with the codeowner teams that have not approved the PR
 
 	if a.config.Quiet || len(unapprovedOwners) == 0 {
-		printDebug("Skipping review status comment (disabled or no unapproved owners).\n")
+		a.printDebug("Skipping review status comment (disabled or no unapproved owners).\n")
 		return nil
 	}
 
 	var commentPrefix = "Codeowners approval required for this PR:\n"
 
-	hasHighPriority, err := a.client.IsInLabels(a.conf.HighPriorityLabels)
+	hasHighPriority, err := a.client.IsInLabels(a.Conf.HighPriorityLabels)
 	if err != nil {
-		printWarning("WARNING: Error checking high priority labels: %v\n", err)
+		a.printWarn("WARNING: Error checking high priority labels: %v\n", err)
 	} else if hasHighPriority {
 		commentPrefix = "❗High Prio❗\n\n" + commentPrefix
 	}
@@ -248,13 +253,13 @@ func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeown
 			// we don't need to update the comment
 			return nil
 		}
-		printDebug("Updating existing review status comment\n")
+		a.printDebug("Updating existing review status comment\n")
 		err = a.client.UpdateComment(existingComment, comment)
 		if err != nil {
 			return fmt.Errorf("UpdateComment Error: %v", err)
 		}
 	} else {
-		printDebug("Adding new review status comment: %q\n", comment)
+		a.printDebug("Adding new review status comment: %q\n", comment)
 		err = a.client.AddComment(comment)
 		if err != nil {
 			return fmt.Errorf("AddComment Error: %v", err)
@@ -268,7 +273,7 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 	// Add CC comment to the PR with the optional reviewers that have not already been mentioned in the PR comments
 
 	if a.config.Quiet || len(allOptionalReviewerNames) == 0 {
-		printDebug("Skipping optional CC comment (disabled or no optional reviewers).\n")
+		a.printDebug("Skipping optional CC comment (disabled or no optional reviewers).\n")
 		return nil
 	}
 
@@ -279,7 +284,7 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 		}
 		found, err := a.client.IsSubstringInComments(name, nil)
 		if err != nil {
-			printWarning("WARNING: Error checking comments for substring '%s': %v\n", name, err)
+			a.printWarn("WARNING: Error checking comments for substring '%s': %v\n", name, err)
 			isInCommentsError = err
 			return false
 		}
@@ -293,13 +298,13 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 	// Add the CC comment if there are any viewers to ping
 	if len(viewersToPing) > 0 {
 		comment := fmt.Sprintf("cc %s", strings.Join(viewersToPing, " "))
-		printDebug("Adding CC comment: %q\n", comment)
+		a.printDebug("Adding CC comment: %q\n", comment)
 		err := a.client.AddComment(comment)
 		if err != nil {
 			return fmt.Errorf("AddComment Error: %v", err)
 		}
 	} else {
-		printDebug("No new optional reviewers to CC.\n")
+		a.printDebug("No new optional reviewers to CC.\n")
 	}
 
 	return nil
@@ -308,11 +313,11 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 func (a *App) processTokenOwnerApproval() (*gh.CurrentApproval, error) {
 	tokenOwner, err := a.client.GetTokenUser()
 	if err != nil {
-		printWarning("WARNING: You might be trying to use a bot as an Enforcement.Approval user," +
+		a.printWarn("WARNING: You might be trying to use a bot as an Enforcement.Approval user," +
 			" but this will not work due to GitHub CODEOWNERS not allowing bots as code owners." +
 			" To use the Enforcement.Approval feature, the token must belong to a GitHub user account")
 
-		a.conf.Enforcement.Approval = false
+		a.Conf.Enforcement.Approval = false
 		return nil, nil
 	}
 
@@ -326,7 +331,7 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 	a.codeowners.ApplyApprovals(approvers)
 
 	if len(approvalsToDismiss) > 0 {
-		printDebug("Dismissing Stale Approvals: %+v\n", approvalsToDismiss)
+		a.printDebug("Dismissing Stale Approvals: %+v\n", approvalsToDismiss)
 		if err := a.client.DismissStaleReviews(approvalsToDismiss); err != nil {
 			return 0, fmt.Errorf("DismissStaleReviews Error: %v", err)
 		}
@@ -337,32 +342,32 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 
 func (a *App) requestReviews() error {
 	if a.config.Quiet {
-		printDebug("Skipping review requests (disabled in quiet mode).\n")
+		a.printDebug("Skipping review requests (disabled in quiet mode).\n")
 		return nil
 	}
 
 	unapprovedOwners := a.codeowners.AllRequired()
 	unapprovedOwnerNames := unapprovedOwners.Flatten()
-	printDebug("Remaining Required Owners: %s\n", unapprovedOwnerNames)
+	a.printDebug("Remaining Required Owners: %s\n", unapprovedOwnerNames)
 
 	currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()
 	if err != nil {
 		return fmt.Errorf("GetCurrentlyRequested Error: %v", err)
 	}
-	printDebug("Currently Requested Owners: %s\n", currentlyRequestedOwners)
+	a.printDebug("Currently Requested Owners: %s\n", currentlyRequestedOwners)
 
 	previousReviewers, err := a.client.GetAlreadyReviewed()
 	if err != nil {
 		return fmt.Errorf("GetAlreadyReviewed Error: %v", err)
 	}
-	printDebug("Already Reviewed Owners: %s\n", previousReviewers)
+	a.printDebug("Already Reviewed Owners: %s\n", previousReviewers)
 
 	filteredOwners := unapprovedOwners.FilterOut(currentlyRequestedOwners...)
 	filteredOwners = filteredOwners.FilterOut(previousReviewers...)
 	filteredOwnerNames := filteredOwners.Flatten()
 
 	if len(filteredOwners) > 0 {
-		printDebug("Requesting Reviews from: %s\n", filteredOwnerNames)
+		a.printDebug("Requesting Reviews from: %s\n", filteredOwnerNames)
 		if err := a.client.RequestReviewers(filteredOwnerNames); err != nil {
 			return fmt.Errorf("RequestReviewers Error: %v", err)
 		}
@@ -371,15 +376,15 @@ func (a *App) requestReviews() error {
 	return nil
 }
 
-func printFileOwners(codeOwners codeowners.CodeOwners) {
+func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
 	fileRequired := codeOwners.FileRequired()
-	printDebug("File Reviewers:\n")
+	a.printDebug("File Reviewers:\n")
 	for file, reviewers := range fileRequired {
-		printDebug("- %s: %+v\n", file, reviewers.Flatten())
+		a.printDebug("- %s: %+v\n", file, reviewers.Flatten())
 	}
 	fileOptional := codeOwners.FileOptional()
-	printDebug("File Optional:\n")
+	a.printDebug("File Optional:\n")
 	for file, reviewers := range fileOptional {
-		printDebug("- %s: %+v\n", file, reviewers.Flatten())
+		a.printDebug("- %s: %+v\n", file, reviewers.Flatten())
 	}
 }

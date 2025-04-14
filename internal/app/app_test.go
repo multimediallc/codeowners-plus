@@ -1,9 +1,9 @@
-package main
+package app
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -312,122 +312,36 @@ func (m *mockGitHubClient) UpdateComment(commentID int64, body string) error {
 	return nil
 }
 
-func init() {
-	// Initialize test flags with default values
-	flags = &Flags{
-		Token:   new(string),
-		RepoDir: new(string),
-		PR:      new(int),
-		Repo:    new(string),
-		Verbose: new(bool),
-	}
-	*flags.Token = "test-token"
-	*flags.RepoDir = "/test/dir"
-	*flags.PR = 123
-	*flags.Repo = "owner/repo"
-	*flags.Verbose = false
-}
-
-func TestGetEnv(t *testing.T) {
-	tt := []struct {
-		name     string
-		key      string
-		fallback string
-		setEnv   bool
-		envValue string
-		expected string
-	}{
-		{
-			name:     "environment variable set",
-			key:      "TEST_ENV",
-			fallback: "fallback",
-			setEnv:   true,
-			envValue: "test_value",
-			expected: "test_value",
-		},
-		{
-			name:     "environment variable not set",
-			key:      "TEST_ENV",
-			fallback: "fallback",
-			setEnv:   false,
-			expected: "fallback",
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.setEnv {
-				_ = os.Setenv(tc.key, tc.envValue)
-				defer func() {
-					_ = os.Unsetenv(tc.key)
-				}()
-			}
-
-			got := getEnv(tc.key, tc.fallback)
-			if got != tc.expected {
-				t.Errorf("expected %s, got %s", tc.expected, got)
-			}
-		})
-	}
-}
-
-func TestIgnoreError(t *testing.T) {
-	tt := []struct {
-		name     string
-		value    int
-		err      error
-		expected int
-	}{
-		{
-			name:     "error is nil",
-			value:    42,
-			err:      nil,
-			expected: 42,
-		},
-		{
-			name:     "error is not nil",
-			value:    42,
-			err:      os.ErrNotExist,
-			expected: 42,
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ignoreError(tc.value, tc.err)
-			if got != tc.expected {
-				t.Errorf("expected %d, got %d", tc.expected, got)
-			}
-		})
-	}
-}
-
 func TestNewApp(t *testing.T) {
 	tt := []struct {
 		name        string
-		config      AppConfig
+		config      Config
 		expectError bool
 	}{
 		{
 			name: "valid config",
-			config: AppConfig{
-				Token:   "test-token",
-				RepoDir: "/test/dir",
-				PR:      123,
-				Repo:    "owner/repo",
-				Verbose: true,
-				Quiet:   true,
+			config: Config{
+				Token:         "test-token",
+				RepoDir:       "/test/dir",
+				PR:            123,
+				Repo:          "owner/repo",
+				Verbose:       true,
+				Quiet:         true,
+				InfoBuffer:    io.Discard,
+				WarningBuffer: io.Discard,
 			},
 			expectError: false,
 		},
 		{
 			name: "invalid repo name",
-			config: AppConfig{
-				Token:   "test-token",
-				RepoDir: "/test/dir",
-				PR:      123,
-				Repo:    "invalid-repo",
-				Verbose: true,
+			config: Config{
+				Token:         "test-token",
+				RepoDir:       "/test/dir",
+				PR:            123,
+				Repo:          "invalid-repo",
+				Verbose:       true,
+				InfoBuffer:    io.Discard,
+				WarningBuffer: io.Discard,
 			},
 			expectError: true,
 		},
@@ -435,7 +349,7 @@ func TestNewApp(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			app, err := NewApp(tc.config)
+			app, err := New(tc.config)
 			if tc.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
@@ -502,13 +416,17 @@ func TestPrintDebug(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			// Reset buffer
-			InfoBuffer.Reset()
-			// Set verbose flag
-			*flags.Verbose = tc.verbose
+			infoBuffer := bytes.NewBuffer([]byte{})
+			app := &App{
+				config: &Config{
+					Verbose:    tc.verbose,
+					InfoBuffer: infoBuffer,
+				},
+			}
 
-			printDebug(tc.format, tc.args...)
+			app.printDebug(tc.format, tc.args...)
 
-			got := InfoBuffer.String()
+			got := infoBuffer.String()
 			if got != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, got)
 			}
@@ -540,128 +458,18 @@ func TestPrintWarning(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			// Reset buffer
-			WarningBuffer.Reset()
+			warningBuffer := bytes.NewBuffer([]byte{})
+			app := &App{
+				config: &Config{
+					WarningBuffer: warningBuffer,
+				},
+			}
 
-			printWarning(tc.format, tc.args...)
+			app.printWarn(tc.format, tc.args...)
 
-			got := WarningBuffer.String()
+			got := warningBuffer.String()
 			if got != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, got)
-			}
-		})
-	}
-}
-
-func TestOuputAndExit(t *testing.T) {
-	// Note: This test can't actually verify the exit behavior
-	// It only verifies that the buffers are written correctly
-	tt := []struct {
-		name       string
-		shouldFail bool
-		format     string
-		args       []interface{}
-		verbose    bool
-		warnings   string
-		info       string
-	}{
-		{
-			name:       "with warnings and info",
-			shouldFail: true,
-			format:     "test %s %d",
-			args:       []interface{}{"message", 42},
-			verbose:    true,
-			warnings:   "warning message\n",
-			info:       "info message\n",
-		},
-		{
-			name:       "with warnings only",
-			shouldFail: false,
-			format:     "test %s %d",
-			args:       []interface{}{"message", 42},
-			verbose:    false,
-			warnings:   "warning message\n",
-			info:       "",
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			// Reset buffers
-			WarningBuffer.Reset()
-			InfoBuffer.Reset()
-
-			// Set up test data
-			WarningBuffer.WriteString(tc.warnings)
-			InfoBuffer.WriteString(tc.info)
-			*flags.Verbose = tc.verbose
-
-			outputAndExit(io.Discard, tc.shouldFail, fmt.Sprintf(tc.format, tc.args...))
-		})
-	}
-}
-
-func TestInitFlags(t *testing.T) {
-	tokenStr := "test-token"
-	prInt := 123
-	repoStr := "owner/repo"
-	emptyStr := ""
-	zeroInt := 0
-	tt := []struct {
-		name        string
-		flags       *Flags
-		expectError bool
-	}{
-		{
-			name: "all required flags set",
-			flags: &Flags{
-				Token: &tokenStr,
-				PR:    &prInt,
-				Repo:  &repoStr,
-			},
-			expectError: false,
-		},
-		{
-			name: "missing token",
-			flags: &Flags{
-				Token: &emptyStr,
-				PR:    &prInt,
-				Repo:  &repoStr,
-			},
-			expectError: true,
-		},
-		{
-			name: "missing PR",
-			flags: &Flags{
-				Token: &tokenStr,
-				PR:    &zeroInt,
-				Repo:  &repoStr,
-			},
-			expectError: true,
-		},
-		{
-			name: "missing repo",
-			flags: &Flags{
-				Token: &tokenStr,
-				PR:    &prInt,
-				Repo:  &emptyStr,
-			},
-			expectError: true,
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			err := initFlags(tc.flags)
-			if tc.expectError {
-				if err == nil {
-					t.Error("expected error but got none")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-				return
 			}
 		})
 	}
@@ -673,8 +481,10 @@ func setupAppForTest(t *testing.T, quiet bool) (*App, *mockGitHubClient) {
 	mockGH := &mockGitHubClient{}
 	mockGH.ResetGHClientTracking()
 
-	cfg := AppConfig{
-		Quiet: quiet,
+	cfg := Config{
+		Quiet:         quiet,
+		InfoBuffer:    io.Discard,
+		WarningBuffer: io.Discard,
 	}
 
 	conf := &owners.Config{
@@ -687,9 +497,9 @@ func setupAppForTest(t *testing.T, quiet bool) (*App, *mockGitHubClient) {
 	}
 
 	app := &App{
-		config:     cfg,
+		config:     &cfg,
 		client:     mockGH,
-		conf:       conf,
+		Conf:       conf,
 		codeowners: mockOwners,
 		gitDiff:    mockGitDiff{},
 	}
@@ -765,14 +575,16 @@ func TestAddReviewStatusComment(t *testing.T) {
 			}
 
 			app := &App{
-				config: AppConfig{
-					Quiet: tc.name == "quiet mode",
+				config: &Config{
+					Quiet:         tc.name == "quiet mode",
+					InfoBuffer:    io.Discard,
+					WarningBuffer: io.Discard,
 				},
 				client: mockGH,
 				codeowners: &mockCodeOwners{
 					requiredOwners: tc.requiredOwners,
 				},
-				conf: &owners.Config{},
+				Conf: &owners.Config{},
 			}
 
 			err := app.addReviewStatusComment(tc.requiredOwners, tc.unapprovedOwners, tc.maxReviewsMet)
@@ -1144,8 +956,10 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 			}
 
 			app := &App{
-				config: AppConfig{
-					Quiet: false,
+				config: &Config{
+					Quiet:         false,
+					InfoBuffer:    io.Discard,
+					WarningBuffer: io.Discard,
 				},
 				client:     mockGH,
 				codeowners: mockOwners,
@@ -1157,7 +971,7 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 						Dir:  "/test/dir",
 					},
 				},
-				conf: &owners.Config{
+				Conf: &owners.Config{
 					Enforcement: &owners.Enforcement{
 						Approval:  tc.enforcementApproval,
 						FailCheck: true,
@@ -1184,8 +998,8 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 				return
 			}
 
-			if tc.expectedEnfApproval != app.conf.Enforcement.Approval {
-				t.Errorf("expected %t Enforcement.Approval, got %t", tc.expectedEnfApproval, app.conf.Enforcement.Approval)
+			if tc.expectedEnfApproval != app.Conf.Enforcement.Approval {
+				t.Errorf("expected %t Enforcement.Approval, got %t", tc.expectedEnfApproval, app.Conf.Enforcement.Approval)
 			}
 
 			// Verify that approvals were applied correctly
@@ -1197,6 +1011,100 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 
 			if !f.SlicesItemsMatch(tc.expectedApprovals, mockOwners.appliedApprovals) {
 				t.Errorf("expected approvals %x, got %x", tc.expectedApprovals, mockOwners.appliedApprovals)
+			}
+		})
+	}
+}
+
+func TestPrintFileOwners(t *testing.T) {
+	tt := []struct {
+		name           string
+		verbose        bool
+		fileRequired   map[string]codeowners.ReviewerGroups
+		fileOptional   map[string]codeowners.ReviewerGroups
+		expectedOutput string
+	}{
+		{
+			name:    "verbose enabled with both required and optional owners",
+			verbose: true,
+			fileRequired: map[string]codeowners.ReviewerGroups{
+				"file1.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+				},
+			},
+			fileOptional: map[string]codeowners.ReviewerGroups{
+				"file2.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+				},
+			},
+			expectedOutput: "File Reviewers:\n- file1.go: [@user1 @user2]\nFile Optional:\n- file2.go: [@user3]\n",
+		},
+		{
+			name:    "verbose enabled with only required owners",
+			verbose: true,
+			fileRequired: map[string]codeowners.ReviewerGroups{
+				"file1.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				},
+			},
+			fileOptional:   map[string]codeowners.ReviewerGroups{},
+			expectedOutput: "File Reviewers:\n- file1.go: [@user1]\nFile Optional:\n",
+		},
+		{
+			name:         "verbose enabled with only optional owners",
+			verbose:      true,
+			fileRequired: map[string]codeowners.ReviewerGroups{},
+			fileOptional: map[string]codeowners.ReviewerGroups{
+				"file2.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+				},
+			},
+			expectedOutput: "File Reviewers:\nFile Optional:\n- file2.go: [@user3]\n",
+		},
+		{
+			name:    "verbose disabled",
+			verbose: false,
+			fileRequired: map[string]codeowners.ReviewerGroups{
+				"file1.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				},
+			},
+			fileOptional: map[string]codeowners.ReviewerGroups{
+				"file2.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+				},
+			},
+			expectedOutput: "",
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a buffer to capture output
+			infoBuffer := bytes.NewBuffer([]byte{})
+
+			// Create mock codeowners
+			mockOwners := &mockCodeOwners{
+				fileRequiredMap: tc.fileRequired,
+				fileOptionalMap: tc.fileOptional,
+			}
+
+			// Create app instance
+			app := &App{
+				config: &Config{
+					Verbose:    tc.verbose,
+					InfoBuffer: infoBuffer,
+				},
+				codeowners: mockOwners,
+			}
+
+			// Call the method
+			app.printFileOwners(mockOwners)
+
+			// Check the output
+			got := infoBuffer.String()
+			if got != tc.expectedOutput {
+				t.Errorf("expected output:\n%q\ngot:\n%q", tc.expectedOutput, got)
 			}
 		})
 	}
