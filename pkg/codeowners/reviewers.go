@@ -71,9 +71,7 @@ func (rgs ReviewerGroups) ToCommentString(includeCheckbox bool) string {
 		prefix := "- "
 		if includeCheckbox {
 			if s.Approved {
-				prefix += "[x] "
-			} else {
-				prefix += "[ ] "
+				prefix += "✅ "
 			}
 		}
 		return fmt.Sprintf("%s%s", prefix, s.ToCommentString())
