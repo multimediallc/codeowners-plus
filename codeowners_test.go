@@ -109,29 +109,33 @@ func (m *mockCodeOwners) UnownedFiles() []string {
 }
 
 type mockGitHubClient struct {
-	pr                      *github.PullRequest
-	userReviewerMapError    error
-	currentApprovals        []*gh.CurrentApproval
-	currentApprovalsError   error
-	tokenUser               string
-	tokenUserError          error
-	currentlyRequested      []string
-	currentlyRequestedError error
-	alreadyReviewed         []string
-	alreadyReviewedError    error
-	dismissError            error
-	requestReviewersError   error
-	warningBuffer           io.Writer
-	infoBuffer              io.Writer
-	comments                []*github.IssueComment
-	initPRError             error
-	initReviewsError        error
-	initCommentsError       error
-	addCommentError         error
-	approvePRError          error
-	AddCommentCalled        bool
-	AddCommentInput         string
-	RequestReviewersCalled  bool
+	pr                        *github.PullRequest
+	userReviewerMapError      error
+	currentApprovals          []*gh.CurrentApproval
+	currentApprovalsError     error
+	tokenUser                 string
+	tokenUserError            error
+	currentlyRequested        []string
+	currentlyRequestedError   error
+	alreadyReviewed           []string
+	alreadyReviewedError      error
+	dismissError              error
+	requestReviewersError     error
+	warningBuffer             io.Writer
+	infoBuffer                io.Writer
+	comments                  []*github.IssueComment
+	initPRError               error
+	initReviewsError          error
+	initCommentsError         error
+	addCommentError           error
+	approvePRError            error
+	AddCommentCalled          bool
+	AddCommentInput           string
+	RequestReviewersCalled    bool
+	FindExistingCommentCalled bool
+	FindExistingCommentInput  string
+	UpdateCommentCalled       bool
+	UpdateCommentInput        string
 }
 
 func (m *mockGitHubClient) PR() *github.PullRequest {
@@ -289,6 +293,23 @@ func (m *mockGitHubClient) IsInLabels(labels []string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func (m *mockGitHubClient) FindExistingComment(prefix string, since *time.Time) (int64, bool, error) {
+	m.FindExistingCommentCalled = true
+	m.FindExistingCommentInput = prefix
+	for _, comment := range m.comments {
+		if strings.HasPrefix(comment.GetBody(), prefix) {
+			return comment.GetID(), true, nil
+		}
+	}
+	return 0, false, nil
+}
+
+func (m *mockGitHubClient) UpdateComment(commentID int64, body string) error {
+	m.UpdateCommentCalled = true
+	m.UpdateCommentInput = body
+	return nil
 }
 
 func init() {
@@ -677,51 +698,106 @@ func setupAppForTest(t *testing.T, quiet bool) (*App, *mockGitHubClient) {
 }
 
 func TestAddReviewStatusComment(t *testing.T) {
-	user1Group := codeowners.ReviewerGroups{
-		&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-	}
-	pendingReviewerGroup := codeowners.ReviewerGroups{
-		&codeowners.ReviewerGroup{Names: []string{"@pending-reviewer"}},
-	}
-
 	tt := []struct {
-		name               string
-		quiet              bool
-		unapproved         codeowners.ReviewerGroups
-		allRequired        codeowners.ReviewerGroups
-		expectedShouldCall bool
-		expectedComment    string
+		name                string
+		requiredOwners      codeowners.ReviewerGroups
+		unapprovedOwners    codeowners.ReviewerGroups
+		maxReviewsMet       bool
+		existingComments    []*github.IssueComment
+		expectAddComment    bool
+		expectUpdateComment bool
+		expectError         bool
 	}{
 		{
-			name:               "short circuits in quiet mode",
-			quiet:              true,
-			unapproved:         pendingReviewerGroup,
-			allRequired:        pendingReviewerGroup,
-			expectedShouldCall: false,
-			expectedComment:    "",
+			name: "no existing comment",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+			},
+			unapprovedOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+			},
+			expectAddComment: true,
+			expectError:      false,
 		},
 		{
-			name:               "adds comment when not in quiet mode and a required reviewer has not approved",
-			quiet:              false,
-			unapproved:         user1Group,
-			allRequired:        user1Group,
-			expectedShouldCall: true,
-			expectedComment:    user1Group.ToCommentString(),
+			name: "update existing comment",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+			},
+			unapprovedOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+			},
+			existingComments: []*github.IssueComment{
+				{
+					ID:   github.Int64(1),
+					Body: github.String("Codeowners approval required for this PR:\n[ ] @user1"),
+				},
+			},
+			expectUpdateComment: true,
+			expectError:         false,
+		},
+		{
+			name: "quiet mode",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+			},
+			unapprovedOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+			},
+			expectAddComment: false,
+			expectError:      false,
+		},
+		{
+			name: "no unapproved owners",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1"}, Approved: true},
+			},
+			unapprovedOwners: codeowners.ReviewerGroups{},
+			expectAddComment: false,
+			expectError:      false,
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			app, mockClient := setupAppForTest(t, tc.quiet)
-			err := app.addReviewStatusComment(tc.allRequired, tc.unapproved, false)
-			if err != nil {
-				t.Errorf("Unexpected error when adding comment: %v", err)
+			mockGH := &mockGitHubClient{
+				comments: tc.existingComments,
 			}
-			if mockClient.AddCommentCalled != tc.expectedShouldCall {
-				t.Errorf("Expected mockClient.AddCommentCalled to be %t, but got %t", tc.expectedShouldCall, mockClient.AddCommentCalled)
+
+			app := &App{
+				config: AppConfig{
+					Quiet: tc.name == "quiet mode",
+				},
+				client: mockGH,
+				codeowners: &mockCodeOwners{
+					requiredOwners: tc.requiredOwners,
+				},
+				conf: &owners.Config{},
 			}
-			if mockClient.AddCommentInput != tc.expectedComment {
-				t.Errorf("Expected comment body %q, got %q", tc.expectedComment, mockClient.AddCommentInput)
+
+			err := app.addReviewStatusComment(tc.requiredOwners, tc.unapprovedOwners, tc.maxReviewsMet)
+			if tc.expectError {
+				if err == nil {
+					t.Error("expected an error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+
+			if tc.expectAddComment && !mockGH.AddCommentCalled {
+				t.Error("expected AddComment to be called")
+			}
+			if !tc.expectAddComment && mockGH.AddCommentCalled {
+				t.Error("expected AddComment not to be called")
+			}
+
+			if tc.expectUpdateComment && !mockGH.UpdateCommentCalled {
+				t.Error("expected UpdateComment to be called")
+			}
+			if !tc.expectUpdateComment && mockGH.UpdateCommentCalled {
+				t.Error("expected UpdateComment not to be called")
 			}
 		})
 	}
