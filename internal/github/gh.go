@@ -44,6 +44,8 @@ type Client interface {
 	ApprovePR() error
 	InitComments() error
 	AddComment(comment string) error
+	FindExistingComment(prefix string, since *time.Time) (int64, bool, error)
+	UpdateComment(commentID int64, body string) error
 	IsInComments(comment string, since *time.Time) (bool, error)
 	IsSubstringInComments(substring string, since *time.Time) (bool, error)
 	CheckApprovals(fileReviewerMap map[string][]string, approvals []*CurrentApproval, originalDiff git.Diff) (approvers []string, staleApprovals []*CurrentApproval)
@@ -407,6 +409,42 @@ func (gh *GHClient) AddComment(comment string) error {
 		_ = res.Body.Close()
 	}()
 	return err
+}
+
+func (gh *GHClient) FindExistingComment(prefix string, since *time.Time) (int64, bool, error) {
+	if gh.pr == nil {
+		return 0, false, &NoPRError{}
+	}
+	if err := gh.InitComments(); err != nil {
+		return 0, false, err
+	}
+
+	for _, comment := range gh.comments {
+		if since != nil && comment.GetCreatedAt().Before(*since) {
+			continue
+		}
+		if strings.HasPrefix(comment.GetBody(), prefix) {
+			return comment.GetID(), true, nil
+		}
+	}
+	return 0, false, nil
+}
+
+func (gh *GHClient) UpdateComment(commentID int64, body string) error {
+	if gh.pr == nil {
+		return &NoPRError{}
+	}
+	comment := &github.IssueComment{
+		Body: &body,
+	}
+	_, res, err := gh.client.Issues.EditComment(gh.ctx, gh.owner, gh.repo, commentID, comment)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
+	return nil
 }
 
 func (gh *GHClient) IsInComments(comment string, since *time.Time) (bool, error) {

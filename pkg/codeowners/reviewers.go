@@ -10,8 +10,6 @@ import (
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
-var commentPrefix = "Codeowners approval required for this PR:\n"
-
 type ReviewerGroupManager interface {
 	ToReviewerGroup(names ...string) *ReviewerGroup
 }
@@ -68,13 +66,18 @@ func (rgs ReviewerGroups) FilterOut(names ...string) ReviewerGroups {
 	})
 }
 
-func (rgs ReviewerGroups) ToCommentString() string {
+func (rgs ReviewerGroups) ToCommentString(includeCheckbox bool) string {
 	ownersList := f.Map(rgs, func(s *ReviewerGroup) string {
-		return "- " + s.ToCommentString()
+		prefix := "- "
+		if includeCheckbox {
+			if s.Approved {
+				prefix += "✅ "
+			}
+		}
+		return fmt.Sprintf("%s%s", prefix, s.ToCommentString())
 	})
 	slices.Sort(ownersList)
-	ownersListString := strings.Join(ownersList, "\n")
-	return fmt.Sprintf("%s%s", commentPrefix, ownersListString)
+	return strings.Join(ownersList, "\n")
 }
 
 // Represents the owners of a file, with a list of required and optional reviewers

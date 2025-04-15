@@ -3,6 +3,7 @@ package gh
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -594,7 +595,6 @@ func mockServerAndClient(t *testing.T) (*http.ServeMux, *httptest.Server, *GHCli
 		warningBuffer: io.Discard,
 	}
 	return mux, server, gh
-
 }
 
 func TestInitPRSuccess(t *testing.T) {
@@ -1114,6 +1114,177 @@ func TestIsInLabels(t *testing.T) {
 			}
 			if hasLabel != tc.expected {
 				t.Error(tc.failMessage)
+			}
+		})
+	}
+}
+
+func TestFindExistingComment(t *testing.T) {
+	tt := []struct {
+		name          string
+		comments      []*github.IssueComment
+		prefix        string
+		since         *time.Time
+		expectedID    int64
+		expectedFound bool
+		expectedError bool
+	}{
+		{
+			name: "comment found",
+			comments: []*github.IssueComment{
+				{
+					ID:   github.Int64(1),
+					Body: github.String("Codeowners approval required for this PR:\n- [ ] @user1"),
+				},
+			},
+			prefix:        "Codeowners approval required for this PR:",
+			expectedID:    1,
+			expectedFound: true,
+			expectedError: false,
+		},
+		{
+			name: "comment not found",
+			comments: []*github.IssueComment{
+				{
+					ID:   github.Int64(1),
+					Body: github.String("Some other comment"),
+				},
+			},
+			prefix:        "Codeowners approval required for this PR:",
+			expectedID:    0,
+			expectedFound: false,
+			expectedError: false,
+		},
+		{
+			name: "comment too old",
+			comments: []*github.IssueComment{
+				{
+					ID:        github.Int64(1),
+					Body:      github.String("Codeowners approval required for this PR:\n- [ ] @user1"),
+					CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -6)}, // 6 days old
+				},
+			},
+			prefix:        "Codeowners approval required for this PR:",
+			since:         func() *time.Time { t := time.Now().AddDate(0, 0, -5); return &t }(), // 5 days ago
+			expectedID:    0,
+			expectedFound: false,
+			expectedError: false,
+		},
+		{
+			name: "comment within time range",
+			comments: []*github.IssueComment{
+				{
+					ID:        github.Int64(1),
+					Body:      github.String("Codeowners approval required for this PR:\n- [ ] @user1"),
+					CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -4)}, // 4 days old
+				},
+			},
+			prefix:        "Codeowners approval required for this PR:",
+			since:         func() *time.Time { t := time.Now().AddDate(0, 0, -5); return &t }(), // 5 days ago
+			expectedID:    1,
+			expectedFound: true,
+			expectedError: false,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, server, gh := mockServerAndClient(t)
+			defer server.Close()
+
+			gh.pr = &github.PullRequest{Number: github.Int(123)}
+
+			// Mock the GitHub API endpoint
+			mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("expected method GET, got %s", r.Method)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(tc.comments)
+			})
+
+			id, found, err := gh.FindExistingComment(tc.prefix, tc.since)
+			if tc.expectedError {
+				if err == nil {
+					t.Error("expected an error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if found != tc.expectedFound {
+				t.Errorf("expected found to be %t, got %t", tc.expectedFound, found)
+			}
+
+			if id != tc.expectedID {
+				t.Errorf("expected ID to be %d, got %d", tc.expectedID, id)
+			}
+		})
+	}
+}
+
+func TestUpdateComment(t *testing.T) {
+	tt := []struct {
+		name          string
+		commentID     int64
+		body          string
+		expectedError bool
+	}{
+		{
+			name:          "successful update",
+			commentID:     1,
+			body:          "Updated comment",
+			expectedError: false,
+		},
+		{
+			name:          "zero comment ID",
+			commentID:     0,
+			body:          "Updated comment",
+			expectedError: true,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, server, gh := mockServerAndClient(t)
+			defer server.Close()
+
+			gh.pr = &github.PullRequest{Number: github.Int(123)}
+
+			if tc.commentID != 0 {
+				// Mock the GitHub API endpoint
+				mux.HandleFunc(fmt.Sprintf("/repos/test-owner/test-repo/issues/comments/%d", tc.commentID), func(w http.ResponseWriter, r *http.Request) {
+					if r.Method != http.MethodPatch {
+						t.Errorf("expected method PATCH, got %s", r.Method)
+					}
+
+					// Validate the request payload
+					var req github.IssueComment
+					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+						t.Errorf("failed to decode request body: %v", err)
+					}
+					if *req.Body != tc.body {
+						t.Errorf("expected Body '%s', got '%s'", tc.body, *req.Body)
+					}
+
+					w.WriteHeader(http.StatusOK)
+				})
+			}
+
+			err := gh.UpdateComment(tc.commentID, tc.body)
+			if tc.expectedError {
+				if err == nil {
+					t.Error("expected an error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
 			}
 		})
 	}

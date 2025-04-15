@@ -1,7 +1,6 @@
 package codeowners
 
 import (
-	"fmt"
 	"sort"
 	"testing"
 
@@ -124,12 +123,19 @@ func TestToCommentString(t *testing.T) {
 	}
 
 	rgs := ReviewerGroups{rgMan.ToReviewerGroup("@a"), rgMan.ToReviewerGroup("@b")}
-	if rgs.ToCommentString() != fmt.Sprintf("%s- @a\n- @b", commentPrefix) {
+	if rgs.ToCommentString(true) != "- @a\n- @b" {
+		t.Error("ToCommentString should match expected format")
+	}
+	if rgs.ToCommentString(false) != "- @a\n- @b" {
 		t.Error("ToCommentString should match expected format")
 	}
 	// Test sorting is working in ToCommentString
 	rgs = ReviewerGroups{rgMan.ToReviewerGroup("@b"), rgMan.ToReviewerGroup("@a")}
-	if rgs.ToCommentString() != fmt.Sprintf("%s- @a\n- @b", commentPrefix) {
+	if rgs.ToCommentString(true) != "- @a\n- @b" {
+		t.Error("ToCommentString should use sorted reviewers")
+	}
+	rgs[0].Approved = true
+	if rgs.ToCommentString(true) != "- @a\n- ✅ @b" {
 		t.Error("ToCommentString should use sorted reviewers")
 	}
 }
