@@ -511,7 +511,6 @@ func TestAddReviewStatusComment(t *testing.T) {
 	tt := []struct {
 		name                string
 		requiredOwners      codeowners.ReviewerGroups
-		unapprovedOwners    codeowners.ReviewerGroups
 		maxReviewsMet       bool
 		existingComments    []*github.IssueComment
 		expectAddComment    bool
@@ -523,18 +522,12 @@ func TestAddReviewStatusComment(t *testing.T) {
 			requiredOwners: codeowners.ReviewerGroups{
 				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
 			},
-			unapprovedOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-			},
 			expectAddComment: true,
 			expectError:      false,
 		},
 		{
 			name: "update existing comment",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-			},
-			unapprovedOwners: codeowners.ReviewerGroups{
 				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
 			},
 			existingComments: []*github.IssueComment{
@@ -551,18 +544,6 @@ func TestAddReviewStatusComment(t *testing.T) {
 			requiredOwners: codeowners.ReviewerGroups{
 				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
 			},
-			unapprovedOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-			},
-			expectAddComment: false,
-			expectError:      false,
-		},
-		{
-			name: "no unapproved owners",
-			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}, Approved: true},
-			},
-			unapprovedOwners: codeowners.ReviewerGroups{},
 			expectAddComment: false,
 			expectError:      false,
 		},
@@ -587,7 +568,7 @@ func TestAddReviewStatusComment(t *testing.T) {
 				Conf: &owners.Config{},
 			}
 
-			err := app.addReviewStatusComment(tc.requiredOwners, tc.unapprovedOwners, tc.maxReviewsMet)
+			err := app.addReviewStatusComment(tc.requiredOwners, tc.maxReviewsMet)
 			if tc.expectError {
 				if err == nil {
 					t.Error("expected an error, got nil")

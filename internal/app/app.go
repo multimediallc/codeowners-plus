@@ -175,7 +175,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	}
 
 	// Add comments to the PR if necessary
-	err = a.addReviewStatusComment(allRequiredOwners, unapprovedOwners, maxReviewsMet)
+	err = a.addReviewStatusComment(allRequiredOwners, maxReviewsMet)
 	if err != nil {
 		return false, message, fmt.Errorf("failed to add review status comment: %w", err)
 	}
@@ -217,10 +217,10 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	return true, message, nil
 }
 
-func (a *App) addReviewStatusComment(allRequiredOwners, unapprovedOwners codeowners.ReviewerGroups, maxReviewsMet bool) error {
-	// Comment on the PR with the codeowner teams that have not approved the PR
+func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups, maxReviewsMet bool) error {
+	// Comment on the PR with the codeowner teams required for review
 
-	if a.config.Quiet || len(unapprovedOwners) == 0 {
+	if a.config.Quiet || len(allRequiredOwners) == 0 {
 		a.printDebug("Skipping review status comment (disabled or no unapproved owners).\n")
 		return nil
 	}
@@ -271,7 +271,6 @@ func (a *App) addOptionalCcComment(allOptionalReviewerNames []string) error {
 	// Add CC comment to the PR with the optional reviewers that have not already been mentioned in the PR comments
 
 	if a.config.Quiet || len(allOptionalReviewerNames) == 0 {
-		a.printDebug("Skipping optional CC comment (disabled or no optional reviewers).\n")
 		return nil
 	}
 
@@ -340,7 +339,6 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 
 func (a *App) requestReviews() error {
 	if a.config.Quiet {
-		a.printDebug("Skipping review requests (disabled in quiet mode).\n")
 		return nil
 	}
 
