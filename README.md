@@ -64,7 +64,6 @@ jobs:
   codeowners:
     name: 'Run Codeowners Plus'
     runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v4
@@ -72,10 +71,12 @@ jobs:
           fetch-depth: 0
 
       - name: 'Codeowners Plus'
-        uses: multimediallc/codeowners-plus@v0.1.4
+        uses: multimediallc/codeowners-plus@v0.2.0
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
+          verbose: true
+          quiet: ${{ github.event.pull_request.draft }}
 ```
 
 ### Github Teams support
