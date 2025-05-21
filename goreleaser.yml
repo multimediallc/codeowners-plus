@@ -1,4 +1,6 @@
 version: 2
+
+project_name: codeowners-cli
 before:
   hooks:
     # You may remove this if you don't use go modules.
@@ -7,7 +9,9 @@ builds:
   # You can have multiple builds defined as a yaml list
   - id: "cli"
     main: ./tools/cli
-    binary: codeowners-cli
+    binary: >-
+      {{ .ProjectName }}
+      {{- if eq .Os "windows" }}.exe{{ end }}
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -15,6 +19,7 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
