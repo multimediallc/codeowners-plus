@@ -52,8 +52,8 @@ func setupTestRepo(t *testing.T) (string, func()) {
 		"tests/.codeowners": `
 *.go @backend-team
 *.js @frontend-team`,
-		"tests/test.js": "// Test file",
-		"tests/test.go": "// Test file",
+		"tests/some.test.js": "// Test file",
+		"tests/some.test.go": "// Test file",
 	}
 
 	for path, content := range files {
@@ -155,42 +155,42 @@ func TestFileOwner(t *testing.T) {
 
 	tt := []struct {
 		name      string
-		target    string
+		target    []string
 		wantErr   bool
 		wantOwner []string
 	}{
 		{
 			name:      "go file",
-			target:    "main.go",
+			target:    []string{"main.go"},
 			wantErr:   false,
 			wantOwner: []string{"@backend-team"},
 		},
 		{
 			name:      "internal file",
-			target:    "internal/util.go",
+			target:    []string{"internal/util.go"},
 			wantErr:   false,
 			wantOwner: []string{"@backend-team", "@security-team"},
 		},
 		{
 			name:      "frontend file",
-			target:    "frontend/app.js",
+			target:    []string{"frontend/app.js"},
 			wantErr:   false,
 			wantOwner: []string{"@frontend-team"},
 		},
 		{
 			name:      "test file",
-			target:    "tests/test.js",
+			target:    []string{"tests/some.test.js"},
 			wantErr:   false,
-			wantOwner: []string{"@frontend-team"},
+			wantOwner: []string{"@frontend-team", "@qa-team (Optional)"},
 		},
 		{
 			name:    "non-existent file",
-			target:  "does-not-exist.go",
+			target:  []string{"does-not-exist.go"},
 			wantErr: true,
 		},
 		{
 			name:    "empty target",
-			target:  "",
+			target:  []string{""},
 			wantErr: true,
 		},
 	}
@@ -202,7 +202,7 @@ func TestFileOwner(t *testing.T) {
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
-			err := fileOwner(testRepo, tc.target)
+			err := fileOwner(testRepo, tc.target, "default")
 			if (err != nil) != tc.wantErr {
 				t.Errorf("fileOwner() error = %v, wantErr %v", err, tc.wantErr)
 				return
@@ -225,7 +225,7 @@ func TestFileOwner(t *testing.T) {
 			got = func(lines []string) []string {
 				result := make([]string, 0)
 				for _, line := range lines {
-					if line != "" && line != "Optional:" {
+					if line != "" {
 						result = append(result, line)
 					}
 				}

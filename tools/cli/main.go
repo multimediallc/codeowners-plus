@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -24,17 +25,26 @@ func stripRoot(root string, path string) string {
 
 func main() {
 	var repo string
-	var target string
-
+	cli.VersionFlag = &cli.BoolFlag{
+		Name:    "version",
+		Aliases: []string{"v"},
+		Usage:   "Print version",
+	}
+	cli.VersionPrinter = func(cCtx *cli.Context) {
+		fmt.Println(cCtx.App.Version)
+	}
 	app := &cli.App{
 		Name:        "codeowners-cli",
 		Usage:       "CLI tool for working with .codeowners files",
+		Version:     "v0.3.0.dev",
 		Description: "",
 		Commands: []*cli.Command{
 			{
-				Name:    "unowned",
-				Aliases: []string{"u"},
-				Usage:   "Check unowned files in the repository",
+				Name:        "unowned",
+				Aliases:     []string{"u"},
+				Usage:       "Check unowned files in the repository",
+				UsageText:   "codeowners-cli unowned [options] [target-dir]",
+				Description: "Check for unowned files in the repository. If target-dir is specified, only check files under that directory.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "root",
@@ -42,13 +52,6 @@ func main() {
 						Value:       "./",
 						Usage:       "Path to local Git repo",
 						Destination: &repo,
-					},
-					&cli.StringFlag{
-						Name:        "target",
-						Aliases:     []string{"t"},
-						Value:       "",
-						Usage:       "Path from the root of the repo to the target directory",
-						Destination: &target,
 					},
 					&cli.IntFlag{
 						Name:    "depth",
@@ -64,13 +67,19 @@ func main() {
 					},
 				},
 				Action: func(cCtx *cli.Context) error {
+					target := ""
+					if cCtx.NArg() > 0 {
+						target = cCtx.Args().First()
+					}
 					return unownedFiles(repo, target, cCtx.Int("depth"), cCtx.Bool("dirs_only"))
 				},
 			},
 			{
-				Name:    "owner",
-				Aliases: []string{"o"},
-				Usage:   "Get owner of a file",
+				Name:        "owner",
+				Aliases:     []string{"o"},
+				Usage:       "Get owner of one or more files",
+				UsageText:   "codeowners-cli owner [options] <file1> [file2] [file3]...",
+				Description: "Get the owners of one or more files. Multiple files can be specified as arguments.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "root",
@@ -80,21 +89,31 @@ func main() {
 						Destination: &repo,
 					},
 					&cli.StringFlag{
-						Name:        "target",
-						Aliases:     []string{"t"},
-						Value:       "",
-						Usage:       "Path from the root of the repo to the target file",
-						Destination: &target,
+						Name:    "format",
+						Aliases: []string{"f"},
+						Value:   "default",
+						Usage:   "Output format.  Allowed values are: default, one-line, and json",
 					},
 				},
 				Action: func(cCtx *cli.Context) error {
-					return fileOwner(repo, target)
+					targets := cCtx.Args().Slice()
+					if len(targets) == 0 {
+						return fmt.Errorf("at least one target file is required")
+					}
+					allowedFormats := []string{"default", "one-line", "json"}
+					format := cCtx.String("format")
+					if !slices.Contains(allowedFormats, format) {
+						return fmt.Errorf("invalid format %s.  Must be one of %s", format, strings.Join(allowedFormats, ", "))
+					}
+					return fileOwner(repo, targets, cCtx.String("format"))
 				},
 			},
 			{
-				Name:    "verify",
-				Aliases: []string{"v"},
-				Usage:   "Verify the .codeowners file",
+				Name:        "verify",
+				Aliases:     []string{"v"},
+				Usage:       "Verify the .codeowners file",
+				UsageText:   "codeowners-cli verify [options] [directory]",
+				Description: "Verify the .codeowners file in the specified directory or the root of the repo if not specified. The directory must contain a .codeowners file.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "root",
@@ -103,15 +122,12 @@ func main() {
 						Usage:       "Path to local Git repo",
 						Destination: &repo,
 					},
-					&cli.StringFlag{
-						Name:        "target",
-						Aliases:     []string{"t"},
-						Value:       "",
-						Usage:       "Path from the root of the repo to the target directory with a .codeowners file",
-						Destination: &target,
-					},
 				},
 				Action: func(cCtx *cli.Context) error {
+					if cCtx.NArg() == 0 {
+						return fmt.Errorf("target directory is required")
+					}
+					target := cCtx.Args().First()
 					return verifyCodeowners(repo, target)
 				},
 			},
@@ -190,29 +206,113 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 	return nil
 }
 
-func fileOwner(repo string, target string) error {
+type Target struct {
+	Required []string `json:"required"`
+	Optional []string `json:"optional"`
+}
+
+func jsonTargets(targets []string, ownersMap codeowners.CodeOwners) {
+	requiredOwners := ownersMap.FileRequired()
+	optionalOwners := ownersMap.FileOptional()
+
+	targetMap := make(map[string]Target)
+	for _, target := range targets {
+		targetMap[target] = Target{
+			Required: f.Map(requiredOwners[target], func(ro *codeowners.ReviewerGroup) string { return ro.ToCommentString() }),
+			Optional: f.Map(optionalOwners[target], func(ro *codeowners.ReviewerGroup) string { return ro.ToCommentString() }),
+		}
+	}
+	jsonString, _ := json.Marshal(targetMap)
+	fmt.Println(string(jsonString))
+}
+
+func printTargets(targets []string, ownersMap codeowners.CodeOwners, oneLine bool) {
+	first := true
+
+	requiredOwners := ownersMap.FileRequired()
+	optionalOwners := ownersMap.FileOptional()
+	// Process each file
+	for _, target := range targets {
+		if !first && !oneLine {
+			fmt.Println()
+		}
+		first = false
+
+		if len(targets) > 1 {
+			fmt.Printf("%s: ", target)
+			if !oneLine {
+				fmt.Println()
+			}
+		}
+		printOwners(requiredOwners[target], optionalOwners[target], oneLine)
+	}
+}
+
+func printOwners(required codeowners.ReviewerGroups, optional codeowners.ReviewerGroups, oneLine bool) {
+	sep := "\n"
+	if oneLine {
+		sep = ", "
+	}
+	if len(required) > 0 {
+		requiredOwnerStrs := f.Map(required, func(rg *codeowners.ReviewerGroup) string {
+			return rg.ToCommentString()
+		})
+		fmt.Print(strings.Join(requiredOwnerStrs, sep))
+	}
+
+	if len(required) > 0 && len(optional) > 0 {
+		fmt.Print(sep)
+	}
+
+	if len(optional) > 0 {
+		optionalOwnerStrs := f.Map(optional, func(rg *codeowners.ReviewerGroup) string {
+			return rg.ToCommentString() + " (Optional)"
+		})
+		fmt.Print(strings.Join(optionalOwnerStrs, sep))
+	}
+	fmt.Println()
+}
+
+func fileOwner(repo string, targets []string, format string) error {
 	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
 		return fmt.Errorf("root is not a directory: %s", repo)
 	}
 	if gitStat, err := os.Stat(filepath.Join(repo, ".git")); err != nil || !gitStat.IsDir() {
 		return fmt.Errorf("root is not a Git repository: %s", repo)
 	}
-	if target == "" {
-		return fmt.Errorf("target file is required")
-	}
-	if targetStat, err := os.Stat(filepath.Join(repo, target)); err != nil || targetStat.IsDir() {
-		return fmt.Errorf("target is not a file: %s", target)
+
+	// Validate all targets exist and are files
+	for _, target := range targets {
+		if target == "" {
+			return fmt.Errorf("empty target file path is not allowed")
+		}
+		if targetStat, err := os.Stat(filepath.Join(repo, target)); err != nil || targetStat.IsDir() {
+			return fmt.Errorf("target is not a file: %s", target)
+		}
 	}
 
-	ownersMap, err := codeowners.New(repo, []codeowners.DiffFile{{FileName: target}}, io.Discard)
+	// Create diff files for all targets
+	diffFiles := make([]codeowners.DiffFile, len(targets))
+	for i, target := range targets {
+		diffFiles[i] = codeowners.DiffFile{FileName: target}
+	}
+
+	ownersMap, err := codeowners.New(repo, diffFiles, io.Discard)
 	if err != nil {
 		return fmt.Errorf("error reading codeowners config: %s", err)
 	}
-	fmt.Println(strings.Join(f.Map(ownersMap.AllRequired(), func(rg *codeowners.ReviewerGroup) string { return rg.ToCommentString() }), "\n"))
-	if len(ownersMap.AllOptional()) > 0 {
-		fmt.Println("Optional:")
-		fmt.Println(strings.Join(f.Map(ownersMap.AllOptional(), func(rg *codeowners.ReviewerGroup) string { return rg.ToCommentString() }), "\n"))
+	switch format {
+	case "json":
+		jsonTargets(targets, ownersMap)
+		break
+	case "default":
+		printTargets(targets, ownersMap, false)
+		break
+	case "one-line":
+		printTargets(targets, ownersMap, true)
+		break
 	}
+
 	return nil
 }
 
