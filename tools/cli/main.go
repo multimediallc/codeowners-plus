@@ -304,13 +304,10 @@ func fileOwner(repo string, targets []string, format string) error {
 	switch format {
 	case "json":
 		jsonTargets(targets, ownersMap)
-		break
 	case "default":
 		printTargets(targets, ownersMap, false)
-		break
 	case "one-line":
 		printTargets(targets, ownersMap, true)
-		break
 	}
 
 	return nil
