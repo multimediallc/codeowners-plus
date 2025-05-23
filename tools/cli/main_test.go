@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -86,36 +85,42 @@ func TestUnownedFiles(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		target   string
+		targets  []string
 		depth    int
 		dirsOnly bool
 		want     []string
 		wantErr  bool
 	}{
 		{
-			name:   "all unowned files",
-			target: "",
-			depth:  0,
-			want:   []string{"unowned/file.txt", "unowned/inner/file2.txt", "unowned2/file3.txt"},
+			name:    "all unowned files",
+			targets: []string{""},
+			depth:   0,
+			want:    []string{"unowned/file.txt", "unowned/inner/file2.txt", "unowned2/file3.txt"},
 		},
 		{
 			name:     "unowned directories",
-			target:   "",
+			targets:  []string{""},
 			depth:    0,
 			dirsOnly: true,
 			want:     []string{"unowned", "unowned/inner", "unowned2"},
 		},
 		{
-			name:   "specific directory",
-			target: "unowned2",
-			depth:  0,
-			want:   []string{"unowned2/file3.txt"},
+			name:    "specific directory",
+			targets: []string{"unowned2"},
+			depth:   0,
+			want:    []string{"unowned2/file3.txt"},
 		},
 		{
-			name:   "with depth limit",
-			target: "",
-			depth:  1,
-			want:   []string{"unowned/file.txt", "unowned2/file3.txt"},
+			name:    "with depth limit",
+			targets: []string{""},
+			depth:   1,
+			want:    []string{"unowned/file.txt", "unowned2/file3.txt"},
+		},
+		{
+			name:    "multiple targets",
+			targets: []string{"unowned", "unowned2"},
+			depth:   1,
+			want:    []string{"unowned:", "unowned/file.txt", "unowned/inner/file2.txt", "", "unowned2:", "unowned2/file3.txt"},
 		},
 	}
 
@@ -126,7 +131,7 @@ func TestUnownedFiles(t *testing.T) {
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
-			err := unownedFilesWithFormat(testRepo, []string{tc.target}, tc.depth, tc.dirsOnly, FormatDefault)
+			err := unownedFilesWithFormat(testRepo, tc.targets, tc.depth, tc.dirsOnly, FormatDefault)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("unownedFilesWithFormat() error = %v, wantErr %v", err, tc.wantErr)
 				return
@@ -144,20 +149,8 @@ func TestUnownedFiles(t *testing.T) {
 			os.Stdout = oldStdout
 			out, _ := io.ReadAll(r)
 			got := strings.Split(strings.TrimSpace(string(out)), "\n")
-			if tc.target == "" {
-				if got[0] != ".:" {
-					t.Errorf("unownedFilesWithFormat() got '%s', want '.:'", got[0])
-				}
-			} else {
-				if got[0] != fmt.Sprintf("%s:", tc.target) {
-					t.Errorf("unownedFilesWithFormat() got '%s', want '%s'", got[0], fmt.Sprintf("%s:", tc.target))
-				}
-			}
-			// remove filename
-			got = got[1:]
 
 			if len(got) != len(tc.want) {
-				t.Logf("%+v <> %+v", got, tc.want)
 				t.Errorf("unownedFilesWithFormat() got %d files, want %d", len(got), len(tc.want))
 				return
 			}
@@ -602,13 +595,13 @@ func TestUnownedFilesWithFormat(t *testing.T) {
 		{
 			name:   "default format",
 			format: FormatDefault,
-			want:   []string{".:", "unowned/file.txt", "unowned/inner/file2.txt", "unowned2/file3.txt"},
+			want:   []string{"unowned/file.txt", "unowned/inner/file2.txt", "unowned2/file3.txt"},
 		},
 		{
 			name:    "one-line format",
 			targets: []string{""},
 			format:  FormatOneLine,
-			want:    []string{".: unowned/file.txt, unowned/inner/file2.txt, unowned2/file3.txt"},
+			want:    []string{"unowned/file.txt, unowned/inner/file2.txt, unowned2/file3.txt"},
 		},
 		{
 			name:   "json format",

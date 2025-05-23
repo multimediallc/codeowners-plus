@@ -58,7 +58,9 @@ func TestScanStdin(t *testing.T) {
 			os.Stdin = r
 
 			go func() {
-				defer w.Close()
+				defer func() {
+					_ = w.Close()
+				}()
 				if _, err := w.Write([]byte(tt.input)); err != nil {
 					t.Errorf("Failed to write to pipe: %v", err)
 				}

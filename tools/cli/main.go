@@ -165,7 +165,7 @@ func main() {
 					}
 
 					if len(targets) == 0 {
-						fmt.Printf("No target provided, validating root .codeowners")
+						fmt.Println("No target provided, validating root .codeowners")
 						targets = []string{"."}
 					}
 
@@ -236,7 +236,7 @@ func unownedFilesWithFormat(repo string, targets []string, depth int, dirsOnly b
 			if depth != 0 && depthCheck(file, target, depth) {
 				continue
 			}
-			if target != "" && !strings.HasPrefix(file, target) {
+			if target != "" && !strings.HasPrefix(file, fmt.Sprintf("%s/", target)) {
 				continue
 			}
 			files = append(files, codeowners.DiffFile{FileName: file})
@@ -277,7 +277,10 @@ func unownedFilesWithFormat(repo string, targets []string, depth int, dirsOnly b
 		fmt.Println(string(jsonData))
 	case FormatOneLine:
 		for target, files := range results {
-			fmt.Printf("%s: %s\n", target, strings.Join(files, ", "))
+			if len(targets) > 1 {
+				fmt.Printf("%s: ", target)
+			}
+			fmt.Println(strings.Join(files, ", "))
 		}
 	default: // FormatDefault
 		first := true
@@ -286,7 +289,9 @@ func unownedFilesWithFormat(repo string, targets []string, depth int, dirsOnly b
 				fmt.Println()
 			}
 			first = false
-			fmt.Printf("%s:\n", target)
+			if len(targets) > 1 {
+				fmt.Printf("%s:\n", target)
+			}
 			for _, file := range files {
 				fmt.Println(file)
 			}
