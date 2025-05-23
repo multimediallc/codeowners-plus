@@ -6,6 +6,7 @@ set -u
 # --- Configuration ---
 ACTIONS_FILE="action.yml"
 CLI_TOOL_FILE="tools/cli/main.go"
+README_FILE="README.md"
 
 # --- Helper Functions ---
 function usage() {
@@ -37,7 +38,7 @@ function check_git_clean() {
 
 # --- Main Script ---
 
-# 1. Check for argument
+# Check for argument
 if [ -z "${1-}" ]; then
   echo "Error: No semantic version provided."
   usage
@@ -55,16 +56,13 @@ BRANCH_NAME="release/${VERSION_TAG}"
 
 echo "--- Starting release process for version ${SEMANTIC_VERSION} ---"
 
-# Check if working directory is clean
 check_git_clean
 
-# Check if actions.yml exists
 if [ ! -f "${ACTIONS_FILE}" ]; then
   echo "Error: ${ACTIONS_FILE} not found in the current directory.  Make sure you are running this from the root."
   exit 1
 fi
 
-# 2. Create new branch
 echo "Creating branch '${BRANCH_NAME}'..."
 if git rev-parse --verify "${BRANCH_NAME}" >/dev/null 2>&1; then
   echo "Error: Branch '${BRANCH_NAME}' already exists."
@@ -73,37 +71,31 @@ else
   git checkout -b "${BRANCH_NAME}"
 fi
 
-# 3. Update actions.yml
-echo "Updating ${ACTIONS_FILE} to replace Docker image tag with ':${VERSION_TAG}'..."
+# Update actions.yml
+echo "Updating ${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE} to replace 'latest' or old tag with '${VERSION_TAG}'..."
 
 # sed -i works differently on macOS and Linux.
 # For GNU sed (Linux), -i without an argument is fine.
 # For BSD sed (macOS), -i requires an argument (even if empty string for no backup).
 if sed --version 2>/dev/null | grep -q GNU; then # GNU sed
-sed -i "s|codeowners-plus:.*'|codeowners-plus:${VERSION_TAG}'|g" "${ACTIONS_FILE}"
+  sed -i "s|codeowners-plus:.*'|codeowners-plus:${VERSION_TAG}'|g" "${ACTIONS_FILE}"
+  sed -i "s|Version: .*|Version: \"${VERSION_TAG}\",|g" "${CLI_TOOL_FILE}"
+  sed -i "s|codeowners-plus@.*|codeowners-plus@${VERSION_TAG}|g" "${README_FILE}"
 else # BSD sed (macOS)
-sed -i '' "s|codeowners-plus:.*'|codeowners-plus:${VERSION_TAG}'|g" "${ACTIONS_FILE}"
-fi
-echo "${ACTIONS_FILE} updated."
-
-# 4. Update CLI tool
-echo "Updating ${CLI_TOOL_FILE} to replace 'Version:' value with '${VERSION_TAG}'..."
-
-if sed --version 2>/dev/null | grep -q GNU; then # GNU sed
-sed -i "s|Version: .*|Version: \"${VERSION_TAG}\",|g" "${CLI_TOOL_FILE}"
-else # BSD sed (macOS)
-sed -i '' "s|Version: .*|Version: \"${VERSION_TAG}\",|g" "${CLI_TOOL_FILE}"
+  sed -i '' "s|codeowners-plus:.*'|codeowners-plus:${VERSION_TAG}'|g" "${ACTIONS_FILE}"
+  sed -i '' "s|Version: .*|Version: \"${VERSION_TAG}\",|g" "${CLI_TOOL_FILE}"
+  sed -i '' "s|codeowners-plus@.*|codeowners-plus@${VERSION_TAG}|g" "${README_FILE}"
 fi
 gofmt -w tools/cli
-echo "${CLI_TOOL_FILE} updated."
+echo "${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE} updated."
 
-# 5. Commit the changes
+# Commit the changes
 echo "Committing changes to ${ACTIONS_FILE}..."
 git add "${ACTIONS_FILE}"
 git add "${CLI_TOOL_FILE}"
 git commit -m "${VERSION_TAG}"
 
-# 6. Create tag
+# Create tag
 echo "Creating tag '${VERSION_TAG}'..."
 git tag -m "${VERSION_TAG}" "${VERSION_TAG}"
 
