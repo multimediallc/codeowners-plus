@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
@@ -389,4 +391,179 @@ func TestDepthCheck(t *testing.T) {
 			}
 		})
 	}
+}
+
+type fakeCodeOwners struct {
+	required map[string]codeowners.ReviewerGroups
+	optional map[string]codeowners.ReviewerGroups
+}
+
+func (f *fakeCodeOwners) FileRequired() map[string]codeowners.ReviewerGroups {
+	return f.required
+}
+func (f *fakeCodeOwners) FileOptional() map[string]codeowners.ReviewerGroups {
+	return f.optional
+}
+func (f *fakeCodeOwners) SetAuthor(author string)                {}
+func (f *fakeCodeOwners) AllRequired() codeowners.ReviewerGroups { return nil }
+func (f *fakeCodeOwners) AllOptional() codeowners.ReviewerGroups { return nil }
+func (f *fakeCodeOwners) UnownedFiles() []string                 { return nil }
+func (f *fakeCodeOwners) ApplyApprovals(approvers []string)      {}
+
+func TestJsonTargets(t *testing.T) {
+	owners := &fakeCodeOwners{
+		required: map[string]codeowners.ReviewerGroups{
+			"file1.txt": {&codeowners.ReviewerGroup{Names: []string{"@alice"}}},
+			"file2.txt": {&codeowners.ReviewerGroup{Names: []string{"@bob"}}},
+		},
+		optional: map[string]codeowners.ReviewerGroups{
+			"file1.txt": {&codeowners.ReviewerGroup{Names: []string{"@carol"}}},
+			"file2.txt": {},
+		},
+	}
+	targets := []string{"file1.txt", "file2.txt"}
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	jsonTargets(targets, owners)
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+	output := string(out)
+
+	// Unmarshal and check associations
+	type targetJSON struct {
+		Required []string `json:"required"`
+		Optional []string `json:"optional"`
+	}
+	var parsed map[string]targetJSON
+	err := json.Unmarshal([]byte(output), &parsed)
+	if err != nil {
+		t.Fatalf("jsonTargets output is not valid JSON: %v\noutput: %s", err, output)
+	}
+
+	want := map[string]struct {
+		required []string
+		optional []string
+	}{
+		"file1.txt": {required: []string{"@alice"}, optional: []string{"@carol"}},
+		"file2.txt": {required: []string{"@bob"}, optional: []string{}},
+	}
+
+	for file, expect := range want {
+		got, ok := parsed[file]
+		if !ok {
+			t.Errorf("jsonTargets output missing file: %s", file)
+			continue
+		}
+		if !f.SlicesItemsMatch(got.Required, expect.required) {
+			t.Errorf("jsonTargets required for %s: got %v, want %v", file, got.Required, expect.required)
+		}
+		if !f.SlicesItemsMatch(got.Optional, expect.optional) {
+			t.Errorf("jsonTargets optional for %s: got %v, want %v", file, got.Optional, expect.optional)
+		}
+	}
+}
+
+func TestPrintTargets(t *testing.T) {
+	owners := &fakeCodeOwners{
+		required: map[string]codeowners.ReviewerGroups{
+			"file1.txt": {&codeowners.ReviewerGroup{Names: []string{"@alice"}}},
+			"file2.txt": {&codeowners.ReviewerGroup{Names: []string{"@bob"}}},
+		},
+		optional: map[string]codeowners.ReviewerGroups{
+			"file1.txt": {&codeowners.ReviewerGroup{Names: []string{"@carol"}}},
+			"file2.txt": {},
+		},
+	}
+	targets := []string{"file1.txt", "file2.txt"}
+
+	want := map[string]struct {
+		required []string
+		optional []string
+	}{
+		"file1.txt": {required: []string{"@alice"}, optional: []string{"@carol (Optional)"}},
+		"file2.txt": {required: []string{"@bob"}, optional: []string{}},
+	}
+
+	t.Run("default format", func(t *testing.T) {
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		printTargets(targets, owners, false)
+
+		_ = w.Close()
+		os.Stdout = oldStdout
+		out, _ := io.ReadAll(r)
+		output := string(out)
+
+		// Parse output by file
+		for file, expect := range want {
+			idx := strings.Index(output, file+":")
+			if idx == -1 {
+				t.Errorf("printTargets output missing file: %s", file)
+				continue
+			}
+			// Get the section for this file
+			section := output[idx:]
+			if next := strings.Index(section, "\n\n"); next != -1 {
+				section = section[:next]
+			}
+			for _, req := range expect.required {
+				if !strings.Contains(section, req) {
+					t.Errorf("printTargets output for %s missing required owner: %s", file, req)
+				}
+			}
+			for _, opt := range expect.optional {
+				if !strings.Contains(section, opt) {
+					t.Errorf("printTargets output for %s missing optional owner: %s", file, opt)
+				}
+			}
+		}
+	})
+
+	t.Run("one-line format", func(t *testing.T) {
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		printTargets(targets, owners, true)
+
+		_ = w.Close()
+		os.Stdout = oldStdout
+		out, _ := io.ReadAll(r)
+		output := string(out)
+
+		// Each file should be on a single line, check association
+		lines := strings.Split(strings.TrimSpace(output), "\n")
+		for _, line := range lines {
+			found := false
+			for file, expect := range want {
+				if strings.HasPrefix(line, file+": ") {
+					found = true
+					for _, req := range expect.required {
+						if !strings.Contains(line, req) {
+							t.Errorf("printTargets (one-line) for %s missing required owner: %s", file, req)
+						}
+					}
+					for _, opt := range expect.optional {
+						if !strings.Contains(line, opt) {
+							t.Errorf("printTargets (one-line) for %s missing optional owner: %s", file, opt)
+						}
+					}
+				}
+			}
+			if !found {
+				t.Errorf("printTargets (one-line) output missing file: %s", line)
+			}
+		}
+		if strings.Contains(output, "\n\n") {
+			t.Errorf("printTargets (one-line) should not have double newlines: %s", output)
+		}
+	})
 }
