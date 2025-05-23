@@ -91,8 +91,7 @@ echo "${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE} updated."
 
 # Commit the changes
 echo "Committing changes to ${ACTIONS_FILE}..."
-git add "${ACTIONS_FILE}"
-git add "${CLI_TOOL_FILE}"
+git add "${ACTIONS_FILE}" "${CLI_TOOL_FILE}" "${README_FILE}"
 git commit -m "${VERSION_TAG}"
 
 # Create tag
