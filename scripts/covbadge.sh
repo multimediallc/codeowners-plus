@@ -2,7 +2,7 @@
 
 set -e
 
-go install github.com/AlexBeauchemin/gobadge@v0.3.0
+go install github.com/AlexBeauchemin/gobadge@v0.4.0
 
 # fail if gobadge is no installed
 which gobadge
