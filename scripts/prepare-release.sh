@@ -3,20 +3,18 @@
 set -e
 set -u
 
-# --- Configuration ---
 ACTIONS_FILE="action.yml"
 CLI_TOOL_FILE="tools/cli/main.go"
 README_FILE="README.md"
 
-# --- Helper Functions ---
 function usage() {
   echo "Usage: $0 <semantic_version>"
   echo "Example: $0 1.2.3"
   echo "  This script will:"
-  echo "  1. Create a new branch called 'release/v<semantic_version>'."
-  echo "  2. Update '${ACTIONS_FILE}' and ${CLI_TOOL_FILE} so reference the new version."
+  echo "  1. Create a new branch called 'release/v1.2.3'."
+  echo "  2. Update '${ACTIONS_FILE}', ${CLI_TOOL_FILE}, and ${README_FILE} to reference the new version."
   echo "  3. Commit the changes."
-  echo "  4. Create a tag called 'v<semantic_version>'."
+  echo "  4. Create a tag called 'v1.2.3'."
   exit 1
 }
 
@@ -30,13 +28,11 @@ function check_git_clean() {
     echo "Error: Tag '${VERSION_TAG}' already exists."
     exit 1
   fi
+  echo "Git working directory is clean."
   git fetch origin
   echo "Switching to origin/main"
   git checkout origin/main >/dev/null 2>&1
-  echo "Git working directory is clean."
 }
-
-# --- Main Script ---
 
 # Check for argument
 if [ -z "${1-}" ]; then
@@ -46,8 +42,8 @@ fi
 
 SEMANTIC_VERSION="$1"
 
-if ! [[ "$SEMANTIC_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc|.dev)?([0-9]+)?$ ]]; then
-  echo "Error: '$SEMANTIC_VERSION' does not look like a valid semantic version (e.g., 1.2.3, 1.0.0-alpha.1)."
+if ! [[ "$SEMANTIC_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc|\.dev)?([0-9]+)?$ ]]; then
+  echo "Error: '$SEMANTIC_VERSION' does not look like a valid semantic version (e.g., 1.2.3, 1.0.0-rc1)."
   usage
 fi
 
@@ -71,7 +67,6 @@ else
   git checkout -b "${BRANCH_NAME}"
 fi
 
-# Update actions.yml
 echo "Updating ${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE} to replace 'latest' or old tag with '${VERSION_TAG}'..."
 
 # sed -i works differently on macOS and Linux.
@@ -89,12 +84,10 @@ fi
 gofmt -w tools/cli
 echo "${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE} updated."
 
-# Commit the changes
 echo "Committing changes to ${ACTIONS_FILE}..."
 git add "${ACTIONS_FILE}" "${CLI_TOOL_FILE}" "${README_FILE}"
 git commit -m "${VERSION_TAG}"
 
-# Create tag
 echo "Creating tag '${VERSION_TAG}'..."
 git tag -m "${VERSION_TAG}" "${VERSION_TAG}"
 
