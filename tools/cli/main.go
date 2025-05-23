@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -78,8 +79,8 @@ func main() {
 				Name:        "owner",
 				Aliases:     []string{"o"},
 				Usage:       "Get owner of one or more files",
-				UsageText:   "codeowners-cli owner [options] <file1> [file2] [file3]...",
-				Description: "Get the owners of one or more files. Multiple files can be specified as arguments.",
+				UsageText:   "codeowners-cli owner [options] <file1> [file2] [file3]...\n   or: cat files.txt | codeowners-cli owner [options]",
+				Description: "Get the owners of one or more files. Multiple files can be specified as arguments, or piped from stdin (one file per line).",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "root",
@@ -96,9 +97,25 @@ func main() {
 					},
 				},
 				Action: func(cCtx *cli.Context) error {
-					targets := cCtx.Args().Slice()
+					var targets []string
+					if cCtx.NArg() > 0 {
+						targets = cCtx.Args().Slice()
+					} else {
+						// Read from stdin
+						scanner := bufio.NewScanner(os.Stdin)
+						for scanner.Scan() {
+							line := strings.TrimSpace(scanner.Text())
+							if line != "" {
+								targets = append(targets, line)
+							}
+						}
+						if err := scanner.Err(); err != nil {
+							return fmt.Errorf("error reading from stdin: %w", err)
+						}
+					}
+
 					if len(targets) == 0 {
-						return fmt.Errorf("at least one target file is required")
+						return fmt.Errorf("no target files provided (either as arguments or from stdin)")
 					}
 					allowedFormats := []string{"default", "one-line", "json"}
 					format := cCtx.String("format")
