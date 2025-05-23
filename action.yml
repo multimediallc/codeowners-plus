@@ -1,6 +1,9 @@
 name: 'Codeowners Plus'
 description: 'Code ownership tool for manging owner-ship based review assignments and checks'
 author: 'Hans Baker'
+branding:
+  icon: 'plus-circle'
+  color: 'blue'
 inputs:
   github-token:
     description: 'Github API token'
