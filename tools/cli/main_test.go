@@ -83,50 +83,61 @@ func TestUnownedFiles(t *testing.T) {
 	testRepo, cleanup := setupTestRepo(t)
 	defer cleanup()
 
-	tt := []struct {
+	tests := []struct {
 		name     string
-		target   string
+		targets  []string
 		depth    int
 		dirsOnly bool
 		want     []string
+		wantErr  bool
 	}{
 		{
-			name:   "all unowned files",
-			target: "",
-			depth:  0,
-			want:   []string{"unowned/file.txt", "unowned/inner/file2.txt", "unowned2/file3.txt"},
+			name:    "all unowned files",
+			targets: []string{""},
+			depth:   0,
+			want:    []string{"unowned/file.txt", "unowned/inner/file2.txt", "unowned2/file3.txt"},
 		},
 		{
 			name:     "unowned directories",
-			target:   "",
+			targets:  []string{""},
 			depth:    0,
 			dirsOnly: true,
 			want:     []string{"unowned", "unowned/inner", "unowned2"},
 		},
 		{
-			name:   "specific directory",
-			target: "unowned2",
-			depth:  0,
-			want:   []string{"unowned2/file3.txt"},
+			name:    "specific directory",
+			targets: []string{"unowned2"},
+			depth:   0,
+			want:    []string{"unowned2/file3.txt"},
 		},
 		{
-			name:   "with depth limit",
-			target: "",
-			depth:  1,
-			want:   []string{"unowned/file.txt", "unowned2/file3.txt"},
+			name:    "with depth limit",
+			targets: []string{""},
+			depth:   1,
+			want:    []string{"unowned/file.txt", "unowned2/file3.txt"},
+		},
+		{
+			name:    "multiple targets",
+			targets: []string{"unowned", "unowned2"},
+			depth:   1,
+			want:    []string{"unowned:", "unowned/file.txt", "unowned/inner/file2.txt", "", "unowned2:", "unowned2/file3.txt"},
 		},
 	}
 
-	for _, tc := range tt {
+	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Capture stdout
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
-			err := unownedFiles(testRepo, tc.target, tc.depth, tc.dirsOnly)
-			if err != nil {
-				t.Errorf("unownedFiles() error = %v", err)
+			err := unownedFilesWithFormat(testRepo, tc.targets, tc.depth, tc.dirsOnly, FormatDefault)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("unownedFilesWithFormat() error = %v, wantErr %v", err, tc.wantErr)
+				return
+			}
+
+			if tc.wantErr {
 				return
 			}
 
@@ -140,12 +151,12 @@ func TestUnownedFiles(t *testing.T) {
 			got := strings.Split(strings.TrimSpace(string(out)), "\n")
 
 			if len(got) != len(tc.want) {
-				t.Errorf("unownedFiles() got %d files, want %d", len(got), len(tc.want))
+				t.Errorf("unownedFilesWithFormat() got %d files, want %d", len(got), len(tc.want))
 				return
 			}
 
 			if !f.SlicesItemsMatch(got, tc.want) {
-				t.Errorf("unownedFiles() got %+v, want %+v", got, tc.want)
+				t.Errorf("unownedFilesWithFormat() got %+v, want %+v", got, tc.want)
 			}
 		})
 	}
@@ -246,7 +257,7 @@ func TestFileOwner(t *testing.T) {
 	}
 }
 
-func TestVerifyCodeowners(t *testing.T) {
+func TestValidateCodeowners(t *testing.T) {
 	testRepo, cleanup := setupTestRepo(t)
 	defer cleanup()
 
@@ -295,14 +306,14 @@ func TestVerifyCodeowners(t *testing.T) {
 				}
 			}
 
-			err := verifyCodeowners(testRepo, tc.target)
+			err := validateCodeowners(testRepo, tc.target)
 			if (err != nil) != tc.wantErr {
-				t.Errorf("verifyCodeowners() error = %v, wantErr %v", err, tc.wantErr)
+				t.Errorf("validateCodeowners() error = %v, wantErr %v", err, tc.wantErr)
 				return
 			}
 
 			if tc.wantErr && tc.errMatch != "" && !strings.Contains(err.Error(), tc.errMatch) {
-				t.Errorf("verifyCodeowners() error = %v, want to contain %v", err, tc.errMatch)
+				t.Errorf("validateCodeowners() error = %v, want to contain %v", err, tc.errMatch)
 			}
 		})
 	}
@@ -566,4 +577,65 @@ func TestPrintTargets(t *testing.T) {
 			t.Errorf("printTargets (one-line) should not have double newlines: %s", output)
 		}
 	})
+}
+
+func TestUnownedFilesWithFormat(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	tests := []struct {
+		name     string
+		targets  []string
+		depth    int
+		dirsOnly bool
+		format   OutputFormat
+		want     []string
+		wantErr  bool
+	}{
+		{
+			name:   "default format",
+			format: FormatDefault,
+			want:   []string{"unowned/file.txt", "unowned/inner/file2.txt", "unowned2/file3.txt"},
+		},
+		{
+			name:    "one-line format",
+			targets: []string{""},
+			format:  FormatOneLine,
+			want:    []string{"unowned/file.txt, unowned/inner/file2.txt, unowned2/file3.txt"},
+		},
+		{
+			name:   "json format",
+			format: FormatJSON,
+			want:   []string{"{\".\":[\"unowned/file.txt\",\"unowned/inner/file2.txt\",\"unowned2/file3.txt\"]}"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture stdout
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			_ = unownedFilesWithFormat(testRepo, []string{""}, 0, false, tt.format)
+
+			// Restore stdout and get output
+			if err := w.Close(); err != nil {
+				t.Errorf("failed to close pipe writer: %v", err)
+				return
+			}
+			os.Stdout = oldStdout
+			out, _ := io.ReadAll(r)
+			got := strings.Split(strings.TrimSpace(string(out)), "\n")
+
+			if len(got) != len(tt.want) {
+				t.Errorf("unownedFilesWithFormat() got %d files, want %d", len(got), len(tt.want))
+				return
+			}
+
+			if !f.SlicesItemsMatch(got, tt.want) {
+				t.Errorf("unownedFilesWithFormat() got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
 }

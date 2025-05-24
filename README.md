@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-83.7%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-82.2%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -287,7 +287,7 @@ Even in quiet mode, the tool still performs all its internal calculations: deter
 * **GitHub Action:** Set the `quiet` input to `'true'`.
     ```yaml
     - name: 'Codeowners Plus (Quiet)'
-      uses: multimediallc/codeowners-plus@v0.1.0
+      uses: multimediallc/codeowners-plus@v0.2.0
       with:
         # ... other inputs ...
         quiet: 'true'
@@ -308,7 +308,7 @@ Available commands are:
 
 * `unowned` to check for unowned files
 * `owner` to check who owns a specific file
-* `verify` to check for typos in a `.codeowners` file
+* `validate` to check for typos in a `.codeowners` file
 
 ## Contributing
 

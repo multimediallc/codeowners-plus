@@ -23,6 +23,20 @@ func stripRoot(root string, path string) string {
 	return strings.TrimPrefix(path, root+"/")
 }
 
+func getTargets(cCtx *cli.Context) ([]string, error) {
+	var targets []string
+	if cCtx.NArg() > 0 {
+		targets = cCtx.Args().Slice()
+	} else if isStdinPiped() {
+		var err error
+		targets, err = scanStdin()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return targets, nil
+}
+
 func main() {
 	var repo string
 	cli.VersionFlag = &cli.BoolFlag{
@@ -43,8 +57,8 @@ func main() {
 				Name:        "unowned",
 				Aliases:     []string{"u"},
 				Usage:       "Check unowned files in the repository",
-				UsageText:   "codeowners-cli unowned [options] [target-dir]",
-				Description: "Check for unowned files in the repository. If target-dir is specified, only check files under that directory.",
+				UsageText:   "codeowners-cli unowned [options] [target-dir1] [target-dir2]...\n   or: cat dirs.txt | codeowners-cli unowned [options]",
+				Description: "Check for unowned files in the repository. Multiple target directories can be specified as arguments or piped from stdin (one directory per line). If no target is specified, checks the entire repository.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "root",
@@ -65,21 +79,32 @@ func main() {
 						Value:   false,
 						Usage:   "Only check directories",
 					},
+					&cli.StringFlag{
+						Name:    "format",
+						Aliases: []string{"f"},
+						Value:   string(FormatDefault),
+						Usage:   "Output format. Allowed values are: default, one-line, and json",
+					},
 				},
 				Action: func(cCtx *cli.Context) error {
-					target := ""
-					if cCtx.NArg() > 0 {
-						target = cCtx.Args().First()
+					targets, err := getTargets(cCtx)
+					if err != nil {
+						return err
 					}
-					return unownedFiles(repo, target, cCtx.Int("depth"), cCtx.Bool("dirs_only"))
+
+					format, err := validateFormat(cCtx.String("format"))
+					if err != nil {
+						return err
+					}
+					return unownedFilesWithFormat(repo, targets, cCtx.Int("depth"), cCtx.Bool("dirs_only"), format)
 				},
 			},
 			{
 				Name:        "owner",
 				Aliases:     []string{"o"},
 				Usage:       "Get owner of one or more files",
-				UsageText:   "codeowners-cli owner [options] <file1> [file2] [file3]...",
-				Description: "Get the owners of one or more files. Multiple files can be specified as arguments.",
+				UsageText:   "codeowners-cli owner [options] <file1> [file2] [file3]...\n   or: cat files.txt | codeowners-cli owner [options]",
+				Description: "Get the owners of one or more files. Multiple files can be specified as arguments, or piped from stdin (one file per line).",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "root",
@@ -91,29 +116,33 @@ func main() {
 					&cli.StringFlag{
 						Name:    "format",
 						Aliases: []string{"f"},
-						Value:   "default",
-						Usage:   "Output format.  Allowed values are: default, one-line, and json",
+						Value:   string(FormatDefault),
+						Usage:   "Output format. Allowed values are: default, one-line, and json",
 					},
 				},
 				Action: func(cCtx *cli.Context) error {
-					targets := cCtx.Args().Slice()
+					targets, err := getTargets(cCtx)
+					if err != nil {
+						return err
+					}
+
 					if len(targets) == 0 {
-						return fmt.Errorf("at least one target file is required")
+						return fmt.Errorf("no target files provided (either as arguments or from stdin)")
 					}
-					allowedFormats := []string{"default", "one-line", "json"}
-					format := cCtx.String("format")
-					if !slices.Contains(allowedFormats, format) {
-						return fmt.Errorf("invalid format %s.  Must be one of %s", format, strings.Join(allowedFormats, ", "))
+
+					format, err := validateFormat(cCtx.String("format"))
+					if err != nil {
+						return err
 					}
-					return fileOwner(repo, targets, cCtx.String("format"))
+					return fileOwner(repo, targets, format)
 				},
 			},
 			{
-				Name:        "verify",
-				Aliases:     []string{"v"},
-				Usage:       "Verify the .codeowners file",
-				UsageText:   "codeowners-cli verify [options] [directory]",
-				Description: "Verify the .codeowners file in the specified directory or the root of the repo if not specified. The directory must contain a .codeowners file.",
+				Name:        "validate",
+				Aliases:     []string{"v", "verify"},
+				Usage:       "Validate the `.codeowners` file format",
+				UsageText:   "codeowners-cli validate [options] <directory1> [directory2]...\n   or: cat dirs.txt | codeowners-cli validate [options]",
+				Description: "Validate the `.codeowners` file in the specified directories. Multiple directories can be specified as arguments or piped from stdin (one directory per line). Each directory must contain a `.codeowners` file.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "root",
@@ -122,13 +151,35 @@ func main() {
 						Usage:       "Path to local Git repo",
 						Destination: &repo,
 					},
+					&cli.StringFlag{
+						Name:    "format",
+						Aliases: []string{"f"},
+						Value:   string(FormatDefault),
+						Usage:   "Output format. Allowed values are: default, one-line, and json",
+					},
 				},
 				Action: func(cCtx *cli.Context) error {
-					if cCtx.NArg() == 0 {
-						return fmt.Errorf("target directory is required")
+					targets, err := getTargets(cCtx)
+					if err != nil {
+						return err
 					}
-					target := cCtx.Args().First()
-					return verifyCodeowners(repo, target)
+
+					if len(targets) == 0 {
+						fmt.Println("No target provided, validating root .codeowners")
+						targets = []string{"."}
+					}
+
+					var allErrors []string
+					for _, target := range targets {
+						if err := validateCodeowners(repo, target); err != nil {
+							allErrors = append(allErrors, fmt.Sprintf("%s: %v", target, err))
+						}
+					}
+
+					if len(allErrors) > 0 {
+						return fmt.Errorf("verification failed:\n%s", strings.Join(allErrors, "\n"))
+					}
+					return nil
 				},
 			},
 		},
@@ -149,7 +200,7 @@ func depthCheck(path string, target string, depth int) bool {
 	return strings.Count(path, "/") > (depth + extra)
 }
 
-func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
+func unownedFilesWithFormat(repo string, targets []string, depth int, dirsOnly bool, format OutputFormat) error {
 	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
 		return fmt.Errorf("root is not a directory: %s", repo)
 	}
@@ -157,52 +208,96 @@ func unownedFiles(repo string, target string, depth int, dirsOnly bool) error {
 		return fmt.Errorf("root is not a Git repository: %s", repo)
 	}
 
-	fileListQueue := make(chan *gocodewalker.File, 100)
+	// If no targets specified, use empty string to check entire repo
+	if len(targets) == 0 {
+		targets = []string{""}
+	}
 
-	walker := gocodewalker.NewFileWalker(repo, fileListQueue)
-	walker.IncludeHidden = true
-	walker.ExcludeDirectory = []string{".git"}
+	// Process each target
+	results := make(map[string][]string)
+	for _, target := range targets {
+		fileListQueue := make(chan *gocodewalker.File, 100)
 
-	errChan := make(chan error)
+		walker := gocodewalker.NewFileWalker(repo, fileListQueue)
+		walker.IncludeHidden = true
+		walker.ExcludeDirectory = []string{".git"}
 
-	go func() {
-		err := walker.Start()
-		errChan <- err
-		close(errChan)
-	}()
+		errChan := make(chan error)
 
-	files := make([]codeowners.DiffFile, 0)
-	for f := range fileListQueue {
-		file := stripRoot(repo, f.Location)
-		if depth != 0 && depthCheck(file, target, depth) {
-			continue
+		go func() {
+			err := walker.Start()
+			errChan <- err
+			close(errChan)
+		}()
+
+		files := make([]codeowners.DiffFile, 0)
+		for f := range fileListQueue {
+			file := stripRoot(repo, f.Location)
+			if depth != 0 && depthCheck(file, target, depth) {
+				continue
+			}
+			if target != "" && !strings.HasPrefix(file, fmt.Sprintf("%s/", target)) {
+				continue
+			}
+			files = append(files, codeowners.DiffFile{FileName: file})
 		}
-		if target != "" && !strings.HasPrefix(file, target) {
-			continue
+
+		if err := <-errChan; err != nil {
+			return fmt.Errorf("error walking repo: %s", err)
 		}
-		files = append(files, codeowners.DiffFile{FileName: file})
+
+		ownersMap, err := codeowners.New(repo, files, io.Discard)
+		if err != nil {
+			return fmt.Errorf("error reading codeowners config: %s", err)
+		}
+
+		unowned := ownersMap.UnownedFiles()
+
+		if dirsOnly {
+			unowned = f.Filtered(f.RemoveDuplicates(f.Map(unowned, func(path string) string {
+				return filepath.Dir(path)
+			})), func(path string) bool {
+				return path != "."
+			})
+		}
+		slices.Sort(unowned)
+		if target == "" {
+			target = "."
+		}
+		results[target] = unowned
 	}
 
-	if err := <-errChan; err != nil {
-		return fmt.Errorf("error walking repo: %s", err)
+	// Print results based on format
+	switch format {
+	case FormatJSON:
+		jsonData, err := json.Marshal(results)
+		if err != nil {
+			return fmt.Errorf("error marshaling JSON: %s", err)
+		}
+		fmt.Println(string(jsonData))
+	case FormatOneLine:
+		for target, files := range results {
+			if len(targets) > 1 {
+				fmt.Printf("%s: ", target)
+			}
+			fmt.Println(strings.Join(files, ", "))
+		}
+	default: // FormatDefault
+		first := true
+		for target, files := range results {
+			if !first {
+				fmt.Println()
+			}
+			first = false
+			if len(targets) > 1 {
+				fmt.Printf("%s:\n", target)
+			}
+			for _, file := range files {
+				fmt.Println(file)
+			}
+		}
 	}
 
-	ownersMap, err := codeowners.New(repo, files, io.Discard)
-	if err != nil {
-		return fmt.Errorf("error reading codeowners config: %s", err)
-	}
-
-	unowned := ownersMap.UnownedFiles()
-
-	if dirsOnly {
-		unowned = f.Filtered(f.RemoveDuplicates(f.Map(unowned, func(path string) string {
-			return filepath.Dir(path)
-		})), func(path string) bool {
-			return path != "."
-		})
-	}
-	slices.Sort(unowned)
-	fmt.Println(strings.Join(unowned, "\n"))
 	return nil
 }
 
@@ -273,7 +368,7 @@ func printOwners(required codeowners.ReviewerGroups, optional codeowners.Reviewe
 	fmt.Println()
 }
 
-func fileOwner(repo string, targets []string, format string) error {
+func fileOwner(repo string, targets []string, format OutputFormat) error {
 	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
 		return fmt.Errorf("root is not a directory: %s", repo)
 	}
@@ -302,18 +397,18 @@ func fileOwner(repo string, targets []string, format string) error {
 		return fmt.Errorf("error reading codeowners config: %s", err)
 	}
 	switch format {
-	case "json":
+	case FormatJSON:
 		jsonTargets(targets, ownersMap)
-	case "default":
+	case FormatDefault:
 		printTargets(targets, ownersMap, false)
-	case "one-line":
+	case FormatOneLine:
 		printTargets(targets, ownersMap, true)
 	}
 
 	return nil
 }
 
-func verifyCodeowners(repo string, target string) error {
+func validateCodeowners(repo string, target string) error {
 	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
 		return fmt.Errorf("root is not a directory: %s", repo)
 	}
