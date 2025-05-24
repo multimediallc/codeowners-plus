@@ -22,7 +22,7 @@ VERSION_TAG="$(gh release list --limit 1 --json tagName --jq '.[0].tagName')"
 DEV_TAG="$(echo "${VERSION_TAG}" | awk -F'[.-]' '{print $1"."$2"."$3+1".dev"}')"
 BRANCH_NAME="post/${VERSION_TAG}"
 
-echo "--- Starting update process for version ${SEMANTIC_VERSION} ---"
+echo "--- Starting update process for version ${VERSION_TAG} ---"
 
 check_git_clean
 
