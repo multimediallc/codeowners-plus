@@ -257,7 +257,7 @@ func TestFileOwner(t *testing.T) {
 	}
 }
 
-func TestVerifyCodeowners(t *testing.T) {
+func TestValidateCodeowners(t *testing.T) {
 	testRepo, cleanup := setupTestRepo(t)
 	defer cleanup()
 
@@ -306,14 +306,14 @@ func TestVerifyCodeowners(t *testing.T) {
 				}
 			}
 
-			err := verifyCodeowners(testRepo, tc.target)
+			err := validateCodeowners(testRepo, tc.target)
 			if (err != nil) != tc.wantErr {
-				t.Errorf("verifyCodeowners() error = %v, wantErr %v", err, tc.wantErr)
+				t.Errorf("validateCodeowners() error = %v, wantErr %v", err, tc.wantErr)
 				return
 			}
 
 			if tc.wantErr && tc.errMatch != "" && !strings.Contains(err.Error(), tc.errMatch) {
-				t.Errorf("verifyCodeowners() error = %v, want to contain %v", err, tc.errMatch)
+				t.Errorf("validateCodeowners() error = %v, want to contain %v", err, tc.errMatch)
 			}
 		})
 	}

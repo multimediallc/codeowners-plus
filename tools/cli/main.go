@@ -141,7 +141,7 @@ func main() {
 				Name:        "validate",
 				Aliases:     []string{"v", "verify"},
 				Usage:       "Validate the `.codeowners` file format",
-				UsageText:   "codeowners-cli verify [options] <directory1> [directory2]...\n   or: cat dirs.txt | codeowners-cli verify [options]",
+				UsageText:   "codeowners-cli validate [options] <directory1> [directory2]...\n   or: cat dirs.txt | codeowners-cli validate [options]",
 				Description: "Validate the `.codeowners` file in the specified directories. Multiple directories can be specified as arguments or piped from stdin (one directory per line). Each directory must contain a `.codeowners` file.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
@@ -171,7 +171,7 @@ func main() {
 
 					var allErrors []string
 					for _, target := range targets {
-						if err := verifyCodeowners(repo, target); err != nil {
+						if err := validateCodeowners(repo, target); err != nil {
 							allErrors = append(allErrors, fmt.Sprintf("%s: %v", target, err))
 						}
 					}
@@ -408,7 +408,7 @@ func fileOwner(repo string, targets []string, format OutputFormat) error {
 	return nil
 }
 
-func verifyCodeowners(repo string, target string) error {
+func validateCodeowners(repo string, target string) error {
 	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
 		return fmt.Errorf("root is not a directory: %s", repo)
 	}

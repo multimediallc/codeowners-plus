@@ -308,7 +308,7 @@ Available commands are:
 
 * `unowned` to check for unowned files
 * `owner` to check who owns a specific file
-* `verify` to check for typos in a `.codeowners` file
+* `validate` to check for typos in a `.codeowners` file
 
 ## Contributing
 
