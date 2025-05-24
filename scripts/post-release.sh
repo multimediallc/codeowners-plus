@@ -28,8 +28,8 @@ echo "--- Starting update process for version ${SEMANTIC_VERSION} ---"
 
 check_git_clean
 
-if [ ! -f "${ACTIONS_FILE}" ]; then
-  echo "Error: ${ACTIONS_FILE} not found in the current directory.  Make sure you are running this from the root."
+if [ ! -f "${README_FILE}" ]; then
+  echo "Error: ${README_FILE} not found in the current directory.  Make sure you are running this from the root."
   exit 1
 fi
 
