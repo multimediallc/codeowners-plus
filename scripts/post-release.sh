@@ -18,9 +18,7 @@ function check_git_clean() {
   git checkout origin/main >/dev/null 2>&1
 }
 
-SEMANTIC_VERSION="$(gh release list --limit 1 --json tagName --jq '.[0].tagName')"
-
-VERSION_TAG="v${SEMANTIC_VERSION}"
+VERSION_TAG="$(gh release list --limit 1 --json tagName --jq '.[0].tagName')"
 DEV_TAG="$(echo "${VERSION_TAG}" | awk -F'[.-]' '{print $1"."$2"."$3+1".dev"}')"
 BRANCH_NAME="post/${VERSION_TAG}"
 
@@ -56,8 +54,8 @@ fi
 gofmt -w tools/cli
 echo "${CLI_TOOL_FILE} and ${README_FILE} updated."
 
-echo "Committing changes to ${ACTIONS_FILE}..."
-git add "${ACTIONS_FILE}" "${CLI_TOOL_FILE}" "${README_FILE}"
+echo "Committing changes..."
+git add "${CLI_TOOL_FILE}" "${README_FILE}"
 git commit -m "${VERSION_TAG}"
 
 echo "--- Post release process completed successfully! ---"
