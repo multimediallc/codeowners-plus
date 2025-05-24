@@ -12,10 +12,6 @@ function check_git_clean() {
     echo "Please commit or stash your changes before running this script."
     exit 1
   fi
-  if git rev-parse --verify "refs/tags/${VERSION_TAG}" >/dev/null 2>&1; then
-    echo "Error: Tag '${VERSION_TAG}' already exists."
-    exit 1
-  fi
   echo "Git working directory is clean."
   git fetch origin
   echo "Switching to origin/main"
