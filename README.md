@@ -73,7 +73,7 @@ jobs:
           fetch-depth: 0
 
       - name: 'Codeowners Plus'
-        uses: multimediallc/codeowners-plus@v0.2.0
+        uses: multimediallc/codeowners-plus@v0.3.0
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
@@ -287,7 +287,7 @@ Even in quiet mode, the tool still performs all its internal calculations: deter
 * **GitHub Action:** Set the `quiet` input to `'true'`.
     ```yaml
     - name: 'Codeowners Plus (Quiet)'
-      uses: multimediallc/codeowners-plus@v0.2.0
+      uses: multimediallc/codeowners-plus@v0.3.0
       with:
         # ... other inputs ...
         quiet: 'true'
