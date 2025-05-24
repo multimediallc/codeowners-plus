@@ -18,12 +18,6 @@ function check_git_clean() {
   git checkout origin/main >/dev/null 2>&1
 }
 
-# Check for argument
-if [ -z "${1-}" ]; then
-  echo "Error: No semantic version provided."
-  usage
-fi
-
 SEMANTIC_VERSION="$(gh release list --limit 1 --json tagName --jq '.[0].tagName')"
 
 VERSION_TAG="v${SEMANTIC_VERSION}"
