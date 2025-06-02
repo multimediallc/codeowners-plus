@@ -203,7 +203,7 @@ This means if there is overlap in rules, the last declared will be the owner.  T
 
 You can include a `codeowners.toml` in the root of your project to add some advanced configuration options.
 
-`codeowners.toml`
+`codeowners.toml`:
 ```toml
 # `min_reviews` (default nil) allows you to specify the minimum number of reviews required
 min_reviews = 1
@@ -242,7 +242,7 @@ To prevent Codeowners Plus check from failing, but instead add an approval to th
 
 Notably, this can be used in conjunction with `CODEOWNERS` if the token owner is a user.
 
-`codeowners.toml`
+`codeowners.toml`:
 ```toml
 [enforcement]
 # `approval` (default false) means the github token owner will approve the PR
@@ -252,7 +252,7 @@ approval = true
 fail_check = false
 ```
 
-`.github/CODEOWNERS`
+`.github/CODEOWNERS`:
 ```
 # NOTE: This should be the only rule
 # github token owner (GitHub user set up to act as a bot)
