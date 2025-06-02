@@ -23,15 +23,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
   - [.codeowners File Spec](#codeowners-file-spec)
   - [Advanced Configuration](#advanced-configuration)
     - [Enforcement Options](#enforcement-options)
-    - [Min Reviews](#min-reviews)
-    - [Max Reviews](#max-reviews)
-    - [Ignored Directories](#ignored-directories)
-    - [High Priority Labels](#high-priority-labels)
   - [Quiet Mode](#quiet-mode)
-    - [When Quiet Mode is Enabled](#when-quiet-mode-is-enabled)
-    - [Behavior](#behavior)
-    - [Use Cases](#use-cases)
-    - [Activation](#activation)
 - [CLI Tool](#cli-tool)
 - [Contributing](#contributing)
 - [Future Features](#future-features)
@@ -72,14 +64,7 @@ Create a `.codeowners` file in the root of your repository with the following co
 
 This rule will set up your repo so `@your-username` will become a required approval for any file changed. When you are ready to add more rules, see [.codeowners File Spec](#codeowners-file-spec).
 
-### GitHub Configuration
-
-The `Codeowners Plus` GitHub Action should be set up as a [required status check](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging) in a GitHub Workflow. The workflow should be run on `pull_request`. It is recommended to also set up a rerun workflow on `pull_request_review` to rerun the check (see [.github/workflows/rerun_codeowners.yml](.github/workflows/rerun_codeowners.yml) for an example).
-
-**For advanced features to work, such as only re-requesting review when owned files are changed, you must disable this rule in branch protections:**
-`Dismiss stale pull request approvals when new commits are pushed`
-
-### Example Workflow
+Create a GitHub Actions workflow:
 
 ```yaml
 name: 'Code Owners'
@@ -115,6 +100,15 @@ jobs:
           verbose: true
           quiet: ${{ github.event.pull_request.draft }}
 ```
+
+### GitHub Configuration
+
+The `Codeowners Plus` GitHub Action should be set up as a [required status check](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging) in a GitHub Workflow.
+
+It is recommended to also set up a rerun workflow on `pull_request_review` to rerun the check (see [.github/workflows/rerun_codeowners.yml](.github/workflows/rerun_codeowners.yml) for an example).
+
+**For advanced features to work, such as only re-requesting review when owned files are changed, you must disable this rule in branch protections:**
+`Dismiss stale pull request approvals when new commits are pushed`
 
 ### GitHub Teams Support
 
