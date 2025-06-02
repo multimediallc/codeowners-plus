@@ -10,48 +10,78 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 <img alt="Codeowners-plus Logo" src="images/cop.png" width="140">
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Getting Started](#getting-started)
+  - [Basic Setup](#basic-setup)
+  - [GitHub Configuration](#github-configuration)
+  - [Example Workflow](#example-workflow)
+  - [GitHub Teams Support](#github-teams-support)
+- [Configuration](#configuration)
+  - [.codeowners File Spec](#codeowners-file-spec)
+  - [Advanced Configuration](#advanced-configuration)
+    - [Enforcement Options](#enforcement-options)
+    - [Min Reviews](#min-reviews)
+    - [Max Reviews](#max-reviews)
+    - [Ignored Directories](#ignored-directories)
+    - [High Priority Labels](#high-priority-labels)
+  - [Quiet Mode](#quiet-mode)
+    - [When Quiet Mode is Enabled](#when-quiet-mode-is-enabled)
+    - [Behavior](#behavior)
+    - [Use Cases](#use-cases)
+    - [Activation](#activation)
+- [CLI Tool](#cli-tool)
+- [Contributing](#contributing)
+- [Future Features](#future-features)
+
+## Overview
+
 This tool is meant to be an alternative to [GitHub CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners), overcoming limitations with the `CODEOWNERS` spec and GitHub code owners feature.
-
-## Features
-
-These are features missing from GitHub code owners that are supported by Codeowners Plus
-
-* Smart dismissal of stale reviews (only dismiss review when owned files change, rather than any reviewable push)
-* Supports multiple owners of files (`AND` ownership rules)
-  * Github CODEOWNERS supports only `OR` ownership rules, in contrast
-* Directory-level code ownership files to assign fine-grained code ownership
-* Supports optional reviewers (cc users/teams for non-blocking reviews)
-* Advanced global configuration (see [Advanced Configuration](#advanced-configuration))
 
 ### Caveats & Disclaimer
 
 We hope that GitHub integrates some of these ideas into the code owners feature itself.
-Unfortunately, because code owners does not involve "AI", GitHub will likely not prioritize it.
+Unfortunately, because code owners does not involve AI, GitHub will likely not prioritize it.
 
-Because this tool is not built into GitHub itself, it does not get first-party integration like the owners badge next to the reveiewer's name.
+Because this tool is not built into GitHub itself, it does not get first-party integration like the owners badge next to the reviewer's name.
 Instead, this tool uses comments to communicate who the required reviews are, and uses status check as the default way to enforce required reviews.
+
+## Features
+
+These are features missing from GitHub code owners that are supported by Codeowners Plus:
+
+* Smart dismissal of stale reviews (only dismiss review when owned files change, rather than any reviewable push)
+* Supports multiple owners of files (`AND` ownership rules)
+  * GitHub CODEOWNERS supports only `OR` ownership rules, in contrast
+* Directory-level code ownership files to assign fine-grained code ownership
+* Supports optional reviewers (cc users/teams for non-blocking reviews)
+* Advanced global configuration (see [Advanced Configuration](#advanced-configuration))
 
 ## Getting Started
 
-### Create a `.codeowners` file in the root of your repository with the following contents:
+### Basic Setup
 
-```
+Create a `.codeowners` file in the root of your repository with the following contents:
+
+```codeowners
 # fallback owner for any file
 * @your-username
 ```
 
-This rule will set up your repo so `@your-username` will become a required approval for any file changed.  When you are ready to add more rules, see [.codeowners File Spec](#codeowners-file-spec)
+This rule will set up your repo so `@your-username` will become a required approval for any file changed. When you are ready to add more rules, see [.codeowners File Spec](#codeowners-file-spec).
 
-### Github Protections Configuration
+### GitHub Configuration
 
-The `Codeowners Plus` GitHub Action should be set up as a [required status check](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging) in a Github Workflow.  The workflow should be run on `pull_request`.  It is recommended to also set up a rerun workflow on `pull_request_review` to rerun the check (see [.github/workflows/rerun_codeowners.yml](.github/workflows/rerun_codeowners.yml) for an example).
+The `Codeowners Plus` GitHub Action should be set up as a [required status check](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging) in a GitHub Workflow. The workflow should be run on `pull_request`. It is recommended to also set up a rerun workflow on `pull_request_review` to rerun the check (see [.github/workflows/rerun_codeowners.yml](.github/workflows/rerun_codeowners.yml) for an example).
 
 **For advanced features to work, such as only re-requesting review when owned files are changed, you must disable this rule in branch protections:**
 `Dismiss stale pull request approvals when new commits are pushed`
 
-### Example workflow
+### Example Workflow
 
-```
+```yaml
 name: 'Code Owners'
 
 concurrency:
@@ -61,6 +91,11 @@ concurrency:
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read      # required for @actions/checkout
+  issues: write       # required to create comments
+  pull-request: write # required to request reviewers
 
 jobs:
   codeowners:
@@ -81,11 +116,13 @@ jobs:
           quiet: ${{ github.event.pull_request.draft }}
 ```
 
-### Github Teams support
+### GitHub Teams Support
 
-If you plan to have organization teams as code owners, you will need to use a PAT that has organization [read access for Members and Administration](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens) as the token.  If do not have organization teams as owners, [GITHUB_TOKEN](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication#using-the-github_token-in-a-workflow) should be sufficient.
+If you plan to have organization teams as code owners, you will need to use a PAT that has organization [read access for Members and Administration](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens) as the token. If you do not have organization teams as owners, [GITHUB_TOKEN](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication#using-the-github_token-in-a-workflow) should be sufficient.
 
-## .codeowners File Spec
+## Configuration
+
+### .codeowners File Spec
 
 It is recommended to have a `.codeowners` file in each directory.  However, if there is no `.codeowners` file in a directory, Codeowners Plus will still recursively check rules from higher in the directory tree.
 
@@ -146,7 +183,7 @@ Comments are also suppored:
 # This is a comment
 ```
 
-### Matching differences from Github CODEOWNERS
+#### Matching differences from Github CODEOWNERS
 
 `.codeowners` rules are always relative to the directory the file lives in, while `CODEOWNERS` are not relative.
 For example - `*.js` in `CODEOWNERS` matches any file in the repo that ends in `.js` but in `.codeowners` it will only match files in its directory that end in `.js`.
@@ -170,25 +207,51 @@ This is the priority of file owners in order from highest priority to lowest pri
 
 This means if there is overlap in rules, the last declared will be the owner.  This is similar to GitHub `CODEOWNERS`, except with type-of-rule priority.
 
-## Advanced Configuration
+### Advanced Configuration
 
-You can include a `codeowners.toml` in the root of your project to add some avanced configuration options.
-
-### Enforcement Options
-
-In some cases, it may be undesirable to fail the status check - for example if you want to keep status check badge reflecting the health of PR code.
-If you want to prevent Codeowners Plus check from failing, but instead add an approval to the PR, you can use `enforcement.approval` setting.
-If required reviews are satisfied, Codeowners Plus will trigger an approval.  Otherwise, Codeowners Plus will dismiss its prior approval.
-
-Notably, this can be used in conjuction with `CODEOWNERS` if the token owner is a user.
-Unfortunately, `CODEOWNERS` does not support apps/bots as owners despite there being an [active discussion requesting the feature since 2020](https://github.com/orgs/community/discussions/23064).
-Hopefully GitHub adds support for apps/bots as codeowners so this option can become viable for non-org repos.
-
-Example of using `enforcement.approval` setting for enforcement instead of status check:
+You can include a `codeowners.toml` in the root of your project to add some advanced configuration options.
 
 `codeowners.toml`
 ```toml
+# `min_reviews` (default nil) allows you to specify the minimum number of reviews required
+min_reviews = 1
+
+# `max_reviews` (default nil) allows you to skip some reviewers if the number of reviewers is greater than the max_reviewers
+max_reviews = 2
+
+# `unskippable_reviewers` (default empty) allows you to specify reviewers that cannot be skipped via the max_reviews setting
+unskippable_reviewers = ["@BakerNet"]
+
+# `ignore` (default empty) allows you to specify directories that should be ignored by the codeowners check
+ignore = ["test_project"]
+
+# `high_priority_labels (default empty) will cause "High Prio" label to be added to comments when one of these PR labels is present
+high_priority_labels = ["high-priority", "urgent"]
+
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
+[enforcement]
+# see "Enforcement Options" below for more details
+```
+
+When a PR has any of the `high_priority_labels`, the comment will look like this:
+```
+❗High Prio❗
+
+Codeowners approval required for this PR:
+- @user1
+- @user2
+```
+
+#### Enforcement Options
+
+In some cases, it may be undesirable to fail the status check - for example if you want to keep the green check reflecting the health of PR code.
+
+To prevent Codeowners Plus check from failing, but instead add an approval to the PR, you can use `enforcement.approval` setting.
+
+Notably, this can be used in conjunction with `CODEOWNERS` if the token owner is a user.
+
+`codeowners.toml`
+```toml
 [enforcement]
 # `approval` (default false) means the github token owner will approve the PR
 # this can be used alongside GitHub CODEOWNERS to enforce Codeowners Plus checks by making the github token owner the only CODEOWNER
@@ -206,108 +269,34 @@ fail_check = false
 
 With this setup, `@token-owner` will be a GitHub code owner on every PR, and Codeowners Plus will approve on behalf of `@token-owner` when all required reviews are satisfied, unblocking merge.
 
-### Min Reviews
+Unfortunately, `CODEOWNERS` does not support apps/bots as owners despite there being an [active discussion requesting the feature since 2020](https://github.com/orgs/community/discussions/23064).
+Hopefully GitHub adds support for apps/bots as codeowners so this option can become viable for non-org repos.
 
-If you want to use Codeowners Plus to enforce minimum number of reviewers, you can use `min_reviews` setting:
+### Quiet Mode
 
-`codeowners.toml`
-```toml
-# `min_reviews` (default nil) allows you to specify the minimum number of reviews required
-min_reviews = 1
-```
-
-### Max Reviews
-
-If you want to allow PR authors to bypass some reviews when there are a large numeber of owners involved, you can use the `max_reviews` setting:
-
-`codeowners.toml`
-```toml
-#
-# `max_reviews` (default nil) allows you to skip some reviewers if the number of reviewers is greater than the max_reviewers
-max_reviews = 2
-```
-
-You can prevent certain owners from being bypassed by the max_reviews setting with the `unskippable_reviewers` setting:
-
-`codeowners.toml`
-```toml
-# `unskippable_reviewers` (default empty) allows you to specify reviewers that cannot be skipped via the max_reviews setting
-unskippable_reviewers = ["@BakerNet"]
-```
-
-The `unskippable_reviewers` setting has no effect if `max_reviews` is not set.
-
-### Ignored Directories
-
-To prevent ownership rules from being checked or applied for certain directories, you can use `ignore` setting:
-
-`codeowners.toml`
-```toml
-# `ignore` (default empty) allows you to specify directories that should be ignored by the codeowners check
-ignore = ["test_project"]
-```
-
-### High Priority Labels
-
-You can configure labels that indicate a high priority PR. When a PR has any of these labels, the comment will include a high priority indicator:
-
-```toml
-high_priority_labels = ["high-priority", "urgent"]
-```
-
-When a PR has any of these labels, the comment will look like this:
-```
-❗High Prio❗
-
-Codeowners approval required for this PR:
-- @user1
-- @user2
-```
-
-## Quiet Mode
-
-You can run Codeowners Plus in a "quiet" mode using the `quiet` input in the GitHub Action.
-
-### When Quiet Mode is Enabled
+Using the `quiet` input on the action will change the behavior in a couple ways:
 
 * **No Comments:** The action will **not** post the review status comment (listing required/unapproved reviewers) or the optional reviewer "cc" comment to the Pull Request.
 * **No Review Requests:** The action will **not** automatically request reviews from required owners who have not yet approved via the GitHub API.
 
-### Behavior:
-
-Even in quiet mode, the tool still performs all its internal calculations: determining required/optional owners based on file changes, checking existing approvals, and determining if the ownership rules are satisfied. The primary outcome is still the success or failure status of the associated status check (unless you've configured `enforcement.fail_check = false`).
-
-### Use Cases:
+#### Use Cases
 
 * **Draft Pull Requests:** This is a common use case. You might want the Codeowners Plus logic to run and report a status (e.g., pending or failed) on draft PRs, but without notifying reviewers prematurely by adding comments or requesting reviews until the PR is marked "Ready for review".
 * **Custom Notification Workflows:** You might prefer to handle notifications or review requests through a different mechanism and only use Codeowners Plus for the status check enforcement.
-
-### Activation:
-
-* **GitHub Action:** Set the `quiet` input to `'true'`.
-    ```yaml
-    - name: 'Codeowners Plus (Quiet)'
-      uses: multimediallc/codeowners-plus@v0.3.0
-      with:
-        # ... other inputs ...
-        quiet: 'true'
-    ```
-
-**Default:** Quiet mode is **disabled** (`false`) by default.
 
 ## CLI Tool
 
 A CLI tool is available which provides some utilities for working with `.codeowners` files.
 
 You can download the built tools via [releases](https://github.com/multimediallc/codeowners-plus/releases) or build from source:
-```
+```bash
 go build -o codeowners-cli ./tools/cli/main.go
 ```
 
-Available commands are:
+Available subcommands are:
 
 * `unowned` to check for unowned files
-* `owner` to check who owns a specific file
+* `owner` to check who owns a specific file or list of files
 * `validate` to check for typos in a `.codeowners` file
 
 ## Contributing
