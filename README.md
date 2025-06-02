@@ -208,16 +208,20 @@ You can include a `codeowners.toml` in the root of your project to add some adva
 # `min_reviews` (default nil) allows you to specify the minimum number of reviews required
 min_reviews = 1
 
-# `max_reviews` (default nil) allows you to skip some reviewers if the number of reviewers is greater than the max_reviewers
+# `max_reviews` (default nil) allows you to skip some reviewers if the number of reviewers
+#  is greater than the max_reviewers
 max_reviews = 2
 
-# `unskippable_reviewers` (default empty) allows you to specify reviewers that cannot be skipped via the max_reviews setting
+# `unskippable_reviewers` (default empty) allows you to specify reviewers that cannot be
+#  skipped via the max_reviews setting
 unskippable_reviewers = ["@BakerNet"]
 
-# `ignore` (default empty) allows you to specify directories that should be ignored by the codeowners check
+# `ignore` (default empty) allows you to specify directories that should be ignored by the
+#  codeowners check
 ignore = ["test_project"]
 
-# `high_priority_labels (default empty) will cause "High Prio" label to be added to comments when one of these PR labels is present
+# `high_priority_labels (default empty) will cause "High Prio" label to be added to comments
+#  when one of these PR labels is present
 high_priority_labels = ["high-priority", "urgent"]
 
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
@@ -245,8 +249,9 @@ Notably, this can be used in conjunction with `CODEOWNERS` if the token owner is
 `codeowners.toml`:
 ```toml
 [enforcement]
-# `approval` (default false) means the github token owner will approve the PR
-# this can be used alongside GitHub CODEOWNERS to enforce Codeowners Plus checks by making the github token owner the only CODEOWNER
+# `approval` (default false) means the github token owner will approve the PR.
+# This can be used alongside GitHub CODEOWNERS to enforce Codeowners Plus checks by making
+#  the github token owner the only CODEOWNER
 approval = true
 # `fail_check` (default true) means the codeowners GHA check will fail if the codeowners check fails
 fail_check = false
@@ -282,7 +287,7 @@ A CLI tool is available which provides some utilities for working with `.codeown
 
 You can download the built tools via [releases](https://github.com/multimediallc/codeowners-plus/releases) or build from source:
 ```bash
-go build -o codeowners-cli ./tools/cli/main.go
+go build -o codeowners-cli ./tools/cli
 ```
 
 Available subcommands are:
