@@ -76,9 +76,9 @@ on:
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
 
 permissions:
-  contents: read      # required for @actions/checkout
-  issues: write       # required to create comments
-  pull-request: write # required to request reviewers
+  contents: read       # required for @actions/checkout
+  issues: write        # required to create comments
+  pull-requests: write # required to request reviewers
 
 jobs:
   codeowners:
