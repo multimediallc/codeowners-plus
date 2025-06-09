@@ -1,5 +1,5 @@
 name: 'Codeowners Plus'
-description: 'Code ownership tool for manging owner-ship based review assignments and checks'
+description: 'Feature-rich alternative to GitHub Code Owners for monoliths and mono-repos'
 author: 'Hans Baker'
 branding:
   icon: 'plus-circle'
