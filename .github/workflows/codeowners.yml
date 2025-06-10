@@ -39,6 +39,7 @@ jobs:
           quiet: ${{ github.event.pull_request.draft }}
 
       - name: Create Check Run with JSON Output
+        if: always()
         env:
           REPORT_JSON: ${{ steps.codeowners-plus.outputs.data }}
         run: |
