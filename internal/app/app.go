@@ -3,6 +3,8 @@ package app
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -12,6 +14,7 @@ import (
 	gh "github.com/multimediallc/codeowners-plus/internal/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
+	"github.com/multimediallc/codeowners-plus/pkg/inlineowners"
 )
 
 // Config holds the application configuration
@@ -101,18 +104,70 @@ func (a *App) Run() (bool, string, error) {
 	}
 	a.codeowners = codeOwners
 
+	// Inline ownership integration
+	if a.Conf != nil && a.Conf.InlineOwnershipEnabled {
+		oracle := inlineowners.Oracle{}
+		// build oracle blocks per file
+		for _, df := range gitDiff.AllChanges() {
+			abs := filepath.Join(a.config.RepoDir, df.FileName)
+			data, err := os.ReadFile(abs)
+			if err != nil {
+				a.printWarn("WARNING: unable to read file %s: %v\n", df.FileName, err)
+				continue
+			}
+			blks, _ := inlineowners.Parse(string(data), a.config.WarningBuffer)
+			if len(blks) > 0 {
+				// convert to Block type
+				b2 := make([]inlineowners.Block, 0, len(blks))
+				for _, pb := range blks {
+					b2 = append(b2, inlineowners.Block{Owners: pb.Owners, Start: pb.StartLine, End: pb.EndLine})
+				}
+				oracle[df.FileName] = b2
+			}
+		}
+
+		overrides := make(map[string]codeowners.ReviewerGroups)
+		for _, df := range gitDiff.AllChanges() {
+			// aggregate owners from hunks via oracle
+			rgs := codeowners.ReviewerGroups{}
+			for _, h := range df.Hunks {
+				lists := oracle.OwnersForRange(df.FileName, h.Start, h.End)
+				if lists == nil {
+					continue
+				}
+				for _, lst := range lists {
+					rgs = append(rgs, &codeowners.ReviewerGroup{Names: lst, Approved: false})
+				}
+			}
+			if len(rgs) == 0 {
+				// fallback to file-level
+				if baseGroups, ok := codeOwners.FileRequired()[df.FileName]; ok {
+					rgs = append(rgs, baseGroups...)
+				}
+			} else {
+				rgs = f.RemoveDuplicates(rgs)
+			}
+			overrides[df.FileName] = rgs
+		}
+
+		a.codeowners = newOverlayOwners(codeOwners, overrides)
+	} else {
+		// feature disabled, keep original codeOwners
+		a.codeowners = codeOwners
+	}
+
 	// Set author
 	author := fmt.Sprintf("@%s", a.client.PR().User.GetLogin())
-	codeOwners.SetAuthor(author)
+	a.codeowners.SetAuthor(author)
 
 	// Warn about unowned files
-	for _, uFile := range codeOwners.UnownedFiles() {
+	for _, uFile := range a.codeowners.UnownedFiles() {
 		a.printWarn("WARNING: Unowned File: %s\n", uFile)
 	}
 
 	// Print file owners if verbose
 	if a.config.Verbose {
-		a.printFileOwners(codeOwners)
+		a.printFileOwners(a.codeowners)
 	}
 
 	// Process approvals and reviewers
