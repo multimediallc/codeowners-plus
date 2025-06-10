@@ -1,3 +1,3 @@
-// <CO-inline={@frontend-inline}>
+// <CO-inline={@frontend-inline-misspellede}>
 console.log("bop");
 // </CO-inline>
