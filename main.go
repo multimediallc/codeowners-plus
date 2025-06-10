@@ -96,6 +96,29 @@ func outputAndExit(w io.Writer, shouldFail bool, message string) {
 	}
 }
 
+// writeGITHUBOUTPUT writes the OutputData to the GITHUB_OUTPUT file in the correct format
+func writeGITHUBOUTPUT(outputData app.OutputData) error {
+	githubOutput := os.Getenv("GITHUB_OUTPUT")
+	if githubOutput == "" {
+		return nil // No GITHUB_OUTPUT environment variable set
+	}
+
+	// Marshal the entire OutputData to JSON
+	jsonData, err := json.Marshal(outputData)
+	if err != nil {
+		return fmt.Errorf("error marshaling JSON output: %w", err)
+	}
+
+	// Use GitHub Actions delimiter approach for robust handling of special characters
+	output := fmt.Sprintf("data<<EOF\n%s\nEOF\n", string(jsonData))
+	err = os.WriteFile(githubOutput, []byte(output), 0644)
+	if err != nil {
+		return fmt.Errorf("error writing to GITHUB_OUTPUT: %w", err)
+	}
+
+	return nil
+}
+
 func main() {
 	err := initFlags(flags)
 	if err != nil {
@@ -124,19 +147,8 @@ func main() {
 	}
 
 	// Write JSON output to GITHUB_OUTPUT if the environment variable is set
-	if githubOutput := os.Getenv("GITHUB_OUTPUT"); githubOutput != "" {
-		// Marshal the entire OutputData to JSON
-		jsonData, err := json.Marshal(outputData)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error marshaling JSON output: %v\n", err)
-		} else {
-			// Use GitHub Actions delimiter approach for robust handling of special characters
-			output := fmt.Sprintf("data<<EOF\n%s\nEOF\n", string(jsonData))
-			err = os.WriteFile(githubOutput, []byte(output), 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error writing to GITHUB_OUTPUT: %v\n", err)
-			}
-		}
+	if err := writeGITHUBOUTPUT(outputData); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
 
 	var w io.Writer

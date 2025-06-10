@@ -72,6 +72,24 @@ func (a *App) printWarn(format string, args ...interface{}) {
 	_, _ = fmt.Fprintf(a.config.WarningBuffer, format, args...)
 }
 
+func (a *App) buildOutputData(success bool, message string, stillRequired []string) OutputData {
+	fileOwners := make(map[string][]string)
+	fileOptional := make(map[string][]string)
+	for file, reviewers := range a.codeowners.FileRequired() {
+		fileOwners[file] = reviewers.Flatten()
+	}
+	for file, reviewers := range a.codeowners.FileOptional() {
+		fileOptional[file] = reviewers.Flatten()
+	}
+	return OutputData{
+		FileOwners:    fileOwners,
+		FileOptional:  fileOptional,
+		StillRequired: stillRequired,
+		Success:       success,
+		Message:       message,
+	}
+}
+
 // Run executes the application logic
 func (a *App) Run() (OutputData, error) {
 	// Initialize PR
@@ -130,22 +148,7 @@ func (a *App) Run() (OutputData, error) {
 		return OutputData{}, err
 	}
 
-	fileOwners := make(map[string][]string)
-	fileOptional := make(map[string][]string)
-	for file, reviewers := range a.codeowners.FileRequired() {
-		fileOwners[file] = reviewers.Flatten()
-	}
-	for file, reviewers := range a.codeowners.FileOptional() {
-		fileOptional[file] = reviewers.Flatten()
-	}
-
-	outputData := OutputData{
-		FileOwners:    fileOwners,
-		FileOptional:  fileOptional,
-		StillRequired: stillRequired,
-		Success:       success,
-		Message:       message,
-	}
+	outputData := a.buildOutputData(success, message, stillRequired)
 	return outputData, nil
 }
 

@@ -1090,3 +1090,40 @@ func TestPrintFileOwners(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildOutputData(t *testing.T) {
+	mockOwners := &mockCodeOwners{
+		fileRequiredMap: map[string]codeowners.ReviewerGroups{
+			"file1.go": {&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}}},
+			"file2.go": {&codeowners.ReviewerGroup{Names: []string{"@user3"}}},
+		},
+		fileOptionalMap: map[string]codeowners.ReviewerGroups{
+			"file1.go": {&codeowners.ReviewerGroup{Names: []string{"@optional1"}}},
+		},
+	}
+	app := &App{
+		codeowners: mockOwners,
+	}
+
+	success := true
+	message := "Test message"
+	stillRequired := []string{"@user1"}
+
+	output := app.buildOutputData(success, message, stillRequired)
+
+	if !output.Success {
+		t.Errorf("expected Success true, got false")
+	}
+	if output.Message != message {
+		t.Errorf("expected Message %q, got %q", message, output.Message)
+	}
+	if len(output.FileOwners) != 2 {
+		t.Errorf("expected 2 FileOwners, got %d", len(output.FileOwners))
+	}
+	if len(output.FileOptional) != 1 {
+		t.Errorf("expected 1 FileOptional, got %d", len(output.FileOptional))
+	}
+	if len(output.StillRequired) != 1 || output.StillRequired[0] != "@user1" {
+		t.Errorf("expected StillRequired [@user1], got %v", output.StillRequired)
+	}
+}
