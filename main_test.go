@@ -248,6 +248,7 @@ func TestGITHUBOUTPUT(t *testing.T) {
 			FileOptional: map[string][]string{
 				"file1.go": {"@optional1"},
 			},
+			UnownedFiles:  []string{},
 			StillRequired: []string{"@user1"},
 			Success:       true,
 			Message:       "Codeowners reviews satisfied",
@@ -299,6 +300,9 @@ func TestGITHUBOUTPUT(t *testing.T) {
 		if len(unmarshaled.FileOptional) != len(testOutputData.FileOptional) {
 			t.Errorf("FileOptional length mismatch: expected %d, got %d", len(testOutputData.FileOptional), len(unmarshaled.FileOptional))
 		}
+		if len(unmarshaled.UnownedFiles) != len(testOutputData.UnownedFiles) {
+			t.Errorf("UnownedFiles length mismatch: expected %d, got %d", len(testOutputData.UnownedFiles), len(unmarshaled.UnownedFiles))
+		}
 		if len(unmarshaled.StillRequired) != len(testOutputData.StillRequired) {
 			t.Errorf("StillRequired length mismatch: expected %d, got %d", len(testOutputData.StillRequired), len(unmarshaled.StillRequired))
 		}
@@ -323,6 +327,7 @@ func TestGITHUBOUTPUT(t *testing.T) {
 				"file1.go": {"@user1"},
 			},
 			FileOptional:  map[string][]string{},
+			UnownedFiles:  []string{},
 			StillRequired: []string{},
 			Success:       true,
 			Message:       "Test message",

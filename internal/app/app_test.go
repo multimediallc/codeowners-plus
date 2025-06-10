@@ -1100,6 +1100,7 @@ func TestBuildOutputData(t *testing.T) {
 		fileOptionalMap: map[string]codeowners.ReviewerGroups{
 			"file1.go": {&codeowners.ReviewerGroup{Names: []string{"@optional1"}}},
 		},
+		unownedFiles: []string{"unowned.go"},
 	}
 	app := &App{
 		codeowners: mockOwners,
@@ -1122,6 +1123,9 @@ func TestBuildOutputData(t *testing.T) {
 	}
 	if len(output.FileOptional) != 1 {
 		t.Errorf("expected 1 FileOptional, got %d", len(output.FileOptional))
+	}
+	if len(output.UnownedFiles) != 1 || output.UnownedFiles[0] != "unowned.go" {
+		t.Errorf("expected UnownedFiles [unowned.go], got %v", output.StillRequired)
 	}
 	if len(output.StillRequired) != 1 || output.StillRequired[0] != "@user1" {
 		t.Errorf("expected StillRequired [@user1], got %v", output.StillRequired)

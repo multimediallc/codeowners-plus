@@ -18,6 +18,7 @@ import (
 type OutputData struct {
 	FileOwners    map[string][]string `json:"file_owners"`
 	FileOptional  map[string][]string `json:"file_optional"`
+	UnownedFiles  []string            `json:"unowned_files"`
 	StillRequired []string            `json:"still_required"`
 	Success       bool                `json:"success"`
 	Message       string              `json:"message"`
@@ -84,6 +85,7 @@ func (a *App) buildOutputData(success bool, message string, stillRequired []stri
 	return OutputData{
 		FileOwners:    fileOwners,
 		FileOptional:  fileOptional,
+		UnownedFiles:  a.codeowners.UnownedFiles(),
 		StillRequired: stillRequired,
 		Success:       success,
 		Message:       message,
