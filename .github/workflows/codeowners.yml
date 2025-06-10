@@ -55,4 +55,4 @@ jobs:
             -f "conclusion=neutral" \
             -f "output[title]=Codeowners Plus Report" \
             -f "output[summary]=Codeowners Plus analysis JSON data including file owners and results" \
-            -f "output[text]=@-"
+            -F 'output[text]=@-'
