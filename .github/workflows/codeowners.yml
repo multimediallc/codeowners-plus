@@ -48,7 +48,7 @@ jobs:
             "name": "Codeowners Plus Report",
             "head_sha": "${{ github.event.pull_request.head.sha }}",
             "status": "completed",
-            "conclusion": "neutral",
+            "conclusion": "success",
             "output": {
               "title": "Codeowners Plus Report",
               "summary": "Codeowners Plus analysis JSON data including file owners and results",
