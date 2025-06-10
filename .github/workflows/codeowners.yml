@@ -44,15 +44,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          JSON_PAYLOAD='{
+            "name": "Codeowners Plus Report",
+            "head_sha": "${{ github.event.pull_request.head.sha }}",
+            "status": "completed",
+            "conclusion": "neutral",
+            "output": {
+              "title": "Codeowners Plus Report",
+              "summary": "Codeowners Plus analysis JSON data including file owners and results",
+              "text": "${{ steps.codeowners-plus.outputs.data }}"
+            }
+          }'
           # Use the 'gh' CLI to interact with the GitHub API
-          echo '${{ steps.codeowners-plus.outputs.data }}' | gh api --method POST \
+          echo "$JSON_PAYLOAD" | gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "/repos/${{ github.repository }}/check-runs" \
-            -f "name=Codeowners Plus Report" \
-            -f "head_sha=${{ github.event.pull_request.head.sha }}" \
-            -f "status=completed" \
-            -f "conclusion=neutral" \
-            -f "output[title]=Codeowners Plus Report" \
-            -f "output[summary]=Codeowners Plus analysis JSON data including file owners and results" \
-            -F 'output[text]=@-'
+            --input -
