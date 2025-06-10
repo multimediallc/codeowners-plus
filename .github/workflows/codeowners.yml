@@ -9,7 +9,11 @@ on:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
 
-permissions: {}
+permissions:
+  contents: read       # required for @actions/checkout
+  issues: write        # required to create comments
+  pull-requests: write # required to request reviewers
+  checks: write        # required to export data to check run
 
 jobs:
   codeowners:
@@ -41,6 +45,7 @@ jobs:
       - name: Create Check Run with JSON Output
         if: always()
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPORT_JSON: ${{ steps.codeowners-plus.outputs.data }}
         run: |
           # Use the 'gh' CLI to interact with the GitHub API
