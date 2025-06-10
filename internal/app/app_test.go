@@ -962,7 +962,7 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 				},
 			}
 
-			success, _, err := app.processApprovalsAndReviewers()
+			success, _, _, err := app.processApprovalsAndReviewers()
 			if tc.expectError {
 				if err == nil {
 					t.Error("expected error but got none")

@@ -30,9 +30,26 @@ jobs:
           cat action.yml
 
       - name: 'Codeowners Plus'
+        id: codeowners-plus
         uses: ./
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
           verbose: true
           quiet: ${{ github.event.pull_request.draft }}
+
+      - name: Create Check Run with JSON Output
+        env:
+          REPORT_JSON: ${{ steps.codeowners-plus.outputs.data }}
+        run: |
+          # Use the 'gh' CLI to interact with the GitHub API
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/check-runs" \
+            -f name='Codeowners Plus Report' \
+            -f head_sha='${{ github.event.pull_request.head.sha || github.sha }}' \
+            -f status='completed' \
+            -f conclusion='success' \
+            -f output.title='Codeowners Plus Report' \
+            -f output.summary="Codeowners Plus analysis JSON data including file owners and results" \
+            -f "output.text=$REPORT_JSON"

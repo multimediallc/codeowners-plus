@@ -14,6 +14,15 @@ import (
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
+// OutputData holds the data that will be written to GITHUB_OUTPUT
+type OutputData struct {
+	FileOwners    map[string][]string `json:"file_owners"`
+	FileOptional  map[string][]string `json:"file_optional"`
+	StillRequired []string            `json:"still_required"`
+	Success       bool                `json:"success"`
+	Message       string              `json:"message"`
+}
+
 // Config holds the application configuration
 type Config struct {
 	Token         string
@@ -64,10 +73,10 @@ func (a *App) printWarn(format string, args ...interface{}) {
 }
 
 // Run executes the application logic
-func (a *App) Run() (bool, string, error) {
+func (a *App) Run() (OutputData, error) {
 	// Initialize PR
 	if err := a.client.InitPR(a.config.PR); err != nil {
-		return false, "", fmt.Errorf("InitPR Error: %v", err)
+		return OutputData{}, fmt.Errorf("InitPR Error: %v", err)
 	}
 	a.printDebug("PR: %d\n", a.client.PR().GetNumber())
 
@@ -90,14 +99,14 @@ func (a *App) Run() (bool, string, error) {
 	a.printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
 	gitDiff, err := git.NewDiff(diffContext)
 	if err != nil {
-		return false, "", fmt.Errorf("NewGitDiff Error: %v", err)
+		return OutputData{}, fmt.Errorf("NewGitDiff Error: %v", err)
 	}
 	a.gitDiff = gitDiff
 
 	// Initialize codeowners
 	codeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), a.config.WarningBuffer)
 	if err != nil {
-		return false, "", fmt.Errorf("NewCodeOwners Error: %v", err)
+		return OutputData{}, fmt.Errorf("NewCodeOwners Error: %v", err)
 	}
 	a.codeowners = codeOwners
 
@@ -116,11 +125,33 @@ func (a *App) Run() (bool, string, error) {
 	}
 
 	// Process approvals and reviewers
-	return a.processApprovalsAndReviewers()
+	success, message, stillRequired, err := a.processApprovalsAndReviewers()
+	if err != nil {
+		return OutputData{}, err
+	}
+
+	fileOwners := make(map[string][]string)
+	fileOptional := make(map[string][]string)
+	for file, reviewers := range a.codeowners.FileRequired() {
+		fileOwners[file] = reviewers.Flatten()
+	}
+	for file, reviewers := range a.codeowners.FileOptional() {
+		fileOptional[file] = reviewers.Flatten()
+	}
+
+	outputData := OutputData{
+		FileOwners:    fileOwners,
+		FileOptional:  fileOptional,
+		StillRequired: stillRequired,
+		Success:       success,
+		Message:       message,
+	}
+	return outputData, nil
 }
 
-func (a *App) processApprovalsAndReviewers() (bool, string, error) {
+func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	message := ""
+
 	// Get all required owners before filtering
 	allRequiredOwners := a.codeowners.AllRequired()
 	allRequiredOwnerNames := allRequiredOwners.Flatten()
@@ -135,13 +166,13 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 
 	// Initialize user reviewer map
 	if err := a.client.InitUserReviewerMap(allRequiredOwnerNames); err != nil {
-		return false, message, fmt.Errorf("InitUserReviewerMap Error: %v", err)
+		return false, message, nil, fmt.Errorf("InitUserReviewerMap Error: %v", err)
 	}
 
 	// Get current approvals
 	ghApprovals, err := a.client.GetCurrentReviewerApprovals()
 	if err != nil {
-		return false, message, fmt.Errorf("GetCurrentApprovals Error: %v", err)
+		return false, message, nil, fmt.Errorf("GetCurrentApprovals Error: %v", err)
 	}
 	a.printDebug("Current Approvals: %+v\n", ghApprovals)
 
@@ -150,20 +181,20 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	if a.Conf.Enforcement.Approval {
 		tokenOwnerApproval, err = a.processTokenOwnerApproval()
 		if err != nil {
-			return false, message, err
+			return false, message, nil, err
 		}
 	}
 
 	// Process approvals and dismiss stale ones
 	validApprovalCount, err := a.processApprovals(ghApprovals)
 	if err != nil {
-		return false, message, err
+		return false, message, nil, err
 	}
 
 	// Request reviews from required owners
 	err = a.requestReviews()
 	if err != nil {
-		return false, message, err
+		return false, message, nil, err
 	}
 
 	unapprovedOwners := a.codeowners.AllRequired()
@@ -177,12 +208,15 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 	// Add comments to the PR if necessary
 	err = a.addReviewStatusComment(allRequiredOwners, maxReviewsMet)
 	if err != nil {
-		return false, message, fmt.Errorf("failed to add review status comment: %w", err)
+		return false, message, nil, fmt.Errorf("failed to add review status comment: %w", err)
 	}
 	err = a.addOptionalCcComment(allOptionalReviewerNames)
 	if err != nil {
-		return false, message, fmt.Errorf("failed to add optional CC comment: %w", err)
+		return false, message, nil, fmt.Errorf("failed to add optional CC comment: %w", err)
 	}
+
+	// Collect still required data
+	stillRequired := unapprovedOwners.Flatten()
 
 	// Exit if there are any unapproved codeowner teams
 	if len(unapprovedOwners) > 0 && !maxReviewsMet {
@@ -195,14 +229,14 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 			"FAIL: Codeowners reviews not satisfied\nStill required:\n%s",
 			unapprovedCommentString,
 		)
-		return false, message, nil
+		return false, message, stillRequired, nil
 	}
 
 	// Exit if there are not enough reviews
 	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
 		if validApprovalCount < *a.Conf.MinReviews {
 			message = fmt.Sprintf("FAIL: Min Reviews not satisfied. Need %d, found %d", *a.Conf.MinReviews, validApprovalCount)
-			return false, message, nil
+			return false, message, stillRequired, nil
 		}
 	}
 
@@ -211,10 +245,11 @@ func (a *App) processApprovalsAndReviewers() (bool, string, error) {
 		// Approve the PR since all codeowner teams have approved
 		err = a.client.ApprovePR()
 		if err != nil {
-			return true, message, fmt.Errorf("ApprovePR Error: %v", err)
+			return true, message, stillRequired, fmt.Errorf("ApprovePR Error: %v", err)
 		}
 	}
-	return true, message, nil
+
+	return true, message, stillRequired, nil
 }
 
 func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups, maxReviewsMet bool) error {

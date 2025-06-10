@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -117,16 +118,33 @@ func main() {
 		outputAndExit(os.Stderr, true, fmt.Sprintf("Failed to initialize app: %v\n", err))
 	}
 
-	success, message, err := app.Run()
+	outputData, err := app.Run()
 	if err != nil {
 		outputAndExit(os.Stderr, true, fmt.Sprintln(err))
 	}
+
+	// Write JSON output to GITHUB_OUTPUT if the environment variable is set
+	if githubOutput := os.Getenv("GITHUB_OUTPUT"); githubOutput != "" {
+		// Marshal the entire OutputData to JSON
+		jsonData, err := json.Marshal(outputData)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error marshaling JSON output: %v\n", err)
+		} else {
+			// Use GitHub Actions delimiter approach for robust handling of special characters
+			output := fmt.Sprintf("data<<EOF\n%s\nEOF\n", string(jsonData))
+			err = os.WriteFile(githubOutput, []byte(output), 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing to GITHUB_OUTPUT: %v\n", err)
+			}
+		}
+	}
+
 	var w io.Writer
-	if success {
+	if outputData.Success {
 		w = os.Stdout
 	} else {
 		w = os.Stderr
 	}
-	shouldFail := !success && app.Conf.Enforcement.FailCheck
-	outputAndExit(w, shouldFail, message)
+	shouldFail := !outputData.Success && app.Conf.Enforcement.FailCheck
+	outputAndExit(w, shouldFail, outputData.Message)
 }
