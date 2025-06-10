@@ -52,7 +52,7 @@ jobs:
             "output": {
               "title": "Codeowners Plus Report",
               "summary": "Codeowners Plus analysis JSON data including file owners and results",
-              "text": "${{ toJSON(steps.codeowners-plus.outputs.data) }}"
+              "text": ${{ toJSON(steps.codeowners-plus.outputs.data) }}
             }
           }'
           # Use the 'gh' CLI to interact with the GitHub API
