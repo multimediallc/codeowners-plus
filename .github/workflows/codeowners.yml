@@ -53,6 +53,7 @@ jobs:
             -f "name=Codeowners Plus Report" \
             -f "head_sha=${{ github.event.pull_request.head.sha || github.sha }}" \
             -f "status=completed" \
+            -f "conclusion=neutral" \
             -f "output[title]=Codeowners Plus Report" \
             -f "output[summary]=Codeowners Plus analysis JSON data including file owners and results" \
             -f "output[text]=$REPORT_JSON"
