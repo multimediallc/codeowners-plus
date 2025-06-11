@@ -24,6 +24,10 @@ inputs:
     required: false
     default: false
 
+outputs:
+  data:
+    description: 'JSON string containing all the codeowners data (success, message, file-owners, file-optional, still-required)'
+
 runs:
   using: 'docker'
   image: 'docker://ghcr.io/multimediallc/codeowners-plus:latest'

@@ -9,15 +9,16 @@ on:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
 
-permissions: {}
+permissions:
+  contents: read       # required for @actions/checkout
+  issues: write        # required to create comments
+  pull-requests: write # required to request reviewers
+  checks: write        # required to export data to check run
 
 jobs:
   codeowners:
     name: 'Run Codeowners Plus'
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: read
     steps:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v4
@@ -30,9 +31,33 @@ jobs:
           cat action.yml
 
       - name: 'Codeowners Plus'
+        id: codeowners-plus
         uses: ./
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
           verbose: true
           quiet: ${{ github.event.pull_request.draft }}
+
+      - name: Create Check Run with JSON Output
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          JSON_PAYLOAD='{
+            "name": "Codeowners Plus Report",
+            "head_sha": "${{ github.event.pull_request.head.sha }}",
+            "status": "completed",
+            "conclusion": "success",
+            "output": {
+              "title": "Codeowners Plus Report",
+              "summary": "Codeowners Plus analysis JSON data including file owners and results",
+              "text": ${{ toJSON(steps.codeowners-plus.outputs.data) }}
+            }
+          }'
+          # Use the 'gh' CLI to interact with the GitHub API
+          echo "$JSON_PAYLOAD" | gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${{ github.repository }}/check-runs" \
+            --input -
