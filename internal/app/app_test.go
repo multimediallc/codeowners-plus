@@ -1110,7 +1110,8 @@ func TestBuildOutputData(t *testing.T) {
 	message := "Test message"
 	stillRequired := []string{"@user1"}
 
-	output := app.buildOutputData(success, message, stillRequired)
+	output := NewOutputData(app.codeowners)
+	output.UpdateOutputData(success, message, stillRequired)
 
 	if !output.Success {
 		t.Errorf("expected Success true, got false")

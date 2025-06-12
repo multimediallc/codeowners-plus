@@ -240,7 +240,7 @@ func TestGITHUBOUTPUT(t *testing.T) {
 		_ = os.Setenv("GITHUB_OUTPUT", tmpFile.Name())
 
 		// Test data
-		testOutputData := app.OutputData{
+		testOutputData := &app.OutputData{
 			FileOwners: map[string][]string{
 				"file1.go": {"@user1", "@user2"},
 				"file2.go": {"@user3"},
@@ -322,7 +322,7 @@ func TestGITHUBOUTPUT(t *testing.T) {
 		_ = os.Unsetenv("GITHUB_OUTPUT")
 
 		// Test data
-		testOutputData := app.OutputData{
+		testOutputData := &app.OutputData{
 			FileOwners: map[string][]string{
 				"file1.go": {"@user1"},
 			},
