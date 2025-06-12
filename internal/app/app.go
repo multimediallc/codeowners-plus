@@ -24,6 +24,31 @@ type OutputData struct {
 	Message       string              `json:"message"`
 }
 
+func NewOutputData(co codeowners.CodeOwners) *OutputData {
+	fileOwners := make(map[string][]string)
+	fileOptional := make(map[string][]string)
+	for file, reviewers := range co.FileRequired() {
+		fileOwners[file] = reviewers.Flatten()
+	}
+	for file, reviewers := range co.FileOptional() {
+		fileOptional[file] = reviewers.Flatten()
+	}
+	return &OutputData{
+		FileOwners:    fileOwners,
+		FileOptional:  fileOptional,
+		UnownedFiles:  co.UnownedFiles(),
+		StillRequired: nil,
+		Success:       false,
+		Message:       "",
+	}
+}
+
+func (od *OutputData) UpdateOutputData(success bool, message string, stillRequired []string) {
+	od.Success = success
+	od.Message = message
+	od.StillRequired = stillRequired
+}
+
 // Config holds the application configuration
 type Config struct {
 	Token         string
@@ -73,30 +98,11 @@ func (a *App) printWarn(format string, args ...interface{}) {
 	_, _ = fmt.Fprintf(a.config.WarningBuffer, format, args...)
 }
 
-func (a *App) buildOutputData(success bool, message string, stillRequired []string) OutputData {
-	fileOwners := make(map[string][]string)
-	fileOptional := make(map[string][]string)
-	for file, reviewers := range a.codeowners.FileRequired() {
-		fileOwners[file] = reviewers.Flatten()
-	}
-	for file, reviewers := range a.codeowners.FileOptional() {
-		fileOptional[file] = reviewers.Flatten()
-	}
-	return OutputData{
-		FileOwners:    fileOwners,
-		FileOptional:  fileOptional,
-		UnownedFiles:  a.codeowners.UnownedFiles(),
-		StillRequired: stillRequired,
-		Success:       success,
-		Message:       message,
-	}
-}
-
 // Run executes the application logic
-func (a *App) Run() (OutputData, error) {
+func (a *App) Run() (*OutputData, error) {
 	// Initialize PR
 	if err := a.client.InitPR(a.config.PR); err != nil {
-		return OutputData{}, fmt.Errorf("InitPR Error: %v", err)
+		return &OutputData{}, fmt.Errorf("InitPR Error: %v", err)
 	}
 	a.printDebug("PR: %d\n", a.client.PR().GetNumber())
 
@@ -119,14 +125,14 @@ func (a *App) Run() (OutputData, error) {
 	a.printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
 	gitDiff, err := git.NewDiff(diffContext)
 	if err != nil {
-		return OutputData{}, fmt.Errorf("NewGitDiff Error: %v", err)
+		return &OutputData{}, fmt.Errorf("NewGitDiff Error: %v", err)
 	}
 	a.gitDiff = gitDiff
 
 	// Initialize codeowners
 	codeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), a.config.WarningBuffer)
 	if err != nil {
-		return OutputData{}, fmt.Errorf("NewCodeOwners Error: %v", err)
+		return &OutputData{}, fmt.Errorf("NewCodeOwners Error: %v", err)
 	}
 	a.codeowners = codeOwners
 
@@ -143,14 +149,16 @@ func (a *App) Run() (OutputData, error) {
 	if a.config.Verbose {
 		a.printFileOwners(codeOwners)
 	}
+	outputData := NewOutputData(a.codeowners)
 
 	// Process approvals and reviewers
 	success, message, stillRequired, err := a.processApprovalsAndReviewers()
 	if err != nil {
-		return OutputData{}, err
+		return outputData, err
 	}
 
-	outputData := a.buildOutputData(success, message, stillRequired)
+	outputData.UpdateOutputData(success, message, stillRequired)
+
 	return outputData, nil
 }
 

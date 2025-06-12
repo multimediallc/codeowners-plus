@@ -97,7 +97,7 @@ func outputAndExit(w io.Writer, shouldFail bool, message string) {
 }
 
 // writeGITHUBOUTPUT writes the OutputData to the GITHUB_OUTPUT file in the correct format
-func writeGITHUBOUTPUT(outputData app.OutputData) error {
+func writeGITHUBOUTPUT(outputData *app.OutputData) error {
 	githubOutput := os.Getenv("GITHUB_OUTPUT")
 	if githubOutput == "" {
 		return nil // No GITHUB_OUTPUT environment variable set
