@@ -3,9 +3,10 @@ package codeowners
 import (
 	"errors"
 	"io"
+	"slices"
 	"strings"
 
-	"github.com/multimediallc/codeowners-plus/pkg/functional"
+	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
 // CodeOwners represents a collection of owned files, with reverse lookups for owners and reviewers
@@ -30,6 +31,10 @@ type CodeOwners interface {
 
 	// ApplyApprovals marks the given approvers as satisfied
 	ApplyApprovals(approvers []string)
+
+	// AddInlineOwners merges additional required owners for a specific file, typically
+	// coming from inline ownership blocks. Owners already present are deduplicated.
+	AddInlineOwners(file string, owners ReviewerGroups)
 }
 
 // New creates a new CodeOwners object from a root path and a list of diff files
@@ -114,6 +119,37 @@ func (om *ownersMap) ApplyApprovals(approvers []string) {
 	for _, user := range approvers {
 		applyApproved(user)
 	}
+}
+
+// AddInlineOwners appends the given reviewer groups to the required list for the
+// specified file, deduplicating and updating reverse lookup maps.
+// TODO|ZB should we rename this?  is it actually specific to inline owners?
+func (om *ownersMap) AddInlineOwners(file string, owners ReviewerGroups) {
+	fo, ok := om.fileToOwner[file]
+	if !ok {
+		foPtr := newFileOwners()
+		om.fileToOwner[file] = *foPtr
+		fo = om.fileToOwner[file]
+	}
+	// Merge while avoiding duplicates at pointer level.
+	existing := fo.requiredReviewers
+	for _, rg := range owners {
+		duplicate := false
+		for _, ex := range existing {
+			if slices.Equal(ex.Names, rg.Names) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			fo.requiredReviewers = append(fo.requiredReviewers, rg)
+			existing = append(existing, rg)
+			for _, name := range rg.Names {
+				om.nameReviewerMap[name] = append(om.nameReviewerMap[name], rg)
+			}
+		}
+	}
+	om.fileToOwner[file] = fo
 }
 
 type ownerTreeNode struct {

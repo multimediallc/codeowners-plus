@@ -1,0 +1,13 @@
+* @base
+# This is a comment
+b.py @b-owner
+**/*test.ts @base-test
+test_* @base-test
+
+backend/** @backend
+
+& models* @devops
+& **/*test* @core
+? a.py @junior-devs
+# Bad rule - no owner - will be ignored
+a.py
