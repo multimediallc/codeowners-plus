@@ -1,0 +1,4 @@
+* @frontend
+b.ts @b-owner
+**/*test* @frontend-test
+& **/*test* @frontend-core

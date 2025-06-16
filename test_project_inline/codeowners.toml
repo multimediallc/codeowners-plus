@@ -1,0 +1,12 @@
+unskippable_reviewers = ["@user1", "@user2"]
+
+# Test nil int value
+# max_reviews = 2
+
+ignore = ["ignored"]
+
+[enforcement]
+approval = false
+fail_check = true
+
+inline_ownership_enabled = true

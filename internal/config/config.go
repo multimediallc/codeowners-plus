@@ -9,12 +9,13 @@ import (
 )
 
 type Config struct {
-	MaxReviews           *int         `toml:"max_reviews"`
-	MinReviews           *int         `toml:"min_reviews"`
-	UnskippableReviewers []string     `toml:"unskippable_reviewers"`
-	Ignore               []string     `toml:"ignore"`
-	Enforcement          *Enforcement `toml:"enforcement"`
-	HighPriorityLabels   []string     `toml:"high_priority_labels"`
+	MaxReviews             *int         `toml:"max_reviews"`
+	MinReviews             *int         `toml:"min_reviews"`
+	UnskippableReviewers   []string     `toml:"unskippable_reviewers"`
+	Ignore                 []string     `toml:"ignore"`
+	Enforcement            *Enforcement `toml:"enforcement"`
+	HighPriorityLabels     []string     `toml:"high_priority_labels"`
+	InlineOwnershipEnabled bool         `toml:"inline_ownership_enabled"`
 }
 
 type Enforcement struct {
@@ -28,12 +29,13 @@ func ReadConfig(path string) (*Config, error) {
 	}
 
 	defaultConfig := &Config{
-		MaxReviews:           nil,
-		MinReviews:           nil,
-		UnskippableReviewers: []string{},
-		Ignore:               []string{},
-		Enforcement:          &Enforcement{Approval: false, FailCheck: true},
-		HighPriorityLabels:   []string{},
+		MaxReviews:             nil,
+		MinReviews:             nil,
+		UnskippableReviewers:   []string{},
+		Ignore:                 []string{},
+		Enforcement:            &Enforcement{Approval: false, FailCheck: true},
+		HighPriorityLabels:     []string{},
+		InlineOwnershipEnabled: false,
 	}
 
 	fileName := path + "codeowners.toml"

@@ -108,6 +108,8 @@ func (m *mockCodeOwners) UnownedFiles() []string {
 	return m.unownedFiles
 }
 
+func (m *mockCodeOwners) AddInlineOwners(file string, owners codeowners.ReviewerGroups) {}
+
 type mockGitHubClient struct {
 	pr                        *github.PullRequest
 	userReviewerMapError      error

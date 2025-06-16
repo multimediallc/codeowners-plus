@@ -1,0 +1,184 @@
+diff --git a/test_project_inline/frontend/a.test.ts b/test_project_inline/frontend/a.test.ts
+index 7c61472..fbc730d 100644
+--- a/test_project_inline/frontend/a.test.ts
++++ b/test_project_inline/frontend/a.test.ts
+@@ -5,3 +5,7 @@ console.log("quux");
+ console.log("quuz");
+ console.log("corge");
+ // </CO-inline>
++
++// <CO-inline={@qa-friend}>
++console.log("looks like a new owner in this block");
++// </CO-inline>
+diff --git a/test_project_inline/frontend/b.ts b/test_project_inline/frontend/b.ts
+index d4c26b5..545b64d 100644
+--- a/test_project_inline/frontend/b.ts
++++ b/test_project_inline/frontend/b.ts
+@@ -1,3 +1,3 @@
+-// <CO-inline={@frontend-inline}>
++// <CO-inline={@frontend-inline-misspellede}>
+ console.log("bop");
+ // </CO-inline>
+diff --git a/test_project_inline/models.py b/test_project_inline/models.py
+index 8639e1b..7cea42e 100644
+--- a/test_project_inline/models.py
++++ b/test_project_inline/models.py
+@@ -1,4 +1,5 @@
+ # <CO-inline={@model-owner,@devops}>
+ world
+-foo
+ # </CO-inline>
++
++ll
+diff --git a/test_project_inline/test_a.py b/test_project_inline/test_a.py
+:...skipping...
+diff --git a/test_project_inline/frontend/a.test.ts b/test_project_inline/frontend/a.test.ts
+index 7c61472..fbc730d 100644
+--- a/test_project_inline/frontend/a.test.ts
++++ b/test_project_inline/frontend/a.test.ts
+@@ -5,3 +5,7 @@ console.log("quux");
+ console.log("quuz");
+ console.log("corge");
+ // </CO-inline>
++
++// <CO-inline={@qa-friend}>
++console.log("looks like a new owner in this block");
++// </CO-inline>
+diff --git a/test_project_inline/frontend/b.ts b/test_project_inline/frontend/b.ts
+index d4c26b5..545b64d 100644
+--- a/test_project_inline/frontend/b.ts
++++ b/test_project_inline/frontend/b.ts
+@@ -1,3 +1,3 @@
+-// <CO-inline={@frontend-inline}>
++// <CO-inline={@frontend-inline-misspellede}>
+ console.log("bop");
+ // </CO-inline>
+diff --git a/test_project_inline/models.py b/test_project_inline/models.py
+index 8639e1b..7cea42e 100644
+--- a/test_project_inline/models.py
++++ b/test_project_inline/models.py
+@@ -1,4 +1,5 @@
+ # <CO-inline={@model-owner,@devops}>
+ world
+-foo
+ # </CO-inline>
++
++ll
+diff --git a/test_project_inline/test_a.py b/test_project_inline/test_a.py
+index 5716ca5..c4c70b0 100644
+:...skipping...
+diff --git a/test_project_inline/frontend/a.test.ts b/test_project_inline/frontend/a.test.ts
+index 7c61472..fbc730d 100644
+--- a/test_project_inline/frontend/a.test.ts
++++ b/test_project_inline/frontend/a.test.ts
+@@ -5,3 +5,7 @@ console.log("quux");
+ console.log("quuz");
+ console.log("corge");
+ // </CO-inline>
++
++// <CO-inline={@qa-friend}>
++console.log("looks like a new owner in this block");
++// </CO-inline>
+diff --git a/test_project_inline/frontend/b.ts b/test_project_inline/frontend/b.ts
+index d4c26b5..545b64d 100644
+--- a/test_project_inline/frontend/b.ts
++++ b/test_project_inline/frontend/b.ts
+@@ -1,3 +1,3 @@
+-// <CO-inline={@frontend-inline}>
++// <CO-inline={@frontend-inline-misspellede}>
+ console.log("bop");
+ // </CO-inline>
+diff --git a/test_project_inline/models.py b/test_project_inline/models.py
+index 8639e1b..7cea42e 100644
+--- a/test_project_inline/models.py
++++ b/test_project_inline/models.py
+@@ -1,4 +1,5 @@
+ # <CO-inline={@model-owner,@devops}>
+ world
+-foo
+ # </CO-inline>
++
++ll
+diff --git a/test_project_inline/test_a.py b/test_project_inline/test_a.py
+index 5716ca5..c4c70b0 100644
+--- a/test_project_inline/test_a.py
++++ b/test_project_inline/test_a.py
+:...skipping...
+diff --git a/test_project_inline/frontend/a.test.ts b/test_project_inline/frontend/a.test.ts
+index 7c61472..fbc730d 100644
+--- a/test_project_inline/frontend/a.test.ts
++++ b/test_project_inline/frontend/a.test.ts
+@@ -5,3 +5,7 @@ console.log("quux");
+ console.log("quuz");
+ console.log("corge");
+ // </CO-inline>
++
++// <CO-inline={@qa-friend}>
++console.log("looks like a new owner in this block");
++// </CO-inline>
+diff --git a/test_project_inline/frontend/b.ts b/test_project_inline/frontend/b.ts
+index d4c26b5..545b64d 100644
+--- a/test_project_inline/frontend/b.ts
++++ b/test_project_inline/frontend/b.ts
+@@ -1,3 +1,3 @@
+-// <CO-inline={@frontend-inline}>
++// <CO-inline={@frontend-inline-misspellede}>
+ console.log("bop");
+ // </CO-inline>
+diff --git a/test_project_inline/models.py b/test_project_inline/models.py
+index 8639e1b..7cea42e 100644
+--- a/test_project_inline/models.py
++++ b/test_project_inline/models.py
+@@ -1,4 +1,5 @@
+ # <CO-inline={@model-owner,@devops}>
+ world
+-foo
+ # </CO-inline>
++
++ll
+diff --git a/test_project_inline/test_a.py b/test_project_inline/test_a.py
+index 5716ca5..c4c70b0 100644
+--- a/test_project_inline/test_a.py
++++ b/test_project_inline/test_a.py
+@@ -1 +1 @@
+-bar
+:...skipping...
+diff --git a/test_project_inline/frontend/a.test.ts b/test_project_inline/frontend/a.test.ts
+index 7c61472..fbc730d 100644
+--- a/test_project_inline/frontend/a.test.ts
++++ b/test_project_inline/frontend/a.test.ts
+@@ -5,3 +5,7 @@ console.log("quux");
+ console.log("quuz");
+ console.log("corge");
+ // </CO-inline>
++
++// <CO-inline={@qa-friend}>
++console.log("looks like a new owner in this block");
++// </CO-inline>
+diff --git a/test_project_inline/frontend/b.ts b/test_project_inline/frontend/b.ts
+index d4c26b5..545b64d 100644
+--- a/test_project_inline/frontend/b.ts
++++ b/test_project_inline/frontend/b.ts
+@@ -1,3 +1,3 @@
+-// <CO-inline={@frontend-inline}>
++// <CO-inline={@frontend-inline-misspellede}>
+ console.log("bop");
+ // </CO-inline>
+diff --git a/test_project_inline/models.py b/test_project_inline/models.py
+index 8639e1b..7cea42e 100644
+--- a/test_project_inline/models.py
++++ b/test_project_inline/models.py
+@@ -1,4 +1,5 @@
+ # <CO-inline={@model-owner,@devops}>
+ world
+-foo
+ # </CO-inline>
++
++ll
+diff --git a/test_project_inline/test_a.py b/test_project_inline/test_a.py
+index 5716ca5..c4c70b0 100644
+--- a/test_project_inline/test_a.py
++++ b/test_project_inline/test_a.py
+@@ -1 +1 @@
+-bar
++bar d

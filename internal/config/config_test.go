@@ -179,6 +179,21 @@ func TestReadConfigFileError(t *testing.T) {
 	}
 }
 
+func TestReadConfig_InlineOwnershipEnabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	content := `inline_ownership_enabled = true`
+	if err := os.WriteFile(filepath.Join(tmpDir, "codeowners.toml"), []byte(content), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	cfg, err := ReadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("ReadConfig error: %v", err)
+	}
+	if !cfg.InlineOwnershipEnabled {
+		t.Errorf("expected InlineOwnershipEnabled true, got false")
+	}
+}
+
 // Helper functions
 func intPtr(i int) *int {
 	return &i

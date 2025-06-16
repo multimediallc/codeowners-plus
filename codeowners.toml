@@ -5,7 +5,7 @@ max_reviews = 2
 # `unskippable_reviewers` allows you to specify reviewers that cannot be skipped via the max_reviews setting
 unskippable_reviewers = ["@BakerNet"]
 # `ignore` allows you to specify directories that should be ignored by the codeowners check
-ignore = ["test_project"]
+ignore = ["test_project", "test_project_inline"]
 # `high_priority_lables` allows you to specify labels that should be considered high priority
 high_priority_labels = ["P0"]
 
@@ -16,3 +16,5 @@ high_priority_labels = ["P0"]
 approval = false
 # `fail_check` (default true) means the codeowners GHA check will fail if the codeowners check fails
 fail_check = true
+# `inline_ownership_enabled` (default false) enables parsing of inline ownership tags in source files
+inline_ownership_enabled = true
