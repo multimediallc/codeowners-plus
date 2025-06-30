@@ -187,6 +187,17 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	if err != nil {
 		return false, message, nil, fmt.Errorf("GetCurrentApprovals Error: %v", err)
 	}
+
+	// Check for bypass approvals
+	var allowedBypassUsers []string
+	if a.Conf.AdminBypass != nil && a.Conf.AdminBypass.Enabled {
+		allowedBypassUsers = a.Conf.AdminBypass.AllowedUsers
+	}
+	hasValidBypass, err := a.client.ContainsValidBypassApproval(allowedBypassUsers)
+	if err != nil {
+		return false, message, nil, fmt.Errorf("ContainsValidBypassApproval Error: %v", err)
+	}
+
 	a.printDebug("Current Approvals: %+v\n", ghApprovals)
 
 	// Process token owner approval if enabled
@@ -226,6 +237,21 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	err = a.addOptionalCcComment(allOptionalReviewerNames)
 	if err != nil {
 		return false, message, nil, fmt.Errorf("failed to add optional CC comment: %w", err)
+	}
+
+	// If we have a valid bypass, approve with token owner if needed and return success
+	if hasValidBypass {
+		// If enforcement approval is enabled and token owner approval is missing,
+		// approve the PR with the token owner. This is necessary because users
+		// typically have the token owner as a GitHub CODEOWNER
+		if a.Conf.Enforcement.Approval && tokenOwnerApproval == nil {
+			err := a.client.ApprovePR()
+			if err != nil {
+				a.printWarn("Warning: Failed to approve PR with token owner during bypass: %v\n", err)
+			}
+		}
+		message = "SUCCESS: Codeowners requirements bypassed by administrator"
+		return true, message, []string{}, nil
 	}
 
 	// Collect still required data

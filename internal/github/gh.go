@@ -50,6 +50,8 @@ type Client interface {
 	IsSubstringInComments(substring string, since *time.Time) (bool, error)
 	CheckApprovals(fileReviewerMap map[string][]string, approvals []*CurrentApproval, originalDiff git.Diff) (approvers []string, staleApprovals []*CurrentApproval)
 	IsInLabels(labels []string) (bool, error)
+	IsRepositoryAdmin(username string) (bool, error)
+	ContainsValidBypassApproval(allowedUsers []string) (bool, error)
 }
 
 type GHClient struct {
@@ -179,6 +181,50 @@ func (gh *GHClient) approvals() []*github.PullRequestReview {
 		return approval.GetState() == "APPROVED"
 	})
 	return approvals
+}
+
+// ContainsValidBypassApproval checks if any approval is a valid admin bypass approval
+func (gh *GHClient) ContainsValidBypassApproval(allowedUsers []string) (bool, error) {
+	if gh.pr == nil {
+		return false, &NoPRError{}
+	}
+	if gh.reviews == nil {
+		err := gh.InitReviews()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	for _, review := range gh.reviews {
+		// Check if the review body contains bypass text
+		body := review.GetBody()
+		if !strings.Contains(strings.ToLower(body), "codeowners bypass") {
+			continue
+		}
+
+		username := review.GetUser().GetLogin()
+
+		// Check if user is in allowed users list
+		for _, allowedUser := range allowedUsers {
+			if username == allowedUser {
+				return true, nil
+			}
+		}
+
+		// Check if user is repository admin
+		isAdmin, err := gh.IsRepositoryAdmin(username)
+		if err != nil {
+			// Log error but continue checking other approvals
+			fmt.Fprintf(gh.warningBuffer, "Warning: Could not check admin status for user %s: %v\n", username, err)
+			continue
+		}
+
+		if isAdmin {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (gh *GHClient) AllApprovals() ([]*CurrentApproval, error) {
@@ -514,6 +560,20 @@ func (gh *GHClient) CheckApprovals(
 	appovalsWithDiff, badApprovals := getApprovalDiffs(approvals, originalDiff, gh.warningBuffer, gh.infoBuffer)
 	approvers, staleApprovals = checkStale(fileReviewerMap, appovalsWithDiff)
 	return approvers, append(badApprovals, staleApprovals...)
+}
+
+// IsRepositoryAdmin checks if a user has admin permissions for the repository
+func (gh *GHClient) IsRepositoryAdmin(username string) (bool, error) {
+	permission, _, err := gh.client.Repositories.GetPermissionLevel(
+		gh.ctx,
+		gh.owner,
+		gh.repo,
+		username,
+	)
+	if err != nil {
+		return false, err
+	}
+	return permission.GetPermission() == "admin", nil
 }
 
 type ghUserReviewerMap map[string][]string

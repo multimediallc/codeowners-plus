@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-81.8%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-81.6%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -43,6 +43,7 @@ Instead, this tool uses comments to communicate who the required reviews are, an
 These are features missing from GitHub code owners that are supported by Codeowners Plus:
 
 * Smart dismissal of stale reviews (only dismiss review when owned files change, rather than any reviewable push)
+* Admin bypass functionality for emergency overrides by repository administrators
 * Supports multiple owners of files (`AND` ownership rules)
   * GitHub CODEOWNERS supports only `OR` ownership rules, in contrast
 * Directory-level code ownership files to assign fine-grained code ownership
@@ -227,6 +228,14 @@ high_priority_labels = ["high-priority", "urgent"]
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
 # see "Enforcement Options" below for more details
+
+# `admin_bypass` allows repository administrators to bypass codeowner requirements
+[admin_bypass]
+enabled = true          # Enable admin bypass functionality  
+allowed_users = [       # Specific users allowed to bypass (in addition to repo admins)
+  "emergency-contact",
+  "release-manager"
+]
 ```
 
 When a PR has any of the `high_priority_labels`, the comment will look like this:
@@ -268,6 +277,32 @@ With this setup, `@token-owner` will be a GitHub code owner on every PR, and Cod
 
 Unfortunately, `CODEOWNERS` does not support apps/bots as owners despite there being an [active discussion requesting the feature since 2020](https://github.com/orgs/community/discussions/23064).
 Hopefully GitHub adds support for apps/bots as codeowners so this option can become viable for non-org repos.
+
+#### Admin Bypass
+
+Repository administrators can bypass all codeowner requirements in emergency situations by creating a special approval review containing "Codeowners Bypass" text. This feature:
+
+- **Requires authorization**: Only repository admins or users listed in `admin_bypass.allowed_users` can create valid bypass approvals
+- **Guarantee success**: When detected, the PR passes all codeowner checks regardless of missing approvals
+- **Audit trail**: Creates a clear record of who bypassed requirements and when
+
+To use the admin bypass feature:
+
+1. **Enable it in `codeowners.toml`**:
+   ```toml
+   [admin_bypass]
+   enabled = true
+   allowed_users = ["emergency-contact", "release-manager"]  # Optional specific users
+   ```
+
+2. **Create an approval review containing "Codeowners Bypass"** text. This can be done by:
+   - Repository administrators manually approving the PR with "Codeowners Bypass" in their review comment
+   - Users listed in `allowed_users` manually approving with the bypass text
+   - Automated workflows that create approval reviews with the bypass text on behalf of authorized users
+
+3. **Codeowners Plus automatically detects and validates** the bypass approval, immediately marking the PR as passing all codeowner requirements.
+
+The bypass text is case-insensitive, so "codeowners bypass", "Codeowners Bypass", or "CODEOWNERS BYPASS" all work.
 
 ### Quiet Mode
 
