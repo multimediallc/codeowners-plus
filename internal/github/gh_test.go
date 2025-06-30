@@ -3,6 +3,7 @@ package gh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -1287,5 +1288,289 @@ func TestUpdateComment(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestContainsValidBypassApproval(t *testing.T) {
+	tt := []struct {
+		name         string
+		reviews      []*github.PullRequestReview
+		allowedUsers []string
+		adminUsers   []string
+		expected     bool
+		expectError  bool
+	}{
+		{
+			name: "admin user with bypass text",
+			reviews: []*github.PullRequestReview{
+				{
+					ID:   github.Int64(123),
+					Body: github.String("🔓 Codeowners Bypass Approved by admin"),
+					User: &github.User{Login: github.String("admin-user")},
+				},
+			},
+			allowedUsers: []string{},
+			adminUsers:   []string{"admin-user"},
+			expected:     true,
+			expectError:  false,
+		},
+		{
+			name: "allowed user with bypass text",
+			reviews: []*github.PullRequestReview{
+				{
+					ID:   github.Int64(124),
+					Body: github.String("Emergency bypass - codeowners bypass"),
+					User: &github.User{Login: github.String("emergency-user")},
+				},
+			},
+			allowedUsers: []string{"emergency-user"},
+			adminUsers:   []string{},
+			expected:     true,
+			expectError:  false,
+		},
+		{
+			name: "non-admin user with bypass text",
+			reviews: []*github.PullRequestReview{
+				{
+					ID:   github.Int64(125),
+					Body: github.String("codeowners bypass"),
+					User: &github.User{Login: github.String("regular-user")},
+				},
+			},
+			allowedUsers: []string{},
+			adminUsers:   []string{},
+			expected:     false,
+			expectError:  false,
+		},
+		{
+			name: "admin user without bypass text",
+			reviews: []*github.PullRequestReview{
+				{
+					ID:   github.Int64(126),
+					Body: github.String("LGTM"),
+					User: &github.User{Login: github.String("admin-user")},
+				},
+			},
+			allowedUsers: []string{},
+			adminUsers:   []string{"admin-user"},
+			expected:     false,
+			expectError:  false,
+		},
+		{
+			name: "case insensitive bypass text",
+			reviews: []*github.PullRequestReview{
+				{
+					ID:   github.Int64(127),
+					Body: github.String("CODEOWNERS BYPASS"),
+					User: &github.User{Login: github.String("admin-user")},
+				},
+			},
+			allowedUsers: []string{},
+			adminUsers:   []string{"admin-user"},
+			expected:     true,
+			expectError:  false,
+		},
+		{
+			name: "multiple reviews with one bypass",
+			reviews: []*github.PullRequestReview{
+				{
+					ID:   github.Int64(128),
+					Body: github.String("LGTM"),
+					User: &github.User{Login: github.String("regular-user")},
+				},
+				{
+					ID:   github.Int64(129),
+					Body: github.String("codeowners bypass"),
+					User: &github.User{Login: github.String("admin-user")},
+				},
+			},
+			allowedUsers: []string{},
+			adminUsers:   []string{"admin-user"},
+			expected:     true,
+			expectError:  false,
+		},
+		{
+			name:         "no reviews",
+			reviews:      []*github.PullRequestReview{},
+			allowedUsers: []string{},
+			adminUsers:   []string{},
+			expected:     false,
+			expectError:  false,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, server, gh := mockServerAndClient(t)
+			defer server.Close()
+
+			gh.pr = &github.PullRequest{Number: github.Int(123)}
+			gh.reviews = tc.reviews
+
+			// Mock the admin permission check
+			for _, adminUser := range tc.adminUsers {
+				mux.HandleFunc(fmt.Sprintf("/repos/test-owner/test-repo/collaborators/%s/permission", adminUser), func(w http.ResponseWriter, r *http.Request) {
+					response := map[string]interface{}{
+						"permission": "admin",
+					}
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(response)
+				})
+			}
+
+			// Mock non-admin users
+			for _, review := range tc.reviews {
+				userName := review.User.GetLogin()
+				isAdmin := false
+				for _, adminUser := range tc.adminUsers {
+					if userName == adminUser {
+						isAdmin = true
+						break
+					}
+				}
+				if !isAdmin {
+					mux.HandleFunc(fmt.Sprintf("/repos/test-owner/test-repo/collaborators/%s/permission", userName), func(w http.ResponseWriter, r *http.Request) {
+						response := map[string]interface{}{
+							"permission": "write",
+						}
+						w.Header().Set("Content-Type", "application/json")
+						_ = json.NewEncoder(w).Encode(response)
+					})
+				}
+			}
+
+			result, err := gh.ContainsValidBypassApproval(tc.allowedUsers)
+
+			if tc.expectError {
+				if err == nil {
+					t.Error("expected an error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if result != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestContainsValidBypassApprovalNoPR(t *testing.T) {
+	gh := NewClient("test-owner", "test-repo", "test-token").(*GHClient)
+
+	result, err := gh.ContainsValidBypassApproval([]string{})
+
+	if err == nil {
+		t.Error("expected NoPRError, got nil")
+	}
+
+	if result {
+		t.Error("expected false result when no PR is set")
+	}
+
+	var noPRErr *NoPRError
+	if !errors.As(err, &noPRErr) {
+		t.Errorf("expected NoPRError, got %T", err)
+	}
+}
+
+func TestIsRepositoryAdmin(t *testing.T) {
+	tt := []struct {
+		name        string
+		username    string
+		permission  string
+		expected    bool
+		expectError bool
+	}{
+		{
+			name:        "admin user",
+			username:    "admin-user",
+			permission:  "admin",
+			expected:    true,
+			expectError: false,
+		},
+		{
+			name:        "write user",
+			username:    "write-user",
+			permission:  "write",
+			expected:    false,
+			expectError: false,
+		},
+		{
+			name:        "read user",
+			username:    "read-user",
+			permission:  "read",
+			expected:    false,
+			expectError: false,
+		},
+		{
+			name:        "maintain user",
+			username:    "maintain-user",
+			permission:  "maintain",
+			expected:    false,
+			expectError: false,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, server, gh := mockServerAndClient(t)
+			defer server.Close()
+
+			mux.HandleFunc(fmt.Sprintf("/repos/test-owner/test-repo/collaborators/%s/permission", tc.username), func(w http.ResponseWriter, r *http.Request) {
+				if tc.expectError {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+
+				response := map[string]interface{}{
+					"permission": tc.permission,
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(response)
+			})
+
+			result, err := gh.IsRepositoryAdmin(tc.username)
+
+			if tc.expectError {
+				if err == nil {
+					t.Error("expected an error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if result != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestIsRepositoryAdminError(t *testing.T) {
+	mux, server, gh := mockServerAndClient(t)
+	defer server.Close()
+
+	mux.HandleFunc("/repos/test-owner/test-repo/collaborators/error-user/permission", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	result, err := gh.IsRepositoryAdmin("error-user")
+
+	if err == nil {
+		t.Error("expected an error, got nil")
+	}
+
+	if result {
+		t.Error("expected false result on error")
 	}
 }

@@ -312,6 +312,27 @@ func (m *mockGitHubClient) UpdateComment(commentID int64, body string) error {
 	return nil
 }
 
+func (m *mockGitHubClient) IsRepositoryAdmin(username string) (bool, error) {
+	// For testing, assume any user with "admin" in the name is an admin
+	return strings.Contains(username, "admin"), nil
+}
+
+func (m *mockGitHubClient) ContainsValidBypassApproval(allowedUsers []string) (bool, error) {
+	// For testing, check if any approval is from an admin-user with review ID 999
+	for _, approval := range m.currentApprovals {
+		if approval.ReviewID == 999 && strings.Contains(approval.GHLogin, "admin") {
+			return true, nil
+		}
+		// Also check if user is in allowed users list
+		for _, allowedUser := range allowedUsers {
+			if approval.GHLogin == allowedUser {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 func TestNewApp(t *testing.T) {
 	tt := []struct {
 		name        string
@@ -909,6 +930,27 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 			requestedError:   fmt.Errorf("failed to get requested reviewers"),
 			expectError:      true,
 		},
+		{
+			name: "admin bypass approval succeeds",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: []string{"@user2"}},
+			},
+			fileRequiredMap: map[string]codeowners.ReviewerGroups{
+				"file1.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				},
+				"file2.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@user2"}},
+				},
+			},
+			currentApprovals: []*gh.CurrentApproval{
+				{GHLogin: "admin-user", ReviewID: 999, Reviewers: []string{}},
+			},
+			expectError:       false,
+			expectSuccess:     true,
+			expectedApprovals: []string{"@user1", "@user2"},
+		},
 	}
 
 	for _, tc := range tt {
@@ -959,6 +1001,10 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 					},
 					MaxReviews: tc.maxReviews,
 					MinReviews: tc.minReviews,
+					AdminBypass: &owners.AdminBypass{
+						Enabled:      tc.name == "admin bypass approval succeeds",
+						AllowedUsers: []string{},
+					},
 				},
 			}
 
