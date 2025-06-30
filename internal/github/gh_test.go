@@ -1414,7 +1414,7 @@ func TestContainsValidBypassApproval(t *testing.T) {
 						"permission": "admin",
 					}
 					w.Header().Set("Content-Type", "application/json")
-					json.NewEncoder(w).Encode(response)
+					_ = json.NewEncoder(w).Encode(response)
 				})
 			}
 
@@ -1434,7 +1434,7 @@ func TestContainsValidBypassApproval(t *testing.T) {
 							"permission": "write",
 						}
 						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
+						_ = json.NewEncoder(w).Encode(response)
 					})
 				}
 			}
@@ -1462,17 +1462,17 @@ func TestContainsValidBypassApproval(t *testing.T) {
 
 func TestContainsValidBypassApprovalNoPR(t *testing.T) {
 	gh := NewClient("test-owner", "test-repo", "test-token").(*GHClient)
-	
+
 	result, err := gh.ContainsValidBypassApproval([]string{})
-	
+
 	if err == nil {
 		t.Error("expected NoPRError, got nil")
 	}
-	
+
 	if result {
 		t.Error("expected false result when no PR is set")
 	}
-	
+
 	var noPRErr *NoPRError
 	if !errors.As(err, &noPRErr) {
 		t.Errorf("expected NoPRError, got %T", err)
@@ -1481,11 +1481,11 @@ func TestContainsValidBypassApprovalNoPR(t *testing.T) {
 
 func TestIsRepositoryAdmin(t *testing.T) {
 	tt := []struct {
-		name         string
-		username     string
-		permission   string
-		expected     bool
-		expectError  bool
+		name        string
+		username    string
+		permission  string
+		expected    bool
+		expectError bool
 	}{
 		{
 			name:        "admin user",
@@ -1496,7 +1496,7 @@ func TestIsRepositoryAdmin(t *testing.T) {
 		},
 		{
 			name:        "write user",
-			username:    "write-user", 
+			username:    "write-user",
 			permission:  "write",
 			expected:    false,
 			expectError: false,
@@ -1527,12 +1527,12 @@ func TestIsRepositoryAdmin(t *testing.T) {
 					w.WriteHeader(http.StatusNotFound)
 					return
 				}
-				
+
 				response := map[string]interface{}{
 					"permission": tc.permission,
 				}
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			})
 
 			result, err := gh.IsRepositoryAdmin(tc.username)
@@ -1565,11 +1565,11 @@ func TestIsRepositoryAdminError(t *testing.T) {
 	})
 
 	result, err := gh.IsRepositoryAdmin("error-user")
-	
+
 	if err == nil {
 		t.Error("expected an error, got nil")
 	}
-	
+
 	if result {
 		t.Error("expected false result on error")
 	}

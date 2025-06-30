@@ -215,7 +215,7 @@ func (gh *GHClient) ContainsValidBypassApproval(allowedUsers []string) (bool, er
 		isAdmin, err := gh.IsRepositoryAdmin(username)
 		if err != nil {
 			// Log error but continue checking other approvals
-			fmt.Fprintf(gh.warningBuffer, "Warning: Could not check admin status for user %s: %v\n", username, err)
+			_, _ = fmt.Fprintf(gh.warningBuffer, "Warning: Could not check admin status for user %s: %v\n", username, err)
 			continue
 		}
 
