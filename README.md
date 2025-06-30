@@ -282,24 +282,22 @@ Repository administrators can bypass all codeowner requirements in emergency sit
 - **Guarantee success**: When detected, the PR passes all codeowner checks regardless of missing approvals
 - **Audit trail**: Creates a clear record of who bypassed requirements and when
 
-To use the admin bypass feature:
+`codeowners.toml`:
+ ```toml
+ [admin_bypass]
+ # `enabled` (default false) enables checking reviews for a bypass from repository admins
+ #   and allowed_users
+ enabled = true
+ # `allowed_users` (default empty) includes a list of users who can trigger Admin Bypass
+ allowed_users = ["emergency-contact", "release-manager"]  # Optional specific users
+ ```
 
-1. **Enable it in `codeowners.toml`**:
-   ```toml
-   [admin_bypass]
-   # `enabled` (default false) enables checking reviews for a bypass from repository admins
-   #   and allowed_users
-   enabled = true
-   # `allowed_users` (default empty) includes a list of users who can trigger Admin Bypass
-   allowed_users = ["emergency-contact", "release-manager"]  # Optional specific users
-   ```
+To trigger the admin bypass feature, **Create an approval review containing "Codeowners Bypass"** text. This can be done by:
+- Repository administrators manually approving the PR with "Codeowners Bypass" in their review comment
+- Users listed in `allowed_users` manually approving with the bypass text
+- Automated workflows that create approval reviews with the bypass text on behalf of authorized users
 
-2. **Create an approval review containing "Codeowners Bypass"** text. This can be done by:
-   - Repository administrators manually approving the PR with "Codeowners Bypass" in their review comment
-   - Users listed in `allowed_users` manually approving with the bypass text
-   - Automated workflows that create approval reviews with the bypass text on behalf of authorized users
-
-3. **Codeowners Plus automatically detects and validates** the bypass approval, immediately marking the PR as passing all codeowner requirements.
+Codeowners Plus automatically detects and validates the bypass approval, immediately marking the PR as passing all codeowner requirements.
 
 The bypass text is case-insensitive, so "codeowners bypass", "Codeowners Bypass", or "CODEOWNERS BYPASS" all work.
 
