@@ -283,14 +283,14 @@ Repository administrators can bypass all codeowner requirements in emergency sit
 - **Audit trail**: Creates a clear record of who bypassed requirements and when
 
 `codeowners.toml`:
- ```toml
- [admin_bypass]
- # `enabled` (default false) enables checking reviews for a bypass from repository admins
- #   and allowed_users
- enabled = true
- # `allowed_users` (default empty) includes a list of users who can trigger Admin Bypass
- allowed_users = ["emergency-contact", "release-manager"]  # Optional specific users
- ```
+```toml
+[admin_bypass]
+# `enabled` (default false) enables checking reviews for a bypass from repository admins
+#   and allowed_users
+enabled = true
+# `allowed_users` (default empty) includes a list of users who can trigger Admin Bypass
+allowed_users = ["emergency-contact", "release-manager"]  # Optional specific users
+```
 
 To trigger the admin bypass feature, **Create an approval review containing "Codeowners Bypass"** text. This can be done by:
 - Repository administrators manually approving the PR with "Codeowners Bypass" in their review comment
