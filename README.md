@@ -231,11 +231,7 @@ high_priority_labels = ["high-priority", "urgent"]
 
 # `admin_bypass` allows repository administrators to bypass codeowner requirements
 [admin_bypass]
-enabled = true          # Enable admin bypass functionality  
-allowed_users = [       # Specific users allowed to bypass (in addition to repo admins)
-  "emergency-contact",
-  "release-manager"
-]
+# see "Admin Bypass" below for more details
 ```
 
 When a PR has any of the `high_priority_labels`, the comment will look like this:
@@ -291,7 +287,10 @@ To use the admin bypass feature:
 1. **Enable it in `codeowners.toml`**:
    ```toml
    [admin_bypass]
+   # `enabled` (default false) enables checking reviews for a bypass from repository admins
+   #   and allowed_users
    enabled = true
+   # `allowed_users` (default empty) includes a list of users who can trigger Admin Bypass
    allowed_users = ["emergency-contact", "release-manager"]  # Optional specific users
    ```
 
