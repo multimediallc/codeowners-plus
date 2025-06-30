@@ -292,7 +292,7 @@ enabled = true
 allowed_users = ["emergency-contact", "release-manager"]  # Optional specific users
 ```
 
-To trigger the admin bypass feature, **Create an approval review containing "Codeowners Bypass"** text. This can be done by:
+To trigger the admin bypass feature, **Create an approval review containing "Codeowners Bypass" text**. This can be done by:
 - Repository administrators manually approving the PR with "Codeowners Bypass" in their review comment
 - Users listed in `allowed_users` manually approving with the bypass text
 - Automated workflows that create approval reviews with the bypass text on behalf of authorized users
