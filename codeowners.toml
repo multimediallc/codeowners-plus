@@ -8,8 +8,8 @@ unskippable_reviewers = ["@BakerNet"]
 ignore = ["test_project"]
 # `high_priority_lables` allows you to specify labels that should be considered high priority
 high_priority_labels = ["P0"]
-# `detailed_owners` (default false) means the codeowners will include a collapsible list of files and owners in its review comment
-detailed_owners = false
+# `detailed_reviewers` (default false) means the codeowners will include a collapsible list of files and owners in its review comment
+detailed_reviewers = false
 
 # `enforcement` allows you to specify how the codeowners check should be enforced
 [enforcement]

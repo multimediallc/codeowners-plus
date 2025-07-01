@@ -288,7 +288,7 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 		comment += "\n\nThe PR has received the max number of required reviews. No further action is required."
 	}
 
-	if a.Conf.DetailedOwners {
+	if a.Conf.DetailedReviewers {
 		comment += "\n\n<details><summary>Show detailed file reviewers</summary>\n"
 		comment += a.getFileOwnersMapToString(a.codeowners.FileRequired())
 		comment += "</details>"

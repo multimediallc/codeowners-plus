@@ -1133,18 +1133,18 @@ func TestBuildOutputData(t *testing.T) {
 	}
 }
 
-func TestCommentDetailedOwners(t *testing.T) {
+func TestCommentDetailedReviewers(t *testing.T) {
 	tt := []struct {
-		name               string
-		detailedCodeowners bool
+		name              string
+		detailedReviewers bool
 	}{
 		{
-			name:               "exclude detailed owners when config off",
-			detailedCodeowners: false,
+			name:              "exclude detailed owners when config off",
+			detailedReviewers: false,
 		},
 		{
-			name:               "include detailed owners when config on",
-			detailedCodeowners: true,
+			name:              "include detailed owners when config on",
+			detailedReviewers: true,
 		},
 	}
 
@@ -1174,7 +1174,7 @@ func TestCommentDetailedOwners(t *testing.T) {
 				},
 				Conf: &owners.Config{
 					HighPriorityLabels: []string{},
-					DetailedOwners:     tc.detailedCodeowners,
+					DetailedReviewers:  tc.detailedReviewers,
 				},
 			}
 			err := app.addReviewStatusComment(requiredOwners, false)
@@ -1182,15 +1182,15 @@ func TestCommentDetailedOwners(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			detailedOwnersSnippet := "\n\n<details><summary>Show detailed file reviewers</summary>\n" +
+			DetailedReviewersSnippet := "\n\n<details><summary>Show detailed file reviewers</summary>\n" +
 				"- file1.go: [@user1 @user2]\n" +
 				"- file2.go: [@user1]\n"
 
-			containsDetailedOwnersSnippet := strings.Contains(mockGH.AddCommentInput, detailedOwnersSnippet)
+			containsDetailedReviewersSnippet := strings.Contains(mockGH.AddCommentInput, DetailedReviewersSnippet)
 
-			if tc.detailedCodeowners != containsDetailedOwnersSnippet {
+			if tc.detailedReviewers != containsDetailedReviewersSnippet {
 				t.Errorf("expected comment to include detailed owners to be %t, got %t ",
-					tc.detailedCodeowners, containsDetailedOwnersSnippet)
+					tc.detailedReviewers, containsDetailedReviewersSnippet)
 			}
 
 		})
