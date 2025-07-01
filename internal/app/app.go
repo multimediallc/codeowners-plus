@@ -288,6 +288,12 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 		comment += "\n\nThe PR has received the max number of required reviews. No further action is required."
 	}
 
+	if a.Conf.DetailedOwners {
+		comment += "\n\n<details><summary>Show detailed required file reviewers</summary>"
+		comment += a.getFileOwnersString(a.codeowners.FileRequired())
+		comment += "</details>"
+	}
+
 	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
 	existingComment, existingFound, err := a.client.FindExistingComment(commentPrefix, &fiveDaysAgo)
 	if err != nil {
@@ -421,14 +427,17 @@ func (a *App) requestReviews() error {
 }
 
 func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
-	fileRequired := codeOwners.FileRequired()
+	codeOwners.FileRequired()
 	a.printDebug("File Reviewers:\n")
-	for file, reviewers := range fileRequired {
-		a.printDebug("- %s: %+v\n", file, reviewers.Flatten())
-	}
-	fileOptional := codeOwners.FileOptional()
+	a.printDebug(a.getFileOwnersString(codeOwners.FileRequired()))
 	a.printDebug("File Optional:\n")
-	for file, reviewers := range fileOptional {
-		a.printDebug("- %s: %+v\n", file, reviewers.Flatten())
+	a.printDebug(a.getFileOwnersString(codeOwners.FileOptional()))
+}
+
+func (a *App) getFileOwnersString(fileReviewers map[string]codeowners.ReviewerGroups) string {
+	output := ""
+	for file, reviewers := range fileReviewers {
+		output += fmt.Sprintf("- %s: %+v\n", file, reviewers.Flatten())
 	}
+	return output
 }
