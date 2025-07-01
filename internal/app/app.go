@@ -289,8 +289,8 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 	}
 
 	if a.Conf.DetailedOwners {
-		comment += "\n\n<details><summary>Show detailed required file reviewers</summary>"
-		comment += a.getFileOwnersString(a.codeowners.FileRequired())
+		comment += "\n\n<details><summary>Show detailed file reviewers</summary>\n"
+		comment += a.getFileOwnersMapToString(a.codeowners.FileRequired())
 		comment += "</details>"
 	}
 
@@ -429,12 +429,12 @@ func (a *App) requestReviews() error {
 func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
 	codeOwners.FileRequired()
 	a.printDebug("File Reviewers:\n")
-	a.printDebug(a.getFileOwnersString(codeOwners.FileRequired()))
+	a.printDebug(a.getFileOwnersMapToString(codeOwners.FileRequired()))
 	a.printDebug("File Optional:\n")
-	a.printDebug(a.getFileOwnersString(codeOwners.FileOptional()))
+	a.printDebug(a.getFileOwnersMapToString(codeOwners.FileOptional()))
 }
 
-func (a *App) getFileOwnersString(fileReviewers map[string]codeowners.ReviewerGroups) string {
+func (a *App) getFileOwnersMapToString(fileReviewers map[string]codeowners.ReviewerGroups) string {
 	output := ""
 	for file, reviewers := range fileReviewers {
 		output += fmt.Sprintf("- %s: %+v\n", file, reviewers.Flatten())
