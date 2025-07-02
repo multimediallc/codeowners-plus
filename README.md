@@ -225,6 +225,10 @@ ignore = ["test_project"]
 #  when one of these PR labels is present
 high_priority_labels = ["high-priority", "urgent"]
 
+# `detailed_reviewers` (default false) means the codeowners will include a collapsible list 
+# of files and owners in its review comment
+detailed_reviewers = true
+
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
 # see "Enforcement Options" below for more details
