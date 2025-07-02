@@ -427,7 +427,6 @@ func (a *App) requestReviews() error {
 }
 
 func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
-	codeOwners.FileRequired()
 	a.printDebug("File Reviewers:\n")
 	a.printDebug(a.getFileOwnersMapToString(codeOwners.FileRequired()))
 	a.printDebug("File Optional:\n")
@@ -435,9 +434,10 @@ func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
 }
 
 func (a *App) getFileOwnersMapToString(fileReviewers map[string]codeowners.ReviewerGroups) string {
-	output := ""
+	builder := strings.Builder{}
 	for file, reviewers := range fileReviewers {
-		output += fmt.Sprintf("- %s: %+v\n", file, reviewers.Flatten())
+		// builder.WriteString error return is always nil
+		_, _ = fmt.Fprintf(&builder, "- %s: %+v\n", file, reviewers.Flatten())
 	}
-	return output
+	return builder.String()
 }
