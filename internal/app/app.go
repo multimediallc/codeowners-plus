@@ -294,7 +294,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups, maxReviewsMet bool) error {
 	// Comment on the PR with the codeowner teams required for review
 
-	if a.config.Quiet || len(allRequiredOwners) == 0 {
+	if a.config.Quiet {
 		a.printDebug("Skipping review status comment (disabled or no unapproved owners).\n")
 		return nil
 	}
@@ -334,7 +334,7 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 		if err != nil {
 			return fmt.Errorf("UpdateComment Error: %v", err)
 		}
-	} else {
+	} else if len(allRequiredOwners) > 0 {
 		a.printDebug("Adding new review status comment: %q\n", comment)
 		err = a.client.AddComment(comment)
 		if err != nil {
