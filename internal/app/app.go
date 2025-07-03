@@ -315,9 +315,7 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 	}
 
 	if a.Conf.DetailedReviewers {
-		comment += "\n\n<details><summary>Show detailed file reviewers</summary>\n"
-		comment += a.getFileOwnersMapToString(a.codeowners.FileRequired())
-		comment += "</details>"
+		comment += fmt.Sprintf("\n\n<details><summary>Show detailed file reviewers</summary>\n\n%s\n</details>", a.getFileOwnersMapToString(a.codeowners.FileRequired()))
 	}
 
 	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
@@ -461,7 +459,15 @@ func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
 
 func (a *App) getFileOwnersMapToString(fileReviewers map[string]codeowners.ReviewerGroups) string {
 	builder := strings.Builder{}
-	for file, reviewers := range fileReviewers {
+
+	files := make([]string, 0, len(fileReviewers))
+	for file := range fileReviewers {
+		files = append(files, file)
+	}
+	slices.Sort(files)
+
+	for _, file := range files {
+		reviewers := fileReviewers[file]
 		// builder.WriteString error return is always nil
 		_, _ = fmt.Fprintf(&builder, "- %s: %+v\n", file, reviewers.Flatten())
 	}

@@ -1228,13 +1228,14 @@ func TestCommentDetailedReviewers(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			DetailedReviewersSnippet := "\n\n<details><summary>Show detailed file reviewers</summary>\n" +
+			DetailedReviewersSnippet := "\n\n<details><summary>Show detailed file reviewers</summary>\n\n" +
 				"- file1.go: [@user1 @user2]\n" +
-				"- file2.go: [@user1]\n"
+				"- file2.go: [@user1]\n\n"
 
 			containsDetailedReviewersSnippet := strings.Contains(mockGH.AddCommentInput, DetailedReviewersSnippet)
 
 			if tc.detailedReviewers != containsDetailedReviewersSnippet {
+				t.Logf("AddCommentInput: %s", mockGH.AddCommentInput)
 				t.Errorf("expected comment to include detailed owners to be %t, got %t ",
 					tc.detailedReviewers, containsDetailedReviewersSnippet)
 			}
