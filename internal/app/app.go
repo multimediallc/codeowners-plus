@@ -459,7 +459,15 @@ func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
 
 func (a *App) getFileOwnersMapToString(fileReviewers map[string]codeowners.ReviewerGroups) string {
 	builder := strings.Builder{}
-	for file, reviewers := range fileReviewers {
+
+	files := make([]string, 0, len(fileReviewers))
+	for file := range fileReviewers {
+		files = append(files, file)
+	}
+	slices.Sort(files)
+
+	for _, file := range files {
+		reviewers := fileReviewers[file]
 		// builder.WriteString error return is always nil
 		_, _ = fmt.Fprintf(&builder, "- %s: %+v\n", file, reviewers.Flatten())
 	}

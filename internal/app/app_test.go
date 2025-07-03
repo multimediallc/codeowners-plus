@@ -1235,6 +1235,7 @@ func TestCommentDetailedReviewers(t *testing.T) {
 			containsDetailedReviewersSnippet := strings.Contains(mockGH.AddCommentInput, DetailedReviewersSnippet)
 
 			if tc.detailedReviewers != containsDetailedReviewersSnippet {
+				t.Logf("AddCommentInput: %s", mockGH.AddCommentInput)
 				t.Errorf("expected comment to include detailed owners to be %t, got %t ",
 					tc.detailedReviewers, containsDetailedReviewersSnippet)
 			}
