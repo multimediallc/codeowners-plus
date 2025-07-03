@@ -1178,3 +1178,67 @@ func TestBuildOutputData(t *testing.T) {
 		t.Errorf("expected StillRequired [@user1], got %v", output.StillRequired)
 	}
 }
+
+func TestCommentDetailedReviewers(t *testing.T) {
+	tt := []struct {
+		name              string
+		detailedReviewers bool
+	}{
+		{
+			name:              "exclude detailed owners when config off",
+			detailedReviewers: false,
+		},
+		{
+			name:              "include detailed owners when config on",
+			detailedReviewers: true,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			mockGH := &mockGitHubClient{}
+
+			requiredOwners := codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+			}
+			app := &App{
+				config: &Config{
+					InfoBuffer:    io.Discard,
+					WarningBuffer: io.Discard,
+				},
+				client: mockGH,
+				codeowners: &mockCodeOwners{
+					fileRequiredMap: map[string]codeowners.ReviewerGroups{
+						"file1.go": {
+							&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+						},
+						"file2.go": {
+							&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+						},
+					},
+					requiredOwners: requiredOwners,
+				},
+				Conf: &owners.Config{
+					HighPriorityLabels: []string{},
+					DetailedReviewers:  tc.detailedReviewers,
+				},
+			}
+			err := app.addReviewStatusComment(requiredOwners, false)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			DetailedReviewersSnippet := "\n\n<details><summary>Show detailed file reviewers</summary>\n" +
+				"- file1.go: [@user1 @user2]\n" +
+				"- file2.go: [@user1]\n"
+
+			containsDetailedReviewersSnippet := strings.Contains(mockGH.AddCommentInput, DetailedReviewersSnippet)
+
+			if tc.detailedReviewers != containsDetailedReviewersSnippet {
+				t.Errorf("expected comment to include detailed owners to be %t, got %t ",
+					tc.detailedReviewers, containsDetailedReviewersSnippet)
+			}
+
+		})
+	}
+}

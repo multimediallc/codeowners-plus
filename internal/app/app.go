@@ -314,6 +314,12 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 		comment += "\n\nThe PR has received the max number of required reviews. No further action is required."
 	}
 
+	if a.Conf.DetailedReviewers {
+		comment += "\n\n<details><summary>Show detailed file reviewers</summary>\n"
+		comment += a.getFileOwnersMapToString(a.codeowners.FileRequired())
+		comment += "</details>"
+	}
+
 	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
 	existingComment, existingFound, err := a.client.FindExistingComment(commentPrefix, &fiveDaysAgo)
 	if err != nil {
@@ -447,14 +453,17 @@ func (a *App) requestReviews() error {
 }
 
 func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
-	fileRequired := codeOwners.FileRequired()
 	a.printDebug("File Reviewers:\n")
-	for file, reviewers := range fileRequired {
-		a.printDebug("- %s: %+v\n", file, reviewers.Flatten())
-	}
-	fileOptional := codeOwners.FileOptional()
+	a.printDebug(a.getFileOwnersMapToString(codeOwners.FileRequired()))
 	a.printDebug("File Optional:\n")
-	for file, reviewers := range fileOptional {
-		a.printDebug("- %s: %+v\n", file, reviewers.Flatten())
+	a.printDebug(a.getFileOwnersMapToString(codeOwners.FileOptional()))
+}
+
+func (a *App) getFileOwnersMapToString(fileReviewers map[string]codeowners.ReviewerGroups) string {
+	builder := strings.Builder{}
+	for file, reviewers := range fileReviewers {
+		// builder.WriteString error return is always nil
+		_, _ = fmt.Fprintf(&builder, "- %s: %+v\n", file, reviewers.Flatten())
 	}
+	return builder.String()
 }

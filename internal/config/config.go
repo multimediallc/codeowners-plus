@@ -16,6 +16,7 @@ type Config struct {
 	Enforcement          *Enforcement `toml:"enforcement"`
 	HighPriorityLabels   []string     `toml:"high_priority_labels"`
 	AdminBypass          *AdminBypass `toml:"admin_bypass"`
+	DetailedReviewers    bool         `toml:"detailed_reviewers"`
 }
 
 type Enforcement struct {
@@ -41,6 +42,7 @@ func ReadConfig(path string) (*Config, error) {
 		Enforcement:          &Enforcement{Approval: false, FailCheck: true},
 		HighPriorityLabels:   []string{},
 		AdminBypass:          &AdminBypass{Enabled: false, AllowedUsers: []string{}},
+		DetailedReviewers:    false,
 	}
 
 	fileName := path + "codeowners.toml"
