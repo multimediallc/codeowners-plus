@@ -315,9 +315,9 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 	}
 
 	if a.Conf.DetailedReviewers {
-		comment += "\n\n<details><summary>Show detailed file reviewers</summary>\n"
+		comment += "\n\n<details><summary>Show detailed file reviewers</summary>\n\n"
 		comment += a.getFileOwnersMapToString(a.codeowners.FileRequired())
-		comment += "</details>"
+		comment += "\n</details>"
 	}
 
 	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
