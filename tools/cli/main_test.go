@@ -639,3 +639,107 @@ func TestUnownedFilesWithFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateOwnershipMap(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	t.Run("by file", func(t *testing.T) {
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := generateOwnershipMap(testRepo, "file")
+		if err != nil {
+			t.Fatalf("generateOwnershipMap() error = %v", err)
+		}
+
+		_ = w.Close()
+		os.Stdout = oldStdout
+		out, _ := io.ReadAll(r)
+
+		var got map[string][]string
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("failed to unmarshal json: %v", err)
+		}
+
+		want := map[string][]string{
+			".codeowners":          {"@default-owner"},
+			"main.go":              {"@backend-team"},
+			"internal/.codeowners": {"@default-owner", "@security-team"},
+			"internal/util.go":     {"@backend-team", "@security-team"},
+			"frontend/.codeowners": {"@default-owner"},
+			"frontend/app.js":      {"@frontend-team"},
+			"frontend/app.ts":      {"@frontend-team"},
+			"tests/.codeowners":    {"@default-owner"},
+			"tests/some.test.js":   {"@frontend-team", "@qa-team"},
+			"tests/some.test.go":   {"@backend-team"},
+		}
+
+		if len(got) != len(want) {
+			t.Errorf("map by file: got %d files, want %d", len(got), len(want))
+		}
+
+		for file, wantOwners := range want {
+			gotOwners, ok := got[file]
+			if !ok {
+				t.Errorf("map by file: missing file %s in output", file)
+				continue
+			}
+			if !f.SlicesItemsMatch(gotOwners, wantOwners) {
+				t.Errorf("map by file: for file %s, got %v, want %v", file, gotOwners, wantOwners)
+			}
+		}
+	})
+
+	t.Run("by owner", func(t *testing.T) {
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := generateOwnershipMap(testRepo, "owner")
+		if err != nil {
+			t.Fatalf("generateOwnershipMap() error = %v", err)
+		}
+
+		_ = w.Close()
+		os.Stdout = oldStdout
+		out, _ := io.ReadAll(r)
+
+		var got map[string][]string
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("failed to unmarshal json: %v", err)
+		}
+
+		want := map[string][]string{
+			"@default-owner": {".codeowners", "frontend/.codeowners", "internal/.codeowners", "tests/.codeowners"},
+			"@backend-team":  {"internal/util.go", "main.go", "tests/some.test.go"},
+			"@security-team": {"internal/util.go"},
+			"@frontend-team": {"frontend/app.js", "frontend/app.ts", "tests/some.test.js"},
+			"@qa-team":       {"tests/some.test.js"},
+		}
+
+		if len(got) != len(want) {
+			t.Errorf("map by owner: got %d owners, want %d", len(got), len(want))
+		}
+
+		for owner, wantFiles := range want {
+			gotFiles, ok := got[owner]
+			if !ok {
+				t.Errorf("map by owner: missing owner %s in output", owner)
+				continue
+			}
+			// Use a map for efficient lookup
+			gotFilesSet := make(map[string]struct{}, len(gotFiles))
+			for _, file := range gotFiles {
+				gotFilesSet[file] = struct{}{}
+			}
+
+			for _, wantFile := range wantFiles {
+				if _, ok := gotFilesSet[wantFile]; !ok {
+					t.Errorf("map by owner: for owner %s, missing expected file %s in got %v", owner, wantFile, gotFiles)
+				}
+			}
+		}
+	})
+}
