@@ -714,7 +714,7 @@ func TestGenerateOwnershipMap(t *testing.T) {
 		want := map[string][]string{
 			"@default-owner": {".codeowners", "frontend/.codeowners", "internal/.codeowners", "tests/.codeowners"},
 			"@backend-team":  {"internal/util.go", "main.go", "tests/some.test.go"},
-			"@security-team": {"internal/util.go"},
+			"@security-team": {"internal/.codeowners", "internal/util.go"},
 			"@frontend-team": {"frontend/app.js", "frontend/app.ts", "tests/some.test.js"},
 			"@qa-team":       {"tests/some.test.js"},
 		}
@@ -729,17 +729,44 @@ func TestGenerateOwnershipMap(t *testing.T) {
 				t.Errorf("map by owner: missing owner %s in output", owner)
 				continue
 			}
-			// Use a map for efficient lookup
-			gotFilesSet := make(map[string]struct{}, len(gotFiles))
-			for _, file := range gotFiles {
-				gotFilesSet[file] = struct{}{}
-			}
-
-			for _, wantFile := range wantFiles {
-				if _, ok := gotFilesSet[wantFile]; !ok {
-					t.Errorf("map by owner: for owner %s, missing expected file %s in got %v", owner, wantFile, gotFiles)
-				}
+			if !f.SlicesItemsMatch(gotFiles, wantFiles) {
+				t.Errorf("map by owner: for owner %s, got %v, want %v", owner, gotFiles, wantFiles)
 			}
 		}
 	})
+}
+
+func TestWalkRepoFiles(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	files, err := walkRepoFiles(testRepo)
+	if err != nil {
+		t.Fatalf("walkRepoFiles() error = %v", err)
+	}
+
+	// Convert to a slice of strings for easier comparison
+	gotFiles := f.Map(files, func(f codeowners.DiffFile) string {
+		return f.FileName
+	})
+
+	wantFiles := []string{
+		".codeowners",
+		"main.go",
+		"internal/.codeowners",
+		"internal/util.go",
+		"frontend/.codeowners",
+		"frontend/app.js",
+		"frontend/app.ts",
+		"unowned/file.txt",
+		"unowned/inner/file2.txt",
+		"unowned2/file3.txt",
+		"tests/.codeowners",
+		"tests/some.test.js",
+		"tests/some.test.go",
+	}
+
+	if !f.SlicesItemsMatch(gotFiles, wantFiles) {
+		t.Errorf("walkRepoFiles() got %v, want %v", gotFiles, wantFiles)
+	}
 }

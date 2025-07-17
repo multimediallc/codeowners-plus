@@ -219,6 +219,33 @@ func main() {
 	}
 }
 
+// walkRepoFiles walks the git repository and returns a slice of files.
+func walkRepoFiles(repo string) ([]codeowners.DiffFile, error) {
+	fileListQueue := make(chan *gocodewalker.File, 100)
+	walker := gocodewalker.NewFileWalker(repo, fileListQueue)
+	walker.IncludeHidden = true
+	walker.ExcludeDirectory = []string{".git"}
+
+	errChan := make(chan error)
+	go func() {
+		err := walker.Start()
+		errChan <- err
+		close(errChan)
+	}()
+
+	files := make([]codeowners.DiffFile, 0)
+	for f := range fileListQueue {
+		file := stripRoot(repo, f.Location)
+		files = append(files, codeowners.DiffFile{FileName: file})
+	}
+
+	if err := <-errChan; err != nil {
+		return nil, fmt.Errorf("error walking repo: %s", err)
+	}
+
+	return files, nil
+}
+
 func depthCheck(path string, target string, depth int) bool {
 	extra := 0
 	if target != "" {
@@ -240,40 +267,27 @@ func unownedFilesWithFormat(repo string, targets []string, depth int, dirsOnly b
 		targets = []string{""}
 	}
 
+	allRepoFiles, err := walkRepoFiles(repo)
+	if err != nil {
+		return err
+	}
+
 	// Process each target
 	results := make(map[string][]string)
 	for _, target := range targets {
-		fileListQueue := make(chan *gocodewalker.File, 100)
-
-		walker := gocodewalker.NewFileWalker(repo, fileListQueue)
-		walker.IncludeHidden = true
-		walker.ExcludeDirectory = []string{".git"}
-
-		errChan := make(chan error)
-
-		go func() {
-			err := walker.Start()
-			errChan <- err
-			close(errChan)
-		}()
-
-		files := make([]codeowners.DiffFile, 0)
-		for f := range fileListQueue {
-			file := stripRoot(repo, f.Location)
+		filesForTarget := make([]codeowners.DiffFile, 0)
+		for _, f := range allRepoFiles {
+			file := f.FileName
 			if depth != 0 && depthCheck(file, target, depth) {
 				continue
 			}
 			if target != "" && !strings.HasPrefix(file, fmt.Sprintf("%s/", target)) {
 				continue
 			}
-			files = append(files, codeowners.DiffFile{FileName: file})
+			filesForTarget = append(filesForTarget, f)
 		}
 
-		if err := <-errChan; err != nil {
-			return fmt.Errorf("error walking repo: %s", err)
-		}
-
-		ownersMap, err := codeowners.New(repo, files, io.Discard)
+		ownersMap, err := codeowners.New(repo, filesForTarget, io.Discard)
 		if err != nil {
 			return fmt.Errorf("error reading codeowners config: %s", err)
 		}
@@ -445,25 +459,9 @@ func generateOwnershipMap(repo string, mapBy string) error {
 		return fmt.Errorf("root is not a Git repository: %s", repo)
 	}
 
-	fileListQueue := make(chan *gocodewalker.File, 100)
-	walker := gocodewalker.NewFileWalker(repo, fileListQueue)
-	walker.IncludeHidden = true
-	walker.ExcludeDirectory = []string{".git"}
-	errChan := make(chan error)
-	go func() {
-		err := walker.Start()
-		errChan <- err
-		close(errChan)
-	}()
-
-	files := make([]codeowners.DiffFile, 0)
-	for f := range fileListQueue {
-		file := stripRoot(repo, f.Location)
-		files = append(files, codeowners.DiffFile{FileName: file})
-	}
-
-	if err := <-errChan; err != nil {
-		return fmt.Errorf("error walking repo: %s", err)
+	files, err := walkRepoFiles(repo)
+	if err != nil {
+		return err
 	}
 
 	ownersMap, err := codeowners.New(repo, files, io.Discard)
@@ -487,23 +485,34 @@ func generateOwnershipMap(repo string, mapBy string) error {
 	return nil
 }
 
+// getAllFileOwners consolidates required and optional owners into a single map.
+// This helper avoids side effects by working on a copy of the data.
+func getAllFileOwners(ownersMap codeowners.CodeOwners) map[string]codeowners.ReviewerGroups {
+	// Create a new map to avoid side effects on the ownersMap object.
+	allFileOwners := make(map[string]codeowners.ReviewerGroups)
+
+	for file, reviewerGroups := range ownersMap.FileRequired() {
+		allFileOwners[file] = reviewerGroups
+	}
+	for file, reviewerGroups := range ownersMap.FileOptional() {
+		allFileOwners[file] = append(allFileOwners[file], reviewerGroups...)
+	}
+	return allFileOwners
+}
+
 // mapFilesToOwners creates a map where keys are file paths and values are a
 // slice of the owners for that file.
 func mapFilesToOwners(ownersMap codeowners.CodeOwners) map[string][]string {
+	allFileOwners := getAllFileOwners(ownersMap)
 	fileToOwners := make(map[string][]string)
-	allFileOwners := ownersMap.FileRequired()
-
-	for file, reviewerGroups := range ownersMap.FileOptional() {
-		if _, ok := allFileOwners[file]; !ok {
-			allFileOwners[file] = reviewerGroups
-		} else {
-			allFileOwners[file] = append(allFileOwners[file], reviewerGroups...)
-		}
-	}
 
 	for file, reviewerGroups := range allFileOwners {
-		fileToOwners[file] = f.RemoveDuplicates(reviewerGroups.Flatten())
-		slices.Sort(fileToOwners[file])
+		// Flatten, de-duplicate, and sort the owners.
+		owners := f.RemoveDuplicates(reviewerGroups.Flatten())
+		if len(owners) > 0 {
+			slices.Sort(owners)
+			fileToOwners[file] = owners
+		}
 	}
 	return fileToOwners
 }
@@ -511,13 +520,10 @@ func mapFilesToOwners(ownersMap codeowners.CodeOwners) map[string][]string {
 // mapOwnersToFiles creates a map where keys are owner names and values are a
 // slice of the file paths that owner is responsible for.
 func mapOwnersToFiles(ownersMap codeowners.CodeOwners) map[string][]string {
+	allFileOwners := getAllFileOwners(ownersMap)
 	ownerToFiles := make(map[string][]string)
-	for file, reviewerGroups := range ownersMap.FileRequired() {
-		for _, owner := range reviewerGroups.Flatten() {
-			ownerToFiles[owner] = append(ownerToFiles[owner], file)
-		}
-	}
-	for file, reviewerGroups := range ownersMap.FileOptional() {
+
+	for file, reviewerGroups := range allFileOwners {
 		for _, owner := range reviewerGroups.Flatten() {
 			ownerToFiles[owner] = append(ownerToFiles[owner], file)
 		}
