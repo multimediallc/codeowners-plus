@@ -276,15 +276,15 @@ func unownedFilesWithFormat(repo string, targets []string, depth int, dirsOnly b
 	results := make(map[string][]string)
 	for _, target := range targets {
 		filesForTarget := make([]codeowners.DiffFile, 0)
-		for _, f := range allRepoFiles {
-			file := f.FileName
+		for _, repoFile := range allRepoFiles {
+			file := repoFile.FileName
 			if depth != 0 && depthCheck(file, target, depth) {
 				continue
 			}
 			if target != "" && !strings.HasPrefix(file, fmt.Sprintf("%s/", target)) {
 				continue
 			}
-			filesForTarget = append(filesForTarget, f)
+			filesForTarget = append(filesForTarget, repoFile)
 		}
 
 		ownersMap, err := codeowners.New(repo, filesForTarget, io.Discard)
@@ -521,18 +521,25 @@ func mapFilesToOwners(ownersMap codeowners.CodeOwners) map[string][]string {
 // slice of the file paths that owner is responsible for.
 func mapOwnersToFiles(ownersMap codeowners.CodeOwners) map[string][]string {
 	allFileOwners := getAllFileOwners(ownersMap)
-	ownerToFiles := make(map[string][]string)
+	ownerToFilesSet := make(map[string]map[string]struct{})
 
 	for file, reviewerGroups := range allFileOwners {
 		for _, owner := range reviewerGroups.Flatten() {
-			ownerToFiles[owner] = append(ownerToFiles[owner], file)
+			if _, ok := ownerToFilesSet[owner]; !ok {
+				ownerToFilesSet[owner] = make(map[string]struct{})
+			}
+			ownerToFilesSet[owner][file] = struct{}{}
 		}
 	}
 
-	for owner, files := range ownerToFiles {
-		dedupedFiles := f.RemoveDuplicates(files)
-		slices.Sort(dedupedFiles)
-		ownerToFiles[owner] = dedupedFiles
+	ownerToFiles := make(map[string][]string)
+	for owner, filesSet := range ownerToFilesSet {
+		files := make([]string, 0, len(filesSet))
+		for file := range filesSet {
+			files = append(files, file)
+		}
+		slices.Sort(files)
+		ownerToFiles[owner] = files
 	}
 	return ownerToFiles
 }

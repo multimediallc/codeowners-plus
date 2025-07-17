@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -734,6 +735,107 @@ func TestGenerateOwnershipMap(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestMapOwnersToFiles(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    codeowners.CodeOwners
+		expected map[string][]string
+	}{
+		{
+			name:     "no owners",
+			input:    &fakeCodeOwners{},
+			expected: map[string][]string{},
+		},
+		{
+			name: "simple case",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt"},
+				"@owner2": {"b.txt"},
+			},
+		},
+		{
+			name: "owner with multiple files",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt", "b.txt"},
+			},
+		},
+		{
+			name: "file with multiple owners",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1", "@owner2"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt"},
+				"@owner2": {"a.txt"},
+			},
+		},
+		{
+			name: "complex case with optional and duplicates",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
+				},
+				optional: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
+					"c.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt", "c.txt"},
+				"@owner2": {"a.txt", "b.txt"},
+			},
+		},
+		{
+			name: "files are sorted for an owner",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"z.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt", "z.txt"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mapOwnersToFiles(tc.input)
+
+			if len(got) != len(tc.expected) {
+				t.Errorf("mapOwnersToFiles() got %d owners, want %d. Got: %v, want: %v", len(got), len(tc.expected), got, tc.expected)
+			}
+
+			for owner, wantFiles := range tc.expected {
+				gotFiles, ok := got[owner]
+				if !ok {
+					t.Errorf("mapOwnersToFiles() missing owner %s", owner)
+					continue
+				}
+				if !slices.Equal(gotFiles, wantFiles) {
+					t.Errorf("mapOwnersToFiles() for owner %s got %v, want %v", owner, gotFiles, wantFiles)
+				}
+			}
+		})
+	}
 }
 
 func TestWalkRepoFiles(t *testing.T) {
