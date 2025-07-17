@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -637,5 +638,237 @@ func TestUnownedFilesWithFormat(t *testing.T) {
 				t.Errorf("unownedFilesWithFormat() got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGenerateOwnershipMap(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	t.Run("by file", func(t *testing.T) {
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := generateOwnershipMap(testRepo, "file")
+		if err != nil {
+			t.Fatalf("generateOwnershipMap() error = %v", err)
+		}
+
+		_ = w.Close()
+		os.Stdout = oldStdout
+		out, _ := io.ReadAll(r)
+
+		var got map[string][]string
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("failed to unmarshal json: %v", err)
+		}
+
+		want := map[string][]string{
+			".codeowners":          {"@default-owner"},
+			"main.go":              {"@backend-team"},
+			"internal/.codeowners": {"@default-owner", "@security-team"},
+			"internal/util.go":     {"@backend-team", "@security-team"},
+			"frontend/.codeowners": {"@default-owner"},
+			"frontend/app.js":      {"@frontend-team"},
+			"frontend/app.ts":      {"@frontend-team"},
+			"tests/.codeowners":    {"@default-owner"},
+			"tests/some.test.js":   {"@frontend-team", "@qa-team"},
+			"tests/some.test.go":   {"@backend-team"},
+		}
+
+		if len(got) != len(want) {
+			t.Errorf("map by file: got %d files, want %d", len(got), len(want))
+		}
+
+		for file, wantOwners := range want {
+			gotOwners, ok := got[file]
+			if !ok {
+				t.Errorf("map by file: missing file %s in output", file)
+				continue
+			}
+			if !f.SlicesItemsMatch(gotOwners, wantOwners) {
+				t.Errorf("map by file: for file %s, got %v, want %v", file, gotOwners, wantOwners)
+			}
+		}
+	})
+
+	t.Run("by owner", func(t *testing.T) {
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := generateOwnershipMap(testRepo, "owner")
+		if err != nil {
+			t.Fatalf("generateOwnershipMap() error = %v", err)
+		}
+
+		_ = w.Close()
+		os.Stdout = oldStdout
+		out, _ := io.ReadAll(r)
+
+		var got map[string][]string
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("failed to unmarshal json: %v", err)
+		}
+
+		want := map[string][]string{
+			"@default-owner": {".codeowners", "frontend/.codeowners", "internal/.codeowners", "tests/.codeowners"},
+			"@backend-team":  {"internal/util.go", "main.go", "tests/some.test.go"},
+			"@security-team": {"internal/.codeowners", "internal/util.go"},
+			"@frontend-team": {"frontend/app.js", "frontend/app.ts", "tests/some.test.js"},
+			"@qa-team":       {"tests/some.test.js"},
+		}
+
+		if len(got) != len(want) {
+			t.Errorf("map by owner: got %d owners, want %d", len(got), len(want))
+		}
+
+		for owner, wantFiles := range want {
+			gotFiles, ok := got[owner]
+			if !ok {
+				t.Errorf("map by owner: missing owner %s in output", owner)
+				continue
+			}
+			if !f.SlicesItemsMatch(gotFiles, wantFiles) {
+				t.Errorf("map by owner: for owner %s, got %v, want %v", owner, gotFiles, wantFiles)
+			}
+		}
+	})
+}
+
+func TestMapOwnersToFiles(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    codeowners.CodeOwners
+		expected map[string][]string
+	}{
+		{
+			name:     "no owners",
+			input:    &fakeCodeOwners{},
+			expected: map[string][]string{},
+		},
+		{
+			name: "simple case",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt"},
+				"@owner2": {"b.txt"},
+			},
+		},
+		{
+			name: "owner with multiple files",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt", "b.txt"},
+			},
+		},
+		{
+			name: "file with multiple owners",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1", "@owner2"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt"},
+				"@owner2": {"a.txt"},
+			},
+		},
+		{
+			name: "complex case with optional and duplicates",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
+				},
+				optional: map[string]codeowners.ReviewerGroups{
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
+					"c.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt", "c.txt"},
+				"@owner2": {"a.txt", "b.txt"},
+			},
+		},
+		{
+			name: "files are sorted for an owner",
+			input: &fakeCodeOwners{
+				required: map[string]codeowners.ReviewerGroups{
+					"z.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+				},
+			},
+			expected: map[string][]string{
+				"@owner1": {"a.txt", "z.txt"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mapOwnersToFiles(tc.input)
+
+			if len(got) != len(tc.expected) {
+				t.Errorf("mapOwnersToFiles() got %d owners, want %d. Got: %v, want: %v", len(got), len(tc.expected), got, tc.expected)
+			}
+
+			for owner, wantFiles := range tc.expected {
+				gotFiles, ok := got[owner]
+				if !ok {
+					t.Errorf("mapOwnersToFiles() missing owner %s", owner)
+					continue
+				}
+				if !slices.Equal(gotFiles, wantFiles) {
+					t.Errorf("mapOwnersToFiles() for owner %s got %v, want %v", owner, gotFiles, wantFiles)
+				}
+			}
+		})
+	}
+}
+
+func TestWalkRepoFiles(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	files, err := walkRepoFiles(testRepo)
+	if err != nil {
+		t.Fatalf("walkRepoFiles() error = %v", err)
+	}
+
+	// Convert to a slice of strings for easier comparison
+	gotFiles := f.Map(files, func(f codeowners.DiffFile) string {
+		return f.FileName
+	})
+
+	wantFiles := []string{
+		".codeowners",
+		"main.go",
+		"internal/.codeowners",
+		"internal/util.go",
+		"frontend/.codeowners",
+		"frontend/app.js",
+		"frontend/app.ts",
+		"unowned/file.txt",
+		"unowned/inner/file2.txt",
+		"unowned2/file3.txt",
+		"tests/.codeowners",
+		"tests/some.test.js",
+		"tests/some.test.go",
+	}
+
+	if !f.SlicesItemsMatch(gotFiles, wantFiles) {
+		t.Errorf("walkRepoFiles() got %v, want %v", gotFiles, wantFiles)
 	}
 }
