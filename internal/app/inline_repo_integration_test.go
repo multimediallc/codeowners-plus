@@ -36,6 +36,10 @@ func TestInlineRepoFixture_EndToEnd(t *testing.T) {
 	// Convert to []codeowners.DiffFile (simplified in-place variant of git.toDiffFiles)
 	diffFiles := make([]codeowners.DiffFile, 0, len(parsed))
 	for _, fd := range parsed {
+		// Tolerate malformed diffs from the test fixture
+		if fd.NewName == "/dev/null" || len(fd.NewName) < 3 {
+			continue
+		}
 		df := codeowners.DiffFile{
 			FileName: strings.TrimPrefix(fd.NewName[2:], "test_project_inline/"), // strip leading "b/" & repo dir
 			Hunks:    make([]codeowners.HunkRange, 0, len(fd.Hunks)),
