@@ -2,7 +2,7 @@ name: 'Rerun Code Owners'
 
 on:
   pull_request_review:
-    types: [submitted]
+    types: [submitted, dismissed]
 
 permissions: {}
 
@@ -13,11 +13,8 @@ jobs:
     permissions:
       actions: write
       pull-requests: write
-      contents: read
+      checks: read
     steps:
-      - name: 'Checkout Code Repository'
-        uses: actions/checkout@v4
-      
       - name: 'Rerun Checks'
         uses: shqear93/rerun-checks@cafa5c1c11c880f9b23e6a73ad8628483fdae798  # @v3
         with:
