@@ -229,6 +229,9 @@ high_priority_labels = ["high-priority", "urgent"]
 # of files and owners in its review comment
 detailed_reviewers = true
 
+# `disable_smart_dismissal` (default false) means the codeowners will not dismiss stale reviews
+disable_smart_dismissal = true
+
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
 # see "Enforcement Options" below for more details
