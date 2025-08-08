@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-81.8%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-81.6%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -228,6 +228,9 @@ high_priority_labels = ["high-priority", "urgent"]
 # `detailed_reviewers` (default false) means the codeowners will include a collapsible list 
 # of files and owners in its review comment
 detailed_reviewers = true
+
+# `disable_smart_dismissal` (default false) means the codeowners will not dismiss stale reviews
+disable_smart_dismissal = true
 
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
