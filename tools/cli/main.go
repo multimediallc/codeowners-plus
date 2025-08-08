@@ -182,6 +182,33 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:      "map",
+				Aliases:   []string{"m"},
+				Usage:     "Generate a JSON ownership map of the entire repository",
+				UsageText: "codeowners-cli map [options]",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "root",
+						Aliases:     []string{"r", "repo"},
+						Value:       "./",
+						Usage:       "Path to local Git repo",
+						Destination: &repo,
+					},
+					&cli.StringFlag{
+						Name:  "by",
+						Value: "file",
+						Usage: "Map by 'file' (files to owners) or 'owner' (owners to files)",
+					},
+				},
+				Action: func(cCtx *cli.Context) error {
+					mapBy := cCtx.String("by")
+					if mapBy != "file" && mapBy != "owner" {
+						return fmt.Errorf("invalid value for --by flag: must be 'file' or 'owner'")
+					}
+					return generateOwnershipMap(repo, mapBy)
+				},
+			},
 		},
 	}
 
@@ -190,6 +217,33 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
+}
+
+// walkRepoFiles walks the git repository and returns a slice of files.
+func walkRepoFiles(repo string) ([]codeowners.DiffFile, error) {
+	fileListQueue := make(chan *gocodewalker.File, 100)
+	walker := gocodewalker.NewFileWalker(repo, fileListQueue)
+	walker.IncludeHidden = true
+	walker.ExcludeDirectory = []string{".git"}
+
+	errChan := make(chan error)
+	go func() {
+		err := walker.Start()
+		errChan <- err
+		close(errChan)
+	}()
+
+	files := make([]codeowners.DiffFile, 0)
+	for f := range fileListQueue {
+		file := stripRoot(repo, f.Location)
+		files = append(files, codeowners.DiffFile{FileName: file})
+	}
+
+	if err := <-errChan; err != nil {
+		return nil, fmt.Errorf("error walking repo: %s", err)
+	}
+
+	return files, nil
 }
 
 func depthCheck(path string, target string, depth int) bool {
@@ -213,40 +267,27 @@ func unownedFilesWithFormat(repo string, targets []string, depth int, dirsOnly b
 		targets = []string{""}
 	}
 
+	allRepoFiles, err := walkRepoFiles(repo)
+	if err != nil {
+		return err
+	}
+
 	// Process each target
 	results := make(map[string][]string)
 	for _, target := range targets {
-		fileListQueue := make(chan *gocodewalker.File, 100)
-
-		walker := gocodewalker.NewFileWalker(repo, fileListQueue)
-		walker.IncludeHidden = true
-		walker.ExcludeDirectory = []string{".git"}
-
-		errChan := make(chan error)
-
-		go func() {
-			err := walker.Start()
-			errChan <- err
-			close(errChan)
-		}()
-
-		files := make([]codeowners.DiffFile, 0)
-		for f := range fileListQueue {
-			file := stripRoot(repo, f.Location)
+		filesForTarget := make([]codeowners.DiffFile, 0)
+		for _, repoFile := range allRepoFiles {
+			file := repoFile.FileName
 			if depth != 0 && depthCheck(file, target, depth) {
 				continue
 			}
 			if target != "" && !strings.HasPrefix(file, fmt.Sprintf("%s/", target)) {
 				continue
 			}
-			files = append(files, codeowners.DiffFile{FileName: file})
+			filesForTarget = append(filesForTarget, repoFile)
 		}
 
-		if err := <-errChan; err != nil {
-			return fmt.Errorf("error walking repo: %s", err)
-		}
-
-		ownersMap, err := codeowners.New(repo, files, io.Discard)
+		ownersMap, err := codeowners.New(repo, filesForTarget, io.Discard)
 		if err != nil {
 			return fmt.Errorf("error reading codeowners config: %s", err)
 		}
@@ -406,6 +447,101 @@ func fileOwner(repo string, targets []string, format OutputFormat) error {
 	}
 
 	return nil
+}
+
+// generateOwnershipMap walks the entire repository, determines file ownership,
+// and prints a comprehensive JSON map of the results.
+func generateOwnershipMap(repo string, mapBy string) error {
+	if repoStat, err := os.Lstat(repo); err != nil || !repoStat.IsDir() {
+		return fmt.Errorf("root is not a directory: %s", repo)
+	}
+	if gitStat, err := os.Stat(filepath.Join(repo, ".git")); err != nil || !gitStat.IsDir() {
+		return fmt.Errorf("root is not a Git repository: %s", repo)
+	}
+
+	files, err := walkRepoFiles(repo)
+	if err != nil {
+		return err
+	}
+
+	ownersMap, err := codeowners.New(repo, files, io.Discard)
+	if err != nil {
+		return fmt.Errorf("error reading codeowners config: %s", err)
+	}
+
+	var result interface{}
+	if mapBy == "file" {
+		result = mapFilesToOwners(ownersMap)
+	} else {
+		result = mapOwnersToFiles(ownersMap)
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("error marshaling JSON: %s", err)
+	}
+
+	fmt.Println(string(jsonData))
+	return nil
+}
+
+// getAllFileOwners consolidates required and optional owners into a single map.
+// This helper avoids side effects by working on a copy of the data.
+func getAllFileOwners(ownersMap codeowners.CodeOwners) map[string]codeowners.ReviewerGroups {
+	// Create a new map to avoid side effects on the ownersMap object.
+	allFileOwners := make(map[string]codeowners.ReviewerGroups)
+
+	for file, reviewerGroups := range ownersMap.FileRequired() {
+		allFileOwners[file] = reviewerGroups
+	}
+	for file, reviewerGroups := range ownersMap.FileOptional() {
+		allFileOwners[file] = append(allFileOwners[file], reviewerGroups...)
+	}
+	return allFileOwners
+}
+
+// mapFilesToOwners creates a map where keys are file paths and values are a
+// slice of the owners for that file.
+func mapFilesToOwners(ownersMap codeowners.CodeOwners) map[string][]string {
+	allFileOwners := getAllFileOwners(ownersMap)
+	fileToOwners := make(map[string][]string)
+
+	for file, reviewerGroups := range allFileOwners {
+		// Flatten, de-duplicate, and sort the owners.
+		owners := f.RemoveDuplicates(reviewerGroups.Flatten())
+		if len(owners) > 0 {
+			slices.Sort(owners)
+			fileToOwners[file] = owners
+		}
+	}
+	return fileToOwners
+}
+
+// mapOwnersToFiles creates a map where keys are owner names and values are a
+// slice of the file paths that owner is responsible for.
+func mapOwnersToFiles(ownersMap codeowners.CodeOwners) map[string][]string {
+	allFileOwners := getAllFileOwners(ownersMap)
+	ownerToFilesSet := make(map[string]map[string]struct{})
+
+	for file, reviewerGroups := range allFileOwners {
+		for _, owner := range reviewerGroups.Flatten() {
+			if _, ok := ownerToFilesSet[owner]; !ok {
+				ownerToFilesSet[owner] = make(map[string]struct{})
+			}
+			ownerToFilesSet[owner][file] = struct{}{}
+		}
+	}
+
+	ownerToFiles := make(map[string][]string)
+	for owner, filesSet := range ownerToFilesSet {
+		files := make([]string, 0, len(filesSet))
+		for file := range filesSet {
+			files = append(files, file)
+		}
+		slices.Sort(files)
+		ownerToFiles[owner] = files
+	}
+	return ownerToFiles
 }
 
 func validateCodeowners(repo string, target string) error {
