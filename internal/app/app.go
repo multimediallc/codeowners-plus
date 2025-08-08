@@ -261,7 +261,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	if len(unapprovedOwners) > 0 && !maxReviewsMet {
 		// Return failed status if any codeowner team has not approved the PR
 		unapprovedCommentString := unapprovedOwners.ToCommentString(false)
-		if a.Conf.Enforcement.Approval && tokenOwnerApproval != nil {
+		if a.Conf.Enforcement.Approval && tokenOwnerApproval != nil && !a.Conf.DisableSmartDismissal {
 			_ = a.client.DismissStaleReviews([]*gh.CurrentApproval{tokenOwnerApproval})
 		}
 		message = fmt.Sprintf(
@@ -402,7 +402,22 @@ func (a *App) processTokenOwnerApproval() (*gh.CurrentApproval, error) {
 
 func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 	fileReviewers := f.MapMap(a.codeowners.FileRequired(), func(reviewers codeowners.ReviewerGroups) []string { return reviewers.Flatten() })
-	approvers, approvalsToDismiss := a.client.CheckApprovals(fileReviewers, ghApprovals, a.gitDiff)
+	
+	var approvers []string
+	var approvalsToDismiss []*gh.CurrentApproval
+	
+	if a.Conf.DisableSmartDismissal {
+		// Smart dismissal is disabled - treat all approvals as valid
+		a.printDebug("Smart dismissal disabled - keeping all approvals\n")
+		for _, approval := range ghApprovals {
+			approvers = append(approvers, approval.Reviewers...)
+		}
+		approvalsToDismiss = []*gh.CurrentApproval{}
+	} else {
+		// Normal smart dismissal logic
+		approvers, approvalsToDismiss = a.client.CheckApprovals(fileReviewers, ghApprovals, a.gitDiff)
+	}
+	
 	a.codeowners.ApplyApprovals(approvers)
 
 	if len(approvalsToDismiss) > 0 {

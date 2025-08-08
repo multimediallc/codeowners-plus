@@ -17,6 +17,7 @@ type Config struct {
 	HighPriorityLabels   []string     `toml:"high_priority_labels"`
 	AdminBypass          *AdminBypass `toml:"admin_bypass"`
 	DetailedReviewers    bool         `toml:"detailed_reviewers"`
+	DisableSmartDismissal bool        `toml:"disable_smart_dismissal"`
 }
 
 type Enforcement struct {
