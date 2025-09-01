@@ -4,7 +4,7 @@ go 1.23.1
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.9.1
-	github.com/boyter/gocodewalker v1.4.0
+	github.com/boyter/gocodewalker v1.5.1
 	github.com/google/go-github/v63 v63.0.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/sourcegraph/go-diff v0.7.0
@@ -17,5 +17,5 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
-	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
 )
