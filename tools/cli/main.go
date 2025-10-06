@@ -50,7 +50,7 @@ func main() {
 	app := &cli.App{
 		Name:        "codeowners-cli",
 		Usage:       "CLI tool for working with .codeowners files",
-		Version:     "v1.3.3.dev",
+		Version:     "v1.5.1.dev",
 		Description: "",
 		Commands: []*cli.Command{
 			{
