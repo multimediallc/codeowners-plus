@@ -110,6 +110,33 @@ func TestNewDiff(t *testing.T) {
 				"file2.go": 1,
 			},
 		},
+		{
+			name: "ignore deleted files in ignored directories",
+			context: DiffContext{
+				Base:       "main",
+				Head:       "feature",
+				Dir:        ".",
+				IgnoreDirs: []string{"ignored/"},
+			},
+			mockOutput: `diff --git a/file1.go b/file1.go
+index abc..def 100644
+--- a/file1.go
++++ b/file1.go
+@@ -10,0 +11 @@ func Example() {
++       fmt.Println("New line")
+diff --git a/ignored/deleted.go b/dev/null
+deleted file mode 100644
+index ghi..0000000
+--- a/ignored/deleted.go
++++ /dev/null
+@@ -1 +0,0 @@
+-content`,
+			expectedErr:   false,
+			expectedFiles: 1,
+			expectedHunks: map[string]int{
+				"file1.go": 1,
+			},
+		},
 	}
 
 	for _, tc := range tt {
@@ -384,6 +411,94 @@ func TestToDiffFiles(t *testing.T) {
 						{
 							Start: 30,
 							End:   30,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "deleted file",
+			fileDiffs: []*diff.FileDiff{
+				{
+					OrigName: "a/deleted.go",
+					NewName:  "/dev/null",
+					Hunks: []*diff.Hunk{
+						{
+							NewStartLine: 0,
+							NewLines:     0,
+						},
+					},
+				},
+			},
+			expected: []codeowners.DiffFile{
+				{
+					FileName: "deleted.go",
+					Hunks: []codeowners.HunkRange{
+						{
+							Start: 0,
+							End:   -1,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "mixed: added, modified, and deleted files",
+			fileDiffs: []*diff.FileDiff{
+				{
+					NewName: "b/added.go",
+					Hunks: []*diff.Hunk{
+						{
+							NewStartLine: 1,
+							NewLines:     5,
+						},
+					},
+				},
+				{
+					NewName: "b/modified.go",
+					Hunks: []*diff.Hunk{
+						{
+							NewStartLine: 10,
+							NewLines:     2,
+						},
+					},
+				},
+				{
+					OrigName: "a/deleted.go",
+					NewName:  "/dev/null",
+					Hunks: []*diff.Hunk{
+						{
+							NewStartLine: 0,
+							NewLines:     0,
+						},
+					},
+				},
+			},
+			expected: []codeowners.DiffFile{
+				{
+					FileName: "added.go",
+					Hunks: []codeowners.HunkRange{
+						{
+							Start: 1,
+							End:   5,
+						},
+					},
+				},
+				{
+					FileName: "modified.go",
+					Hunks: []codeowners.HunkRange{
+						{
+							Start: 10,
+							End:   11,
+						},
+					},
+				},
+				{
+					FileName: "deleted.go",
+					Hunks: []codeowners.HunkRange{
+						{
+							Start: 0,
+							End:   -1,
 						},
 					},
 				},

@@ -111,13 +111,23 @@ type changesSinceContext struct {
 	olderDiff []*diff.FileDiff
 }
 
+func diffToFilename(d *diff.FileDiff) string {
+	if d.NewName == "/dev/null" {
+		// For deleted files, NewName is "/dev/null", so use OrigName instead
+		return d.OrigName[2:]
+	}
+	return d.NewName[2:]
+}
+
 // Parse the diff output to get the file names and hunks
 func toDiffFiles(fileDiffs []*diff.FileDiff) ([]codeowners.DiffFile, error) {
 	diffFiles := make([]codeowners.DiffFile, 0, len(fileDiffs))
 
 	for _, d := range fileDiffs {
+		fileName := diffToFilename(d)
+
 		newDiffFile := codeowners.DiffFile{
-			FileName: d.NewName[2:],
+			FileName: fileName,
 			Hunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
 		}
 		for _, hunk := range d.Hunks {
@@ -147,8 +157,10 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 	diffFiles := make([]codeowners.DiffFile, 0, len(context.newerDiff))
 
 	for _, d := range context.newerDiff {
+		fileName := diffToFilename(d)
+
 		newDiffFile := codeowners.DiffFile{
-			FileName: d.NewName[2:],
+			FileName: fileName,
 			Hunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
 		}
 		for _, hunk := range d.Hunks {
@@ -177,8 +189,10 @@ func getGitDiff(data DiffContext, executor gitCommandExecutor) ([]*diff.FileDiff
 		return nil, err
 	}
 	gitDiff = slices.DeleteFunc(gitDiff, func(d *diff.FileDiff) bool {
+		fileName := diffToFilename(d)
+
 		for _, dir := range data.IgnoreDirs {
-			if strings.HasPrefix(d.NewName[2:], dir) {
+			if strings.HasPrefix(fileName, dir) {
 				return true
 			}
 		}
