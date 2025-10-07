@@ -28,6 +28,7 @@ type Enforcement struct {
 type AdminBypass struct {
 	Enabled       bool     `toml:"enabled"`
 	AllowedUsers  []string `toml:"allowed_users"`
+	Labels        []string `toml:"labels"`
 }
 
 func ReadConfig(path string) (*Config, error) {
@@ -42,7 +43,7 @@ func ReadConfig(path string) (*Config, error) {
 		Ignore:               []string{},
 		Enforcement:          &Enforcement{Approval: false, FailCheck: true},
 		HighPriorityLabels:   []string{},
-		AdminBypass:          &AdminBypass{Enabled: false, AllowedUsers: []string{}},
+		AdminBypass:          &AdminBypass{Enabled: false, AllowedUsers: []string{}, Labels: []string{}},
 		DetailedReviewers:    false,
 	}
 

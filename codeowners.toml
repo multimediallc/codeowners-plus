@@ -13,6 +13,11 @@ detailed_reviewers = false
 # `disable_smart_dismissal` (default false) means the codeowners will not dismiss stale reviews
 disable_smart_dismissal = false
 
+# `bypass_labels` (default empty) defines labels to automatically apply
+# when bypass is detected. Improves visibility for tool-generated or
+# auto-approved PRs.
+bypass_labels = ["bypass-reviews"]
+
 # `enforcement` allows you to specify how the codeowners check should be enforced
 [enforcement]
 # `approval` (default false) means the github token owner will approve the PR
