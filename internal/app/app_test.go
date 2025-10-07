@@ -180,6 +180,11 @@ func (m *mockGitHubClient) RequestReviewers(reviewers []string) error {
 	return m.requestReviewersError
 }
 
+func (m *mockGitHubClient) RemoveReviewers(reviewers []string) error {
+	// Mock implementation - just return nil for success
+	return nil
+}
+
 func (m *mockGitHubClient) CheckApprovals(fileReviewers map[string][]string, approvals []*gh.CurrentApproval, diff git.Diff) ([]string, []*gh.CurrentApproval) {
 	// Simple mock implementation - approve all reviewers
 	var approvers []string

@@ -41,6 +41,7 @@ type Client interface {
 	GetCurrentlyRequested() ([]string, error)
 	DismissStaleReviews(staleApprovals []*CurrentApproval) error
 	RequestReviewers(reviewers []string) error
+	RemoveReviewers(reviewers []string) error
 	ApprovePR() error
 	InitComments() error
 	AddComment(comment string) error
@@ -379,6 +380,19 @@ func (gh *GHClient) RequestReviewers(reviewers []string) error {
 	defer func() {
 		_ = res.Body.Close()
 	}()
+	return err
+}
+
+func (gh *GHClient) RemoveReviewers(reviewers []string) error {
+	if gh.pr == nil {
+		return &NoPRError{}
+	}
+	if len(reviewers) == 0 {
+		return nil
+	}
+	indvidualReviewers, teamReviewers := splitReviewers(reviewers)
+	reviewersRequest := github.ReviewersRequest{Reviewers: indvidualReviewers, TeamReviewers: teamReviewers}
+	_, err := gh.client.PullRequests.RemoveReviewers(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), reviewersRequest)
 	return err
 }
 

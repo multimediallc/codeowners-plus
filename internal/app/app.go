@@ -215,6 +215,19 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 		return false, message, nil, err
 	}
 
+	// Remove review requests for satisfied groups
+	satisfiedReviewers, err := a.getSatisfiedReviewers()
+	if err != nil {
+		return false, message, nil, fmt.Errorf("getSatisfiedReviewers Error: %v", err)
+	}
+	if len(satisfiedReviewers) > 0 && !a.config.Quiet {
+		a.printDebug("Removing satisfied review requests: %s\n", satisfiedReviewers)
+		if err := a.client.RemoveReviewers(satisfiedReviewers); err != nil {
+			a.printWarn("Warning: Failed to remove satisfied reviewers: %v\n", err)
+			// Don't fail the entire process for this
+		}
+	}
+
 	// Request reviews from required owners
 	err = a.requestReviews()
 	if err != nil {
@@ -402,10 +415,10 @@ func (a *App) processTokenOwnerApproval() (*gh.CurrentApproval, error) {
 
 func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 	fileReviewers := f.MapMap(a.codeowners.FileRequired(), func(reviewers codeowners.ReviewerGroups) []string { return reviewers.Flatten() })
-	
+
 	var approvers []string
 	var approvalsToDismiss []*gh.CurrentApproval
-	
+
 	if a.Conf.DisableSmartDismissal {
 		// Smart dismissal is disabled - treat all approvals as valid
 		a.printDebug("Smart dismissal disabled - keeping all approvals\n")
@@ -417,7 +430,7 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 		// Normal smart dismissal logic
 		approvers, approvalsToDismiss = a.client.CheckApprovals(fileReviewers, ghApprovals, a.gitDiff)
 	}
-	
+
 	a.codeowners.ApplyApprovals(approvers)
 
 	if len(approvalsToDismiss) > 0 {
@@ -463,6 +476,27 @@ func (a *App) requestReviews() error {
 	}
 
 	return nil
+}
+
+func (a *App) getSatisfiedReviewers() ([]string, error) {
+	currentlyRequested, err := a.client.GetCurrentlyRequested()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all required reviewers that are now satisfied (approved)
+	allRequired := a.codeowners.AllRequired()
+	stillRequired := allRequired.Flatten()
+
+	// Find reviewers that were requested but are now satisfied
+	satisfiedReviewers := make([]string, 0)
+	for _, requested := range currentlyRequested {
+		if !slices.Contains(stillRequired, requested) {
+			satisfiedReviewers = append(satisfiedReviewers, requested)
+		}
+	}
+
+	return satisfiedReviewers, nil
 }
 
 func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
