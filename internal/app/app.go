@@ -191,22 +191,22 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	// Check for bypass approvals
 	var allowedBypassUsers []string
 	if a.Conf.AdminBypass != nil && a.Conf.AdminBypass.Enabled {
-    allowedBypassUsers = a.Conf.AdminBypass.AllowedUsers
+		allowedBypassUsers = a.Conf.AdminBypass.AllowedUsers
 
-    // Auto-label PRs when bypass is enabled
-    if len(a.Conf.AdminBypass.Labels) > 0 {
-        prNumber := a.client.PR().GetNumber()
-        for _, label := range a.Conf.AdminBypass.Labels {
-            a.printDebug("Attempting to add bypass label: %s\n", label)
-            err := a.client.AddLabelToPR(prNumber, label)
-            if err != nil {
-                a.printWarn("Failed to add bypass label %q: %v\n", label, err)
-            } else {
-                a.printDebug("Added bypass label %q to PR #%d\n", label, prNumber)
-            }
-        }
-    }
-}
+		// Auto-label PRs when bypass is enabled
+		if len(a.Conf.AdminBypass.Labels) > 0 {
+			prNumber := a.client.PR().GetNumber()
+			for _, label := range a.Conf.AdminBypass.Labels {
+				a.printDebug("Attempting to add bypass label: %s\n", label)
+				err := a.client.AddLabelToPR(prNumber, label)
+				if err != nil {
+					a.printWarn("Failed to add bypass label %q: %v\n", label, err)
+				} else {
+					a.printDebug("Added bypass label %q to PR #%d\n", label, prNumber)
+				}
+			}
+		}
+	}
 
 	hasValidBypass, err := a.client.ContainsValidBypassApproval(allowedBypassUsers)
 	if err != nil {
