@@ -89,6 +89,7 @@ jobs:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.base_ref }}  # use the base_ref to prevent bypass by PR author
           fetch-depth: 0
 
       - name: 'Codeowners Plus'
