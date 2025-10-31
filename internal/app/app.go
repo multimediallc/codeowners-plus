@@ -222,6 +222,32 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	}
 
 	unapprovedOwners := a.codeowners.AllRequired()
+
+	// Check if we need to re-request from a satisfied team when min_reviews is not met
+	// This handles the case where only 1 team is required but multiple reviews are needed
+	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
+		if validApprovalCount < *a.Conf.MinReviews && len(unapprovedOwners) == 0 {
+			// All required teams have approved, but we need more reviews
+			// Re-request review from the satisfied team(s)
+			allRequiredOwnerNames := a.codeowners.AllRequiredIncludingSatisfied().Flatten()
+			currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()
+			if err != nil {
+				a.printWarn("WARNING: Error getting currently requested owners for re-request: %v\n", err)
+			} else {
+				// Filter out anyone already requested
+				ownersToReRequest := f.Filtered(allRequiredOwnerNames, func(owner string) bool {
+					return !slices.Contains(currentlyRequestedOwners, owner)
+				})
+				if len(ownersToReRequest) > 0 {
+					a.printDebug("Re-requesting Reviews from satisfied team(s) to meet min_reviews: %s\n", ownersToReRequest)
+					if err := a.client.RequestReviewers(ownersToReRequest); err != nil {
+						a.printWarn("WARNING: Error re-requesting reviewers: %v\n", err)
+					}
+				}
+			}
+		}
+	}
+
 	maxReviewsMet := false
 	if a.Conf.MaxReviews != nil && *a.Conf.MaxReviews > 0 {
 		if validApprovalCount >= *a.Conf.MaxReviews && len(f.Intersection(unapprovedOwners.Flatten(), a.Conf.UnskippableReviewers)) == 0 {
@@ -402,10 +428,10 @@ func (a *App) processTokenOwnerApproval() (*gh.CurrentApproval, error) {
 
 func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 	fileReviewers := f.MapMap(a.codeowners.FileRequired(), func(reviewers codeowners.ReviewerGroups) []string { return reviewers.Flatten() })
-	
+
 	var approvers []string
 	var approvalsToDismiss []*gh.CurrentApproval
-	
+
 	if a.Conf.DisableSmartDismissal {
 		// Smart dismissal is disabled - treat all approvals as valid
 		a.printDebug("Smart dismissal disabled - keeping all approvals\n")
@@ -417,7 +443,7 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 		// Normal smart dismissal logic
 		approvers, approvalsToDismiss = a.client.CheckApprovals(fileReviewers, ghApprovals, a.gitDiff)
 	}
-	
+
 	a.codeowners.ApplyApprovals(approvers)
 
 	if len(approvalsToDismiss) > 0 {

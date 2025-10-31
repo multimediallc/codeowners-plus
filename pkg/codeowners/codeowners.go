@@ -22,6 +22,9 @@ type CodeOwners interface {
 	// AllRequired returns a list of the required reviewers for all files in the PR
 	AllRequired() ReviewerGroups
 
+	// AllRequiredIncludingSatisfied returns all required reviewer groups including those already satisfied
+	AllRequiredIncludingSatisfied() ReviewerGroups
+
 	// AllOptional return a list of the optional reviewers for all files in the PR
 	AllOptional() ReviewerGroups
 
@@ -88,6 +91,14 @@ func (om *ownersMap) AllRequired() ReviewerGroups {
 	reviewers := make([]*ReviewerGroup, 0)
 	for _, fileOwner := range om.fileToOwner {
 		reviewers = append(reviewers, fileOwner.RequiredReviewers()...)
+	}
+	return f.RemoveDuplicates(reviewers)
+}
+
+func (om *ownersMap) AllRequiredIncludingSatisfied() ReviewerGroups {
+	reviewers := make([]*ReviewerGroup, 0)
+	for _, fileOwner := range om.fileToOwner {
+		reviewers = append(reviewers, fileOwner.requiredReviewers...)
 	}
 	return f.RemoveDuplicates(reviewers)
 }

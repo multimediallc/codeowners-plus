@@ -61,6 +61,10 @@ func (m *mockCodeOwners) AllRequired() codeowners.ReviewerGroups {
 	return m.requiredOwners.FilterOut(m.appliedApprovals...)
 }
 
+func (m *mockCodeOwners) AllRequiredIncludingSatisfied() codeowners.ReviewerGroups {
+	return m.requiredOwners
+}
+
 func (m *mockCodeOwners) AllOptional() codeowners.ReviewerGroups {
 	return m.optionalOwners
 }
@@ -828,6 +832,26 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 			expectError:       false,
 			expectSuccess:     false,
 			expectedApprovals: []string{"@user1"},
+		},
+		{
+			name: "min reviews enforced - re-request from satisfied team",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: []string{"@team/eng", "@user1", "@user2"}},
+			},
+			currentApprovals: []*gh.CurrentApproval{
+				{GHLogin: "@user1", Reviewers: []string{"@team/eng"}},
+			},
+			fileRequiredMap: map[string]codeowners.ReviewerGroups{
+				"file1.go": {
+					&codeowners.ReviewerGroup{Names: []string{"@team/eng"}},
+				},
+			},
+			currentlyRequested: []string{},
+			alreadyReviewed:    []string{"@team/eng"},
+			minReviews:         &minReviews,
+			expectError:        false,
+			expectSuccess:      false,
+			expectedApprovals:  []string{"@team/eng"},
 		},
 		{
 			name: "token user is reviewer",
