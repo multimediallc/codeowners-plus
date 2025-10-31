@@ -68,6 +68,18 @@ func TestGitRefFileReader_ReadFile(t *testing.T) {
 			expected:    "* @owner1\n",
 			expectError: false,
 		},
+		{
+			name:        "read with absolute path including repo dir",
+			path:        "/repo/.codeowners",
+			expected:    "* @owner1\n",
+			expectError: false,
+		},
+		{
+			name:        "read subdirectory with absolute path",
+			path:        "/repo/subdir/.codeowners",
+			expected:    "*.js @owner2\n",
+			expectError: false,
+		},
 	}
 
 	for _, tc := range tt {
@@ -127,6 +139,11 @@ func TestGitRefFileReader_PathExists(t *testing.T) {
 		{
 			name:     "existing file with leading slash",
 			path:     "/.codeowners",
+			expected: true,
+		},
+		{
+			name:     "existing file with absolute path",
+			path:     "/repo/.codeowners",
 			expected: true,
 		},
 	}
