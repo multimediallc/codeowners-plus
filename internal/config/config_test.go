@@ -100,7 +100,7 @@ max_reviews = invalid
 			// Test with and without trailing slash
 			paths := []string{configPath, configPath + "/"}
 			for _, path := range paths {
-				got, err := ReadConfig(path)
+				got, err := ReadConfig(path, nil)
 				if tc.expectedErr {
 					if err == nil {
 						t.Error("expected error but got none")
@@ -176,7 +176,7 @@ func TestReadConfigFileError(t *testing.T) {
 	}
 
 	// Try to read config from directory with no permissions
-	_, err = ReadConfig(configPath)
+	_, err = ReadConfig(configPath, nil)
 	if err == nil {
 		t.Error("expected error when reading from directory with no permissions")
 	}

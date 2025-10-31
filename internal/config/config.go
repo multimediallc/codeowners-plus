@@ -1,23 +1,22 @@
 package owners
 
 import (
-	"errors"
-	"os"
 	"strings"
 
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/pelletier/go-toml/v2"
 )
 
 type Config struct {
-	MaxReviews           *int         `toml:"max_reviews"`
-	MinReviews           *int         `toml:"min_reviews"`
-	UnskippableReviewers []string     `toml:"unskippable_reviewers"`
-	Ignore               []string     `toml:"ignore"`
-	Enforcement          *Enforcement `toml:"enforcement"`
-	HighPriorityLabels   []string     `toml:"high_priority_labels"`
-	AdminBypass          *AdminBypass `toml:"admin_bypass"`
-	DetailedReviewers    bool         `toml:"detailed_reviewers"`
-	DisableSmartDismissal bool        `toml:"disable_smart_dismissal"`
+	MaxReviews            *int         `toml:"max_reviews"`
+	MinReviews            *int         `toml:"min_reviews"`
+	UnskippableReviewers  []string     `toml:"unskippable_reviewers"`
+	Ignore                []string     `toml:"ignore"`
+	Enforcement           *Enforcement `toml:"enforcement"`
+	HighPriorityLabels    []string     `toml:"high_priority_labels"`
+	AdminBypass           *AdminBypass `toml:"admin_bypass"`
+	DetailedReviewers     bool         `toml:"detailed_reviewers"`
+	DisableSmartDismissal bool         `toml:"disable_smart_dismissal"`
 }
 
 type Enforcement struct {
@@ -26,11 +25,11 @@ type Enforcement struct {
 }
 
 type AdminBypass struct {
-	Enabled       bool     `toml:"enabled"`
-	AllowedUsers  []string `toml:"allowed_users"`
+	Enabled      bool     `toml:"enabled"`
+	AllowedUsers []string `toml:"allowed_users"`
 }
 
-func ReadConfig(path string) (*Config, error) {
+func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) {
 	if !strings.HasSuffix(path, "/") {
 		path += "/"
 	}
@@ -46,11 +45,17 @@ func ReadConfig(path string) (*Config, error) {
 		DetailedReviewers:    false,
 	}
 
+	// Use filesystem reader if none provided
+	if fileReader == nil {
+		fileReader = &codeowners.FilesystemReader{}
+	}
+
 	fileName := path + "codeowners.toml"
-	if _, err := os.Stat(fileName); errors.Is(err, os.ErrNotExist) {
+
+	if !fileReader.PathExists(fileName) {
 		return defaultConfig, nil
 	}
-	file, err := os.ReadFile(fileName)
+	file, err := fileReader.ReadFile(fileName)
 	if err != nil {
 		return defaultConfig, err
 	}

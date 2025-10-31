@@ -23,7 +23,6 @@ jobs:
       - name: 'Checkout Code Repository'
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.base_ref }}
           fetch-depth: 0
 
       - name: 'Update action.yml to build locally'
