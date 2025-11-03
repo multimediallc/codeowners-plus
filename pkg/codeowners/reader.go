@@ -2,6 +2,8 @@ package codeowners
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +11,24 @@ import (
 	"sort"
 	"strings"
 )
+
+// FileReader defines an interface for reading files from different sources
+type FileReader interface {
+	ReadFile(path string) ([]byte, error)
+	PathExists(path string) bool
+}
+
+// FilesystemReader implements FileReader for the local filesystem
+type FilesystemReader struct{}
+
+func (f *FilesystemReader) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+func (f *FilesystemReader) PathExists(path string) bool {
+	_, err := os.Stat(path)
+	return !errors.Is(err, os.ErrNotExist)
+}
 
 type Rules struct {
 	Fallback                *ReviewerGroup
@@ -18,7 +38,8 @@ type Rules struct {
 }
 
 // Read the .codeowners file and return the fallback owner, ownership tests, and additional ownership tests
-func Read(path string, reviewerGroupManager ReviewerGroupManager, warningWriter io.Writer) Rules {
+// If fileReader is nil, it will use the filesystem
+func Read(path string, reviewerGroupManager ReviewerGroupManager, fileReader FileReader, warningWriter io.Writer) Rules {
 	rules := Rules{
 		Fallback:                nil,
 		OwnerTests:              FileTestCases{},
@@ -26,26 +47,37 @@ func Read(path string, reviewerGroupManager ReviewerGroupManager, warningWriter 
 		OptionalReviewerTests:   FileTestCases{},
 	}
 
-	ls, error := os.Lstat(path)
-	if error != nil || !ls.IsDir() {
-		return rules
+	// Use filesystem reader if none provided
+	if fileReader == nil {
+		fileReader = &FilesystemReader{}
+	}
+
+	// For filesystem reader, check if path is a directory
+	if _, ok := fileReader.(*FilesystemReader); ok {
+		ls, error := os.Lstat(path)
+		if error != nil || !ls.IsDir() {
+			return rules
+		}
 	}
 
 	if !strings.HasSuffix(path, "/") {
 		path += "/"
 	}
 
-	file, err := os.Open(path + ".codeowners")
+	codeownersPath := path + ".codeowners"
+
+	// Check if the .codeowners file exists
+	if !fileReader.PathExists(codeownersPath) {
+		return rules
+	}
+
+	// Read the file content
+	content, err := fileReader.ReadFile(codeownersPath)
 	if err != nil {
 		return rules
 	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			_, _ = fmt.Fprintf(warningWriter, "WARNING: Error closing file: %v\n", err)
-		}
-	}()
 
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
 		line = strings.TrimSpace(line)

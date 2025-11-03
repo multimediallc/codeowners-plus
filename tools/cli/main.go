@@ -287,7 +287,7 @@ func unownedFilesWithFormat(repo string, targets []string, depth int, dirsOnly b
 			filesForTarget = append(filesForTarget, repoFile)
 		}
 
-		ownersMap, err := codeowners.New(repo, filesForTarget, io.Discard)
+		ownersMap, err := codeowners.New(repo, filesForTarget, &codeowners.FilesystemReader{}, io.Discard)
 		if err != nil {
 			return fmt.Errorf("error reading codeowners config: %s", err)
 		}
@@ -433,7 +433,7 @@ func fileOwner(repo string, targets []string, format OutputFormat) error {
 		diffFiles[i] = codeowners.DiffFile{FileName: target}
 	}
 
-	ownersMap, err := codeowners.New(repo, diffFiles, io.Discard)
+	ownersMap, err := codeowners.New(repo, diffFiles, &codeowners.FilesystemReader{}, io.Discard)
 	if err != nil {
 		return fmt.Errorf("error reading codeowners config: %s", err)
 	}
@@ -464,7 +464,7 @@ func generateOwnershipMap(repo string, mapBy string) error {
 		return err
 	}
 
-	ownersMap, err := codeowners.New(repo, files, io.Discard)
+	ownersMap, err := codeowners.New(repo, files, &codeowners.FilesystemReader{}, io.Discard)
 	if err != nil {
 		return fmt.Errorf("error reading codeowners config: %s", err)
 	}
@@ -562,7 +562,7 @@ func validateCodeowners(repo string, target string) error {
 
 	rgm := codeowners.NewReviewerGroupMemo()
 
-	codeowners := codeowners.Read(target, rgm, io.Discard)
+	codeowners := codeowners.Read(target, rgm, &codeowners.FilesystemReader{}, io.Discard)
 	if codeowners.Fallback != nil {
 		for _, name := range codeowners.Fallback.Names {
 			if !strings.HasPrefix(name, "@") {

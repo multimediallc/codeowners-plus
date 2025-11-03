@@ -106,8 +106,13 @@ func (a *App) Run() (*OutputData, error) {
 	}
 	a.printDebug("PR: %d\n", a.client.PR().GetNumber())
 
-	// Read config
-	conf, err := owners.ReadConfig(a.config.RepoDir)
+	// Create file reader for base ref to prevent PR authors from modifying config or .codeowners
+	// This ensures the security policy comes from the protected branch, not the PR branch
+	fileReader := git.NewGitRefFileReader(a.client.PR().Base.GetSHA(), a.config.RepoDir)
+	a.printDebug("Using base ref %s for codeowners.toml and .codeowners files\n", a.client.PR().Base.GetSHA())
+
+	// Read config from base ref
+	conf, err := owners.ReadConfig(a.config.RepoDir, fileReader)
 	if err != nil {
 		a.printWarn("Error reading codeowners.toml - using default config\n")
 	}
@@ -129,8 +134,8 @@ func (a *App) Run() (*OutputData, error) {
 	}
 	a.gitDiff = gitDiff
 
-	// Initialize codeowners
-	codeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), a.config.WarningBuffer)
+	// Initialize codeowners using base ref file reader (same reader as config)
+	codeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), fileReader, a.config.WarningBuffer)
 	if err != nil {
 		return &OutputData{}, fmt.Errorf("NewCodeOwners Error: %v", err)
 	}

@@ -33,9 +33,10 @@ type CodeOwners interface {
 }
 
 // New creates a new CodeOwners object from a root path and a list of diff files
-func New(root string, files []DiffFile, warningWriter io.Writer) (CodeOwners, error) {
+// If fileReader is nil, it will use the filesystem
+func New(root string, files []DiffFile, fileReader FileReader, warningWriter io.Writer) (CodeOwners, error) {
 	reviewerGroupManager := NewReviewerGroupMemo()
-	tree := initOwnerTreeNode(root, root, reviewerGroupManager, nil, warningWriter)
+	tree := initOwnerTreeNode(root, root, reviewerGroupManager, nil, fileReader, warningWriter)
 	tree.warningWriter = warningWriter
 	// TODO - support inline ownership rules (issue #3)
 	fileNames := f.Map(files, func(file DiffFile) string { return file.FileName })
@@ -125,6 +126,7 @@ type ownerTreeNode struct {
 	optionalReviewerTests   FileTestCases
 	fallback                *ReviewerGroup
 	warningWriter           io.Writer
+	fileReader              FileReader
 }
 
 func initOwnerTreeNode(
@@ -132,9 +134,10 @@ func initOwnerTreeNode(
 	path string,
 	reviewerGroupManager ReviewerGroupManager,
 	parent *ownerTreeNode,
+	fileReader FileReader,
 	warningWriter io.Writer,
 ) *ownerTreeNode {
-	rules := Read(path, reviewerGroupManager, warningWriter)
+	rules := Read(path, reviewerGroupManager, fileReader, warningWriter)
 	fallback := rules.Fallback
 	ownerTests := rules.OwnerTests
 	additionalReviewerTests := rules.AdditionalReviewerTests
@@ -154,6 +157,7 @@ func initOwnerTreeNode(
 		optionalReviewerTests:   optionalReviewerTests,
 		fallback:                fallback,
 		warningWriter:           io.Discard,
+		fileReader:              fileReader,
 	}
 }
 
@@ -172,7 +176,7 @@ func (tree *ownerTreeNode) BuildFromFiles(
 			currPath = currPath + "/" + part
 			partNode, ok := currNode.children[part]
 			if !ok {
-				partNode = initOwnerTreeNode(part, currPath, reviewerGroupManager, currNode, tree.warningWriter)
+				partNode = initOwnerTreeNode(part, currPath, reviewerGroupManager, currNode, tree.fileReader, tree.warningWriter)
 				currNode.children[part] = partNode
 			}
 			currNode = partNode
