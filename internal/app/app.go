@@ -278,6 +278,31 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 
 	// Exit if there are not enough reviews
 	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
+		// Check if we need to re-request from a satisfied team when min_reviews is not met
+		// Handles the case when there min_reviews is higher than the number of teams required.
+		if validApprovalCount < *a.Conf.MinReviews && len(unapprovedOwners) == 0 {
+			// All required teams have approved, but we need more reviews
+			// Re-request review from the satisfied team(s)
+			currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()
+			if err != nil {
+				a.printWarn("WARNING: Error getting currently requested owners for re-request: %v\n", err)
+			} else {
+				currentlyRequestedSet := make(map[string]struct{}, len(currentlyRequestedOwners))
+				for _, owner := range currentlyRequestedOwners {
+					currentlyRequestedSet[owner] = struct{}{}
+				}
+				ownersToReRequest := f.Filtered(allRequiredOwnerNames, func(owner string) bool {
+					_, exists := currentlyRequestedSet[owner]
+					return !exists
+				})
+				if len(ownersToReRequest) > 0 {
+					a.printDebug("Re-requesting Reviews from satisfied team(s) to meet min_reviews: %s\n", ownersToReRequest)
+					if err := a.client.RequestReviewers(ownersToReRequest); err != nil {
+						a.printWarn("WARNING: Error re-requesting reviewers: %v\n", err)
+					}
+				}
+			}
+		}
 		if validApprovalCount < *a.Conf.MinReviews {
 			message = fmt.Sprintf("FAIL: Min Reviews not satisfied. Need %d, found %d", *a.Conf.MinReviews, validApprovalCount)
 			return false, message, stillRequired, nil
