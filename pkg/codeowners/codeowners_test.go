@@ -10,7 +10,7 @@ import (
 
 func TestInitOwnerTree(t *testing.T) {
 	rgMan := NewReviewerGroupMemo()
-	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, io.Discard)
+	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, nil, io.Discard)
 
 	if tree.name != "../../test_project" {
 		t.Errorf("Expected name to be ../test_project, got %s", tree.name)
@@ -64,7 +64,7 @@ func TestGetOwners(t *testing.T) {
 		"frontend/inner/a.test.js",
 	}
 	rgMan := NewReviewerGroupMemo()
-	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, io.Discard)
+	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, nil, io.Discard)
 	testMap := tree.BuildFromFiles(files, rgMan)
 	owners, err := testMap.getOwners(files)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestGetOwners(t *testing.T) {
 func TestGetOwnersFail(t *testing.T) {
 	files := []string{"a.py"}
 	rgMan := NewReviewerGroupMemo()
-	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, io.Discard)
+	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, nil, io.Discard)
 	testMap := tree.BuildFromFiles(files, rgMan)
 	files = append(files, "non_existent_file")
 	_, err := testMap.getOwners(files)
@@ -129,7 +129,7 @@ func TestGetOwnersFail(t *testing.T) {
 func TestGetOwnersNoFallback(t *testing.T) {
 	files := []string{"a.py"}
 	rgMan := NewReviewerGroupMemo()
-	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, io.Discard)
+	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, nil, io.Discard)
 	testMap := tree.BuildFromFiles(files, rgMan)
 	testMap["a.py"].fallback = nil
 	owners, err := testMap.getOwners(files)
@@ -147,7 +147,7 @@ func TestNewCodeOwners(t *testing.T) {
 		{FileName: "frontend/b.ts"},
 		{FileName: "frontend/inner/a.test.js"},
 	}
-	_, err := New("../../test_project", files, io.Discard)
+	_, err := New("../../test_project", files, nil, io.Discard)
 	if err != nil {
 		t.Errorf("NewCodeOwners error: %v", err)
 	}
@@ -164,7 +164,7 @@ func setupOwnersMap() (*ownersMap, map[string]bool, error) {
 		"frontend/inner/a.js",
 	}
 	rgMan := NewReviewerGroupMemo()
-	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, io.Discard)
+	tree := initOwnerTreeNode("../../test_project", "../../test_project", rgMan, nil, nil, io.Discard)
 	testMap := tree.BuildFromFiles(files, rgMan)
 	owners, error := testMap.getOwners(files)
 	expectedOwners := map[string]bool{
