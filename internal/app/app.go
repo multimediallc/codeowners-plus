@@ -283,7 +283,6 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 			if err != nil {
 				a.printWarn("WARNING: Error getting currently requested owners for re-request: %v\n", err)
 			} else {
-				// Filter out anyone already requested
 				currentlyRequestedSet := make(map[string]struct{}, len(currentlyRequestedOwners))
 				for _, owner := range currentlyRequestedOwners {
 					currentlyRequestedSet[owner] = struct{}{}
