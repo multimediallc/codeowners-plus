@@ -222,7 +222,6 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	}
 
 	unapprovedOwners := a.codeowners.AllRequired()
-
 	maxReviewsMet := false
 	if a.Conf.MaxReviews != nil && *a.Conf.MaxReviews > 0 {
 		if validApprovalCount >= *a.Conf.MaxReviews && len(f.Intersection(unapprovedOwners.Flatten(), a.Conf.UnskippableReviewers)) == 0 {
@@ -275,7 +274,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	// Exit if there are not enough reviews
 	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
 		// Check if we need to re-request from a satisfied team when min_reviews is not met
-		// This handles the case where only 1 team is required but multiple reviews are needed
+		// Handles the case when there min_reviews is higher than the number of teams required.
 		if validApprovalCount < *a.Conf.MinReviews && len(unapprovedOwners) == 0 {
 			// All required teams have approved, but we need more reviews
 			// Re-request review from the satisfied team(s)

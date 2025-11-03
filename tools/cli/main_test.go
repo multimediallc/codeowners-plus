@@ -416,11 +416,11 @@ func (f *fakeCodeOwners) FileRequired() map[string]codeowners.ReviewerGroups {
 func (f *fakeCodeOwners) FileOptional() map[string]codeowners.ReviewerGroups {
 	return f.optional
 }
-func (f *fakeCodeOwners) SetAuthor(author string)                               {}
-func (f *fakeCodeOwners) AllRequired() codeowners.ReviewerGroups                { return nil }
-func (f *fakeCodeOwners) AllOptional() codeowners.ReviewerGroups                { return nil }
-func (f *fakeCodeOwners) UnownedFiles() []string                                { return nil }
-func (f *fakeCodeOwners) ApplyApprovals(approvers []string)                     {}
+func (f *fakeCodeOwners) SetAuthor(author string)                {}
+func (f *fakeCodeOwners) AllRequired() codeowners.ReviewerGroups { return nil }
+func (f *fakeCodeOwners) AllOptional() codeowners.ReviewerGroups { return nil }
+func (f *fakeCodeOwners) UnownedFiles() []string                 { return nil }
+func (f *fakeCodeOwners) ApplyApprovals(approvers []string)      {}
 
 func TestJsonTargets(t *testing.T) {
 	owners := &fakeCodeOwners{
