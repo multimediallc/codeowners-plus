@@ -61,10 +61,6 @@ func (m *mockCodeOwners) AllRequired() codeowners.ReviewerGroups {
 	return m.requiredOwners.FilterOut(m.appliedApprovals...)
 }
 
-func (m *mockCodeOwners) AllRequiredIncludingSatisfied() codeowners.ReviewerGroups {
-	return m.requiredOwners
-}
-
 func (m *mockCodeOwners) AllOptional() codeowners.ReviewerGroups {
 	return m.optionalOwners
 }
