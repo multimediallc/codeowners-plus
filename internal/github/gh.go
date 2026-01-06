@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-github/v63/github"
 	"github.com/multimediallc/codeowners-plus/internal/git"
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
@@ -171,7 +172,7 @@ func (gh *GHClient) InitReviews() error {
 func (gh *GHClient) approvals() []*github.PullRequestReview {
 	seen := make(map[string]bool, 0)
 	approvals := f.Filtered(gh.reviews, func(approval *github.PullRequestReview) bool {
-		userName := approval.GetUser().GetLogin()
+		userName := codeowners.NormalizeUsername(approval.GetUser().GetLogin())
 		if _, ok := seen[userName]; ok {
 			// we only care about the most recent reviews for each user
 			return false
@@ -206,7 +207,7 @@ func (gh *GHClient) ContainsValidBypassApproval(allowedUsers []string) (bool, er
 
 		// Check if user is in allowed users list
 		for _, allowedUser := range allowedUsers {
-			if username == allowedUser {
+			if codeowners.NormalizeUsername(username) == codeowners.NormalizeUsername(allowedUser) {
 				return true, nil
 			}
 		}
@@ -253,7 +254,7 @@ func (gh *GHClient) FindUserApproval(ghUser string) (*CurrentApproval, error) {
 		}
 	}
 	review, found := f.Find(gh.approvals(), func(review *github.PullRequestReview) bool {
-		return review.GetUser().GetLogin() == ghUser
+		return codeowners.NormalizeUsername(review.GetUser().GetLogin()) == codeowners.NormalizeUsername(ghUser)
 	})
 
 	if !found {
@@ -604,7 +605,7 @@ func makeGHUserReviwerMap(reviewers []string, teamFetcher func(string, string) [
 	for _, reviewer := range reviewers {
 		reviewerString := reviewer[1:] // trim the @
 		// Add the team or user to the map
-		insertReviewer(reviewerString, reviewer)
+		insertReviewer(codeowners.NormalizeUsername(reviewerString), reviewer)
 		if !strings.Contains(reviewerString, "/") {
 			// This is a user
 			continue
@@ -615,7 +616,7 @@ func makeGHUserReviwerMap(reviewers []string, teamFetcher func(string, string) [
 		users := teamFetcher(org, team)
 		// Add the team members to the map
 		for _, user := range users {
-			insertReviewer(user.GetLogin(), reviewer)
+			insertReviewer(codeowners.NormalizeUsername(user.GetLogin()), reviewer)
 		}
 	}
 	return userReviewerMap

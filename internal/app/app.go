@@ -177,9 +177,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 
 	// Get optional reviewers
 	allOptionalReviewerNames := a.codeowners.AllOptional().Flatten()
-	allOptionalReviewerNames = f.Filtered(allOptionalReviewerNames, func(name string) bool {
-		return !slices.Contains(allRequiredOwnerNames, name)
-	})
+	allOptionalReviewerNames = codeowners.FilterOutNames(allOptionalReviewerNames, allRequiredOwnerNames)
 	a.printDebug("All Optional Reviewers: %s\n", allOptionalReviewerNames)
 
 	// Initialize user reviewer map
@@ -229,7 +227,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	unapprovedOwners := a.codeowners.AllRequired()
 	maxReviewsMet := false
 	if a.Conf.MaxReviews != nil && *a.Conf.MaxReviews > 0 {
-		if validApprovalCount >= *a.Conf.MaxReviews && len(f.Intersection(unapprovedOwners.Flatten(), a.Conf.UnskippableReviewers)) == 0 {
+		if validApprovalCount >= *a.Conf.MaxReviews && !unapprovedOwners.ContainsAny(a.Conf.UnskippableReviewers) {
 			maxReviewsMet = true
 		}
 	}
@@ -431,7 +429,10 @@ func (a *App) processTokenOwnerApproval() (*gh.CurrentApproval, error) {
 }
 
 func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
-	fileReviewers := f.MapMap(a.codeowners.FileRequired(), func(reviewers codeowners.ReviewerGroups) []string { return reviewers.Flatten() })
+	// Create file reviewer map with normalized names for case-insensitive comparison
+	fileReviewers := f.MapMap(a.codeowners.FileRequired(), func(reviewers codeowners.ReviewerGroups) []string {
+		return codeowners.NormalizeUsernames(reviewers.Flatten())
+	})
 
 	var approvers []string
 	var approvalsToDismiss []*gh.CurrentApproval

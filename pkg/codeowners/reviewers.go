@@ -53,16 +53,40 @@ func (rgs ReviewerGroups) Flatten() []string {
 	return names
 }
 
+// ContainsAny returns true if any of the provided names (case-insensitive)
+// are present in any of the reviewer groups
+func (rgs ReviewerGroups) ContainsAny(names []string) bool {
+	normalizedInput := NormalizeUsernames(names)
+	for _, rg := range rgs {
+		for _, name := range rg.Names {
+			if slices.Contains(normalizedInput, NormalizeUsername(name)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (rgs ReviewerGroups) FilterOut(names ...string) ReviewerGroups {
+	normalizedNames := NormalizeUsernames(names)
 	return f.Filtered(rgs, func(rg *ReviewerGroup) bool {
 		found := false
 		for _, name := range rg.Names {
-			if slices.Contains(names, name) {
+			if slices.Contains(normalizedNames, NormalizeUsername(name)) {
 				found = true
 				break
 			}
 		}
 		return !found
+	})
+}
+
+// FilterOutNames returns a new slice with names from 'names' that are NOT present
+// in 'exclude' (case-insensitive comparison)
+func FilterOutNames(names []string, exclude []string) []string {
+	normalizedExclude := NormalizeUsernames(exclude)
+	return f.Filtered(names, func(name string) bool {
+		return !slices.Contains(normalizedExclude, NormalizeUsername(name))
 	})
 }
 

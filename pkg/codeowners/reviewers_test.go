@@ -165,3 +165,109 @@ func TestReviewerGroupsFilter(t *testing.T) {
 		t.Error("Filter should work with multiple names")
 	}
 }
+
+func TestReviewerGroupsContainsAny(t *testing.T) {
+	rgMan := NewReviewerGroupMemo()
+	rgs := ReviewerGroups{rgMan.ToReviewerGroup("@alice", "@bob"), rgMan.ToReviewerGroup("@charlie")}
+
+	tt := []struct {
+		name     string
+		input    []string
+		expected bool
+	}{
+		{
+			name:     "contains exact match",
+			input:    []string{"@alice"},
+			expected: true,
+		},
+		{
+			name:     "contains case-insensitive match",
+			input:    []string{"@ALICE"},
+			expected: true,
+		},
+		{
+			name:     "contains mixed case match",
+			input:    []string{"@BoB"},
+			expected: true,
+		},
+		{
+			name:     "contains one of multiple",
+			input:    []string{"@david", "@charlie"},
+			expected: true,
+		},
+		{
+			name:     "does not contain",
+			input:    []string{"@david"},
+			expected: false,
+		},
+		{
+			name:     "empty input",
+			input:    []string{},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			result := rgs.ContainsAny(tc.input)
+			if result != tc.expected {
+				t.Errorf("ContainsAny(%v) = %v, expected %v", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestFilterOutNames(t *testing.T) {
+	tt := []struct {
+		name     string
+		names    []string
+		exclude  []string
+		expected []string
+	}{
+		{
+			name:     "filter out exact match",
+			names:    []string{"@alice", "@bob", "@charlie"},
+			exclude:  []string{"@bob"},
+			expected: []string{"@alice", "@charlie"},
+		},
+		{
+			name:     "filter out case-insensitive match",
+			names:    []string{"@alice", "@bob", "@charlie"},
+			exclude:  []string{"@BOB"},
+			expected: []string{"@alice", "@charlie"},
+		},
+		{
+			name:     "filter out multiple",
+			names:    []string{"@alice", "@bob", "@charlie"},
+			exclude:  []string{"@alice", "@CHARLIE"},
+			expected: []string{"@bob"},
+		},
+		{
+			name:     "no matches to filter",
+			names:    []string{"@alice", "@bob"},
+			exclude:  []string{"@david"},
+			expected: []string{"@alice", "@bob"},
+		},
+		{
+			name:     "empty exclude list",
+			names:    []string{"@alice", "@bob"},
+			exclude:  []string{},
+			expected: []string{"@alice", "@bob"},
+		},
+		{
+			name:     "empty names list",
+			names:    []string{},
+			exclude:  []string{"@alice"},
+			expected: []string{},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FilterOutNames(tc.names, tc.exclude)
+			if !f.SlicesItemsMatch(result, tc.expected) {
+				t.Errorf("FilterOutNames(%v, %v) = %v, expected %v", tc.names, tc.exclude, result, tc.expected)
+			}
+		})
+	}
+}

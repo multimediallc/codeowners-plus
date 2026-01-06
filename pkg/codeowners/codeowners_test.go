@@ -238,3 +238,131 @@ func TestSetAuthor(t *testing.T) {
 		}
 	}
 }
+
+func TestSetAuthorCaseInsensitive(t *testing.T) {
+	owners, _, err := setupOwnersMap()
+	if err != nil {
+		t.Errorf("Error getting owners: %v", err)
+	}
+
+	// Set author with different casing than what's in the .codeowners file
+	owners.SetAuthor("@B-OWNER") // .codeowners has @b-owner
+
+	// Verify that @b-owner was removed from reviewers
+	allReviewers := owners.AllRequired().Flatten()
+	for _, reviewer := range allReviewers {
+		if NormalizeUsername(reviewer) == "@b-owner" {
+			t.Errorf("Expected @b-owner to be removed, but found %s", reviewer)
+		}
+	}
+
+	// Verify with lowercase
+	owners2, _, err := setupOwnersMap()
+	if err != nil {
+		t.Errorf("Error getting owners: %v", err)
+	}
+	owners2.SetAuthor("@b-owner")
+	allReviewers2 := owners2.AllRequired().Flatten()
+
+	// Both should have the same result
+	if len(allReviewers) != len(allReviewers2) {
+		t.Errorf("Case-insensitive SetAuthor produced different results")
+	}
+}
+
+func TestApplyApprovalsCaseInsensitive(t *testing.T) {
+	owners, _, err := setupOwnersMap()
+	if err != nil {
+		t.Errorf("Error getting owners: %v", err)
+	}
+
+	// Apply approvals with different casing
+	owners.ApplyApprovals([]string{"@BASE", "@B-OWNER"}) // .codeowners has @base, @b-owner
+
+	// Verify approvals were applied regardless of case
+	allRequired := owners.AllRequired()
+	for _, rg := range allRequired {
+		normalizedNames := NormalizeUsernames(rg.Names)
+		for _, name := range normalizedNames {
+			if name == "@base" || name == "@b-owner" {
+				if !rg.Approved {
+					t.Errorf("Expected %v to be approved", rg.Names)
+				}
+			}
+		}
+	}
+
+	// Test with lowercase
+	owners2, _, err := setupOwnersMap()
+	if err != nil {
+		t.Errorf("Error getting owners: %v", err)
+	}
+	owners2.ApplyApprovals([]string{"@base", "@b-owner"})
+
+	// Both should produce the same approval state
+	allRequired2 := owners2.AllRequired()
+	approvedCount1 := 0
+	approvedCount2 := 0
+	for _, rg := range allRequired {
+		if rg.Approved {
+			approvedCount1++
+		}
+	}
+	for _, rg := range allRequired2 {
+		if rg.Approved {
+			approvedCount2++
+		}
+	}
+
+	if approvedCount1 != approvedCount2 {
+		t.Errorf("Case-insensitive ApplyApprovals produced different results: %d vs %d", approvedCount1, approvedCount2)
+	}
+}
+
+func TestNameReviewerMapCaseInsensitive(t *testing.T) {
+	owners, _, err := setupOwnersMap()
+	if err != nil {
+		t.Errorf("Error getting owners: %v", err)
+	}
+
+	// First, verify @frontend is in the required reviewers before approval
+	foundBefore := false
+	for _, fileOwner := range owners.fileToOwner {
+		for _, rg := range fileOwner.requiredReviewers {
+			for _, name := range rg.Names {
+				if NormalizeUsername(name) == "@frontend" {
+					foundBefore = true
+					t.Logf("Found @frontend before approval: %v, approved=%v", rg.Names, rg.Approved)
+				}
+			}
+		}
+	}
+
+	if !foundBefore {
+		t.Errorf("@frontend not found in required reviewers - test setup issue")
+		return
+	}
+
+	// Check that the nameReviewerMap uses normalized keys
+	// Apply an approval with uppercase
+	owners.ApplyApprovals([]string{"@FRONTEND"})
+
+	// Verify it matches @frontend by checking if it was approved
+	foundApproved := false
+	for _, fileOwner := range owners.fileToOwner {
+		for _, rg := range fileOwner.requiredReviewers {
+			for _, name := range rg.Names {
+				if NormalizeUsername(name) == "@frontend" {
+					t.Logf("After approval: %v, approved=%v", rg.Names, rg.Approved)
+					if rg.Approved {
+						foundApproved = true
+					}
+				}
+			}
+		}
+	}
+
+	if !foundApproved {
+		t.Errorf("Expected @frontend to be approved when @FRONTEND was used")
+	}
+}

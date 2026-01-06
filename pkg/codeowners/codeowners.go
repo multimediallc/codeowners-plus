@@ -3,6 +3,7 @@ package codeowners
 import (
 	"errors"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
@@ -54,9 +55,12 @@ type ownersMap struct {
 }
 
 func (om *ownersMap) SetAuthor(author string) {
-	for _, reviewers := range om.nameReviewerMap[author] {
-		// remove author from the reviewers list
-		reviewers.Names = f.RemoveValue(reviewers.Names, author)
+	normalizedAuthor := NormalizeUsername(author)
+	for _, reviewers := range om.nameReviewerMap[normalizedAuthor] {
+		// remove author from the reviewers list (case-insensitive)
+		reviewers.Names = slices.DeleteFunc(reviewers.Names, func(name string) bool {
+			return NormalizeUsername(name) == normalizedAuthor
+		})
 		if len(reviewers.Names) == 0 {
 			// mark the reviewer as approved if they are the author
 			reviewers.Approved = true
@@ -108,7 +112,8 @@ func (om *ownersMap) UnownedFiles() []string {
 // Apply approver satisfaction to the owners map, and return the approvals which should be invalidated
 func (om *ownersMap) ApplyApprovals(approvers []string) {
 	applyApproved := func(user string) {
-		for _, reviewer := range om.nameReviewerMap[user] {
+		normalizedUser := NormalizeUsername(user)
+		for _, reviewer := range om.nameReviewerMap[normalizedUser] {
 			reviewer.Approved = true
 		}
 	}
@@ -259,10 +264,11 @@ func (otfm ownerTestFileMap) getOwners(fileNames []string) (*ownersMap, error) {
 
 		for _, reviewer := range fileOwner.requiredReviewers {
 			for _, name := range reviewer.Names {
-				if v, ok := nameReviewerMap[name]; ok {
-					nameReviewerMap[name] = append(v, reviewer)
+				normalizedName := NormalizeUsername(name)
+				if v, ok := nameReviewerMap[normalizedName]; ok {
+					nameReviewerMap[normalizedName] = append(v, reviewer)
 				} else {
-					nameReviewerMap[name] = []*ReviewerGroup{reviewer}
+					nameReviewerMap[normalizedName] = []*ReviewerGroup{reviewer}
 				}
 			}
 		}

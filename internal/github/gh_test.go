@@ -231,7 +231,7 @@ func TestMakeGHUserReviewerMap(t *testing.T) {
 		"user3":       []string{"@org/team1"},
 		"org/team1":   []string{"@org/team1"},
 		"org/team2":   []string{"@org/team2"},
-		"other/teamX": []string{"@other/teamX"},
+		"other/teamx": []string{"@other/teamX"}, // Key is normalized to lowercase
 	}
 
 	if !reflect.DeepEqual(userReviewerMap, expectedUserReviewerMap) {
