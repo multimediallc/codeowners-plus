@@ -30,7 +30,7 @@ type CodeOwners interface {
 	UnownedFiles() []string
 
 	// ApplyApprovals marks the given approvers as satisfied
-	ApplyApprovals(approvers []string)
+	ApplyApprovals(approvers []Slug)
 }
 
 // New creates a new CodeOwners object from a root path and a list of diff files
@@ -55,11 +55,11 @@ type ownersMap struct {
 }
 
 func (om *ownersMap) SetAuthor(author string) {
-	normalizedAuthor := NormalizeUsername(author)
-	for _, reviewers := range om.nameReviewerMap[normalizedAuthor] {
+	authorSlug := NewSlug(author)
+	for _, reviewers := range om.nameReviewerMap[authorSlug.Normalized()] {
 		// remove author from the reviewers list (case-insensitive)
-		reviewers.Names = slices.DeleteFunc(reviewers.Names, func(name string) bool {
-			return NormalizeUsername(name) == normalizedAuthor
+		reviewers.Names = slices.DeleteFunc(reviewers.Names, func(name Slug) bool {
+			return name.Equals(authorSlug)
 		})
 		if len(reviewers.Names) == 0 {
 			// mark the reviewer as approved if they are the author
@@ -110,15 +110,11 @@ func (om *ownersMap) UnownedFiles() []string {
 }
 
 // Apply approver satisfaction to the owners map, and return the approvals which should be invalidated
-func (om *ownersMap) ApplyApprovals(approvers []string) {
-	applyApproved := func(user string) {
-		normalizedUser := NormalizeUsername(user)
-		for _, reviewer := range om.nameReviewerMap[normalizedUser] {
+func (om *ownersMap) ApplyApprovals(approvers []Slug) {
+	for _, user := range approvers {
+		for _, reviewer := range om.nameReviewerMap[user.Normalized()] {
 			reviewer.Approved = true
 		}
-	}
-	for _, user := range approvers {
-		applyApproved(user)
 	}
 }
 
@@ -264,7 +260,7 @@ func (otfm ownerTestFileMap) getOwners(fileNames []string) (*ownersMap, error) {
 
 		for _, reviewer := range fileOwner.requiredReviewers {
 			for _, name := range reviewer.Names {
-				normalizedName := NormalizeUsername(name)
+				normalizedName := name.Normalized()
 				if v, ok := nameReviewerMap[normalizedName]; ok {
 					nameReviewerMap[normalizedName] = append(v, reviewer)
 				} else {

@@ -52,7 +52,7 @@ type mockCodeOwners struct {
 	optionalOwners   codeowners.ReviewerGroups
 	fileRequiredMap  map[string]codeowners.ReviewerGroups
 	fileOptionalMap  map[string]codeowners.ReviewerGroups
-	appliedApprovals []string
+	appliedApprovals []codeowners.Slug
 	author           string
 	unownedFiles     []string
 }
@@ -73,7 +73,7 @@ func (m *mockCodeOwners) FileOptional() map[string]codeowners.ReviewerGroups {
 	return m.fileOptionalMap
 }
 
-func (m *mockCodeOwners) ApplyApprovals(approvers []string) {
+func (m *mockCodeOwners) ApplyApprovals(approvers []codeowners.Slug) {
 	m.appliedApprovals = approvers
 }
 
@@ -82,7 +82,7 @@ func (m *mockCodeOwners) SetAuthor(author string) {
 	// Remove author from reviewers
 	for _, reviewers := range m.requiredOwners {
 		for i, name := range reviewers.Names {
-			if name == author {
+			if name.EqualsString(author) {
 				reviewers.Names = append(reviewers.Names[:i], reviewers.Names[i+1:]...)
 				if len(reviewers.Names) == 0 {
 					reviewers.Approved = true
@@ -93,7 +93,7 @@ func (m *mockCodeOwners) SetAuthor(author string) {
 	}
 	for _, reviewers := range m.optionalOwners {
 		for i, name := range reviewers.Names {
-			if name == author {
+			if name.EqualsString(author) {
 				reviewers.Names = append(reviewers.Names[:i], reviewers.Names[i+1:]...)
 				if len(reviewers.Names) == 0 {
 					reviewers.Approved = true
@@ -115,9 +115,9 @@ type mockGitHubClient struct {
 	currentApprovalsError     error
 	tokenUser                 string
 	tokenUserError            error
-	currentlyRequested        []string
+	currentlyRequested        []codeowners.Slug
 	currentlyRequestedError   error
-	alreadyReviewed           []string
+	alreadyReviewed           []codeowners.Slug
 	alreadyReviewedError      error
 	dismissError              error
 	requestReviewersError     error
@@ -156,18 +156,18 @@ func (m *mockGitHubClient) GetTokenUser() (string, error) {
 
 func (m *mockGitHubClient) FindUserApproval(user string) (*gh.CurrentApproval, error) {
 	for _, approval := range m.currentApprovals {
-		if approval.GHLogin == user {
+		if approval.GHLogin.EqualsString(user) {
 			return approval, nil
 		}
 	}
 	return nil, fmt.Errorf("not found")
 }
 
-func (m *mockGitHubClient) GetCurrentlyRequested() ([]string, error) {
+func (m *mockGitHubClient) GetCurrentlyRequested() ([]codeowners.Slug, error) {
 	return m.currentlyRequested, m.currentlyRequestedError
 }
 
-func (m *mockGitHubClient) GetAlreadyReviewed() ([]string, error) {
+func (m *mockGitHubClient) GetAlreadyReviewed() ([]codeowners.Slug, error) {
 	return m.alreadyReviewed, m.alreadyReviewedError
 }
 
@@ -180,11 +180,11 @@ func (m *mockGitHubClient) RequestReviewers(reviewers []string) error {
 	return m.requestReviewersError
 }
 
-func (m *mockGitHubClient) CheckApprovals(fileReviewers map[string][]string, approvals []*gh.CurrentApproval, diff git.Diff) ([]string, []*gh.CurrentApproval) {
+func (m *mockGitHubClient) CheckApprovals(fileReviewers map[string][]string, approvals []*gh.CurrentApproval, diff git.Diff) ([]codeowners.Slug, []*gh.CurrentApproval) {
 	// Simple mock implementation - approve all reviewers
-	var approvers []string
+	var approvers []codeowners.Slug
 	for _, reviewers := range fileReviewers {
-		approvers = append(approvers, reviewers...)
+		approvers = append(approvers, codeowners.NewSlugs(reviewers)...)
 	}
 	return approvers, nil
 }
@@ -320,12 +320,12 @@ func (m *mockGitHubClient) IsRepositoryAdmin(username string) (bool, error) {
 func (m *mockGitHubClient) ContainsValidBypassApproval(allowedUsers []string) (bool, error) {
 	// For testing, check if any approval is from an admin-user with review ID 999
 	for _, approval := range m.currentApprovals {
-		if approval.ReviewID == 999 && strings.Contains(approval.GHLogin, "admin") {
+		if approval.ReviewID == 999 && strings.Contains(approval.GHLogin.Original(), "admin") {
 			return true, nil
 		}
 		// Also check if user is in allowed users list
 		for _, allowedUser := range allowedUsers {
-			if approval.GHLogin == allowedUser {
+			if approval.GHLogin.EqualsString(allowedUser) {
 				return true, nil
 			}
 		}
@@ -513,7 +513,7 @@ func setupAppForTest(t *testing.T, quiet bool) (*App, *mockGitHubClient) {
 	}
 	mockOwners := &mockCodeOwners{
 		requiredOwners: codeowners.ReviewerGroups{
-			&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+			&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})},
 		},
 	}
 
@@ -541,7 +541,7 @@ func TestAddReviewStatusComment(t *testing.T) {
 		{
 			name: "no existing comment",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			expectAddComment: true,
 			expectError:      false,
@@ -549,7 +549,7 @@ func TestAddReviewStatusComment(t *testing.T) {
 		{
 			name: "update existing comment",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			existingComments: []*github.IssueComment{
 				{
@@ -563,7 +563,7 @@ func TestAddReviewStatusComment(t *testing.T) {
 		{
 			name: "quiet mode",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			expectAddComment: false,
 			expectError:      false,
@@ -670,22 +670,22 @@ func TestRequestReviews(t *testing.T) {
 	tt := []struct {
 		name                   string
 		quiet                  bool
-		mockCurrentlyRequested []string
-		mockAlreadyReviewed    []string
+		mockCurrentlyRequested []codeowners.Slug
+		mockAlreadyReviewed    []codeowners.Slug
 		expectedShouldCall     bool
 	}{
 		{
 			name:                   "short circuits in quiet mode",
 			quiet:                  true,
-			mockCurrentlyRequested: []string{},
-			mockAlreadyReviewed:    []string{},
+			mockCurrentlyRequested: []codeowners.Slug{},
+			mockAlreadyReviewed:    []codeowners.Slug{},
 			expectedShouldCall:     false,
 		},
 		{
 			name:                   "sends requests when not in quiet mode",
 			quiet:                  false,
-			mockCurrentlyRequested: []string{},
-			mockAlreadyReviewed:    []string{},
+			mockCurrentlyRequested: []codeowners.Slug{},
+			mockAlreadyReviewed:    []codeowners.Slug{},
 			expectedShouldCall:     true,
 		},
 	}
@@ -721,8 +721,8 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		fileRequiredMap      map[string]codeowners.ReviewerGroups
 		fileOptionalMap      map[string]codeowners.ReviewerGroups
 		currentApprovals     []*gh.CurrentApproval
-		currentlyRequested   []string
-		alreadyReviewed      []string
+		currentlyRequested   []codeowners.Slug
+		alreadyReviewed      []codeowners.Slug
 		tokenUser            string
 		tokenUserError       error
 		userReviewerMapError error
@@ -738,132 +738,132 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		unownedFiles         []string
 		expectError          bool
 		expectSuccess        bool
-		expectedApprovals    []string
+		expectedApprovals    []codeowners.Slug
 	}{
 		{
 			name: "successful approval process",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})},
 			},
 			optionalOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
 			},
 			fileRequiredMap: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 			},
 			currentApprovals: []*gh.CurrentApproval{
-				{GHLogin: "@user1"},
+				{GHLogin: codeowners.NewSlug("@user1")},
 			},
-			currentlyRequested: []string{"@user2"},
-			alreadyReviewed:    []string{"@user1"},
+			currentlyRequested: codeowners.NewSlugs([]string{"@user2"}),
+			alreadyReviewed:    codeowners.NewSlugs([]string{"@user1"}),
 			expectError:        false,
 			expectSuccess:      true,
-			expectedApprovals:  []string{"@user1"},
+			expectedApprovals:  codeowners.NewSlugs([]string{"@user1"}),
 		},
 		{
 			name: "not enough approvals",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-				&codeowners.ReviewerGroup{Names: []string{"@user2"}},
-				&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user2"})},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
 			},
 			currentApprovals: []*gh.CurrentApproval{
-				{GHLogin: "@user1"},
-				{GHLogin: "@user3"},
+				{GHLogin: codeowners.NewSlug("@user1")},
+				{GHLogin: codeowners.NewSlug("@user3")},
 			},
 			fileRequiredMap: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 				"file3.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
 				},
 			},
-			currentlyRequested: []string{"@user2"},
+			currentlyRequested: codeowners.NewSlugs([]string{"@user2"}),
 			expectError:        false,
 			expectSuccess:      false,
-			expectedApprovals:  []string{"@user1", "@user3"},
+			expectedApprovals:  codeowners.NewSlugs([]string{"@user1", "@user3"}),
 		},
 		{
 			name: "max reviews bypass",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-				&codeowners.ReviewerGroup{Names: []string{"@user2"}},
-				&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user2"})},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
 			},
 			currentApprovals: []*gh.CurrentApproval{
-				{GHLogin: "@user1"},
-				{GHLogin: "@user3"},
+				{GHLogin: codeowners.NewSlug("@user1")},
+				{GHLogin: codeowners.NewSlug("@user3")},
 			},
 			fileRequiredMap: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 				"file3.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
 				},
 			},
-			currentlyRequested: []string{"@user2"},
+			currentlyRequested: codeowners.NewSlugs([]string{"@user2"}),
 			maxReviews:         &maxReviews,
 			expectError:        false,
 			expectSuccess:      true,
-			expectedApprovals:  []string{"@user1", "@user3"},
+			expectedApprovals:  codeowners.NewSlugs([]string{"@user1", "@user3"}),
 		},
 		{
 			name: "min reviews enforced",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			currentApprovals: []*gh.CurrentApproval{
-				{GHLogin: "@user1"},
+				{GHLogin: codeowners.NewSlug("@user1")},
 			},
 			fileRequiredMap: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 			},
 			minReviews:        &minReviews,
 			expectError:       false,
 			expectSuccess:     false,
-			expectedApprovals: []string{"@user1"},
+			expectedApprovals: codeowners.NewSlugs([]string{"@user1"}),
 		},
 		{
 			name: "min reviews enforced - re-request from satisfied team",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@team/eng", "@user1", "@user2"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@team/eng", "@user1", "@user2"})},
 			},
 			currentApprovals: []*gh.CurrentApproval{
-				{GHLogin: "@user1", Reviewers: []string{"@team/eng"}},
+				{GHLogin: codeowners.NewSlug("@user1"), Reviewers: codeowners.NewSlugs([]string{"@team/eng"})},
 			},
 			fileRequiredMap: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@team/eng"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@team/eng"})},
 				},
 			},
-			currentlyRequested: []string{},
-			alreadyReviewed:    []string{"@team/eng"},
+			currentlyRequested: codeowners.NewSlugs([]string{}),
+			alreadyReviewed:    codeowners.NewSlugs([]string{"@team/eng"}),
 			minReviews:         &minReviews,
 			expectError:        false,
 			expectSuccess:      false,
-			expectedApprovals:  []string{"@team/eng"},
+			expectedApprovals:  codeowners.NewSlugs([]string{"@team/eng"}),
 		},
 		{
 			name: "token user is reviewer",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1", "@token-user"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@token-user"})},
 			},
 			tokenUser:          "@token-user",
 			currentApprovals:   []*gh.CurrentApproval{},
-			currentlyRequested: []string{"@user1"},
+			currentlyRequested: codeowners.NewSlugs([]string{"@user1"}),
 			expectError:        false,
 			expectSuccess:      false,
 		},
 		{
 			name: "token user exists",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			expectError:         false,
 			enforcementApproval: true,
@@ -872,7 +872,7 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		{
 			name: "error getting token user",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			tokenUserError:      fmt.Errorf("failed to get token user"),
 			expectError:         false,
@@ -882,7 +882,7 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		{
 			name: "error initializing reviewer map",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			userReviewerMapError: fmt.Errorf("failed to init reviewer map"),
 			expectError:          true,
@@ -890,45 +890,45 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		{
 			name: "multiple file reviewers",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})},
 			},
 			fileRequiredMap: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 				"file2.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user2"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user2"})},
 				},
 			},
 			currentApprovals: []*gh.CurrentApproval{
-				{GHLogin: "@user1"},
-				{GHLogin: "@user2"},
+				{GHLogin: codeowners.NewSlug("@user1")},
+				{GHLogin: codeowners.NewSlug("@user2")},
 			},
 			expectError:       false,
 			expectSuccess:     true,
-			expectedApprovals: []string{"@user1", "@user2"},
+			expectedApprovals: codeowners.NewSlugs([]string{"@user1", "@user2"}),
 		},
 		{
 			name: "optional reviewers only",
 			optionalOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})},
 			},
 			fileOptionalMap: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 			},
 			currentApprovals: []*gh.CurrentApproval{
-				{GHLogin: "@user1"},
+				{GHLogin: codeowners.NewSlug("@user1")},
 			},
 			expectError:       false,
 			expectSuccess:     true,
-			expectedApprovals: []string{},
+			expectedApprovals: codeowners.NewSlugs([]string{}),
 		},
 		{
 			name: "unowned files",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			unownedFiles: []string{"unowned.go"},
 			expectError:  false,
@@ -936,7 +936,7 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		{
 			name: "error getting approvals",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			approvalsError: fmt.Errorf("failed to get approvals"),
 			expectError:    true,
@@ -944,7 +944,7 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		{
 			name: "error getting currently requested",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 			},
 			currentApprovals: []*gh.CurrentApproval{},
 			requestedError:   fmt.Errorf("failed to get requested reviewers"),
@@ -953,23 +953,23 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		{
 			name: "admin bypass approval succeeds",
 			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1"}},
-				&codeowners.ReviewerGroup{Names: []string{"@user2"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user2"})},
 			},
 			fileRequiredMap: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 				"file2.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user2"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user2"})},
 				},
 			},
 			currentApprovals: []*gh.CurrentApproval{
-				{GHLogin: "admin-user", ReviewID: 999, Reviewers: []string{}},
+				{GHLogin: codeowners.NewSlug("admin-user"), ReviewID: 999, Reviewers: codeowners.NewSlugs([]string{})},
 			},
 			expectError:       false,
 			expectSuccess:     true,
-			expectedApprovals: []string{"@user1", "@user2"},
+			expectedApprovals: codeowners.NewSlugs([]string{"@user1", "@user2"}),
 		},
 	}
 
@@ -1076,12 +1076,12 @@ func TestPrintFileOwners(t *testing.T) {
 			verbose: true,
 			fileRequired: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})},
 				},
 			},
 			fileOptional: map[string]codeowners.ReviewerGroups{
 				"file2.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
 				},
 			},
 			expectedOutput: "File Reviewers:\n- file1.go: [@user1 @user2]\nFile Optional:\n- file2.go: [@user3]\n",
@@ -1091,7 +1091,7 @@ func TestPrintFileOwners(t *testing.T) {
 			verbose: true,
 			fileRequired: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 			},
 			fileOptional:   map[string]codeowners.ReviewerGroups{},
@@ -1103,7 +1103,7 @@ func TestPrintFileOwners(t *testing.T) {
 			fileRequired: map[string]codeowners.ReviewerGroups{},
 			fileOptional: map[string]codeowners.ReviewerGroups{
 				"file2.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
 				},
 			},
 			expectedOutput: "File Reviewers:\nFile Optional:\n- file2.go: [@user3]\n",
@@ -1113,12 +1113,12 @@ func TestPrintFileOwners(t *testing.T) {
 			verbose: false,
 			fileRequired: map[string]codeowners.ReviewerGroups{
 				"file1.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 				},
 			},
 			fileOptional: map[string]codeowners.ReviewerGroups{
 				"file2.go": {
-					&codeowners.ReviewerGroup{Names: []string{"@user3"}},
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
 				},
 			},
 			expectedOutput: "",
@@ -1160,11 +1160,11 @@ func TestPrintFileOwners(t *testing.T) {
 func TestBuildOutputData(t *testing.T) {
 	mockOwners := &mockCodeOwners{
 		fileRequiredMap: map[string]codeowners.ReviewerGroups{
-			"file1.go": {&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}}},
-			"file2.go": {&codeowners.ReviewerGroup{Names: []string{"@user3"}}},
+			"file1.go": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})}},
+			"file2.go": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})}},
 		},
 		fileOptionalMap: map[string]codeowners.ReviewerGroups{
-			"file1.go": {&codeowners.ReviewerGroup{Names: []string{"@optional1"}}},
+			"file1.go": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@optional1"})}},
 		},
 		unownedFiles: []string{"unowned.go"},
 	}
@@ -1219,7 +1219,7 @@ func TestCommentDetailedReviewers(t *testing.T) {
 			mockGH := &mockGitHubClient{}
 
 			requiredOwners := codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})},
 			}
 			app := &App{
 				config: &Config{
@@ -1230,10 +1230,10 @@ func TestCommentDetailedReviewers(t *testing.T) {
 				codeowners: &mockCodeOwners{
 					fileRequiredMap: map[string]codeowners.ReviewerGroups{
 						"file1.go": {
-							&codeowners.ReviewerGroup{Names: []string{"@user1", "@user2"}},
+							&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})},
 						},
 						"file2.go": {
-							&codeowners.ReviewerGroup{Names: []string{"@user1"}},
+							&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
 						},
 					},
 					requiredOwners: requiredOwners,

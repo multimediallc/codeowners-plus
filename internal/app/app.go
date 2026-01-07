@@ -28,10 +28,10 @@ func NewOutputData(co codeowners.CodeOwners) *OutputData {
 	fileOwners := make(map[string][]string)
 	fileOptional := make(map[string][]string)
 	for file, reviewers := range co.FileRequired() {
-		fileOwners[file] = reviewers.Flatten()
+		fileOwners[file] = codeowners.OriginalStrings(reviewers.Flatten())
 	}
 	for file, reviewers := range co.FileOptional() {
-		fileOptional[file] = reviewers.Flatten()
+		fileOptional[file] = codeowners.OriginalStrings(reviewers.Flatten())
 	}
 	return &OutputData{
 		FileOwners:    fileOwners,
@@ -173,15 +173,15 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	// Get all required owners before filtering
 	allRequiredOwners := a.codeowners.AllRequired()
 	allRequiredOwnerNames := allRequiredOwners.Flatten()
-	a.printDebug("All Required Owners: %s\n", allRequiredOwnerNames)
+	a.printDebug("All Required Owners: %s\n", codeowners.OriginalStrings(allRequiredOwnerNames))
 
 	// Get optional reviewers
 	allOptionalReviewerNames := a.codeowners.AllOptional().Flatten()
 	allOptionalReviewerNames = codeowners.FilterOutNames(allOptionalReviewerNames, allRequiredOwnerNames)
-	a.printDebug("All Optional Reviewers: %s\n", allOptionalReviewerNames)
+	a.printDebug("All Optional Reviewers: %s\n", codeowners.OriginalStrings(allOptionalReviewerNames))
 
 	// Initialize user reviewer map
-	if err := a.client.InitUserReviewerMap(allRequiredOwnerNames); err != nil {
+	if err := a.client.InitUserReviewerMap(codeowners.OriginalStrings(allRequiredOwnerNames)); err != nil {
 		return false, message, nil, fmt.Errorf("InitUserReviewerMap Error: %v", err)
 	}
 
@@ -227,7 +227,8 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	unapprovedOwners := a.codeowners.AllRequired()
 	maxReviewsMet := false
 	if a.Conf.MaxReviews != nil && *a.Conf.MaxReviews > 0 {
-		if validApprovalCount >= *a.Conf.MaxReviews && !unapprovedOwners.ContainsAny(a.Conf.UnskippableReviewers) {
+		unskippableReviewerSlugs := codeowners.NewSlugs(a.Conf.UnskippableReviewers)
+		if validApprovalCount >= *a.Conf.MaxReviews && !unapprovedOwners.ContainsAny(unskippableReviewerSlugs) {
 			maxReviewsMet = true
 		}
 	}
@@ -237,7 +238,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	if err != nil {
 		return false, message, nil, fmt.Errorf("failed to add review status comment: %w", err)
 	}
-	err = a.addOptionalCcComment(allOptionalReviewerNames)
+	err = a.addOptionalCcComment(codeowners.OriginalStrings(allOptionalReviewerNames))
 	if err != nil {
 		return false, message, nil, fmt.Errorf("failed to add optional CC comment: %w", err)
 	}
@@ -258,7 +259,8 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	}
 
 	// Collect still required data
-	stillRequired := unapprovedOwners.Flatten()
+	stillRequiredSlugs := unapprovedOwners.Flatten()
+	stillRequired := codeowners.OriginalStrings(stillRequiredSlugs)
 
 	// Exit if there are any unapproved codeowner teams
 	if len(unapprovedOwners) > 0 && !maxReviewsMet {
@@ -287,15 +289,15 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 			} else {
 				currentlyRequestedSet := make(map[string]struct{}, len(currentlyRequestedOwners))
 				for _, owner := range currentlyRequestedOwners {
-					currentlyRequestedSet[owner] = struct{}{}
+					currentlyRequestedSet[owner.Normalized()] = struct{}{}
 				}
-				ownersToReRequest := f.Filtered(allRequiredOwnerNames, func(owner string) bool {
-					_, exists := currentlyRequestedSet[owner]
+				ownersToReRequest := f.Filtered(allRequiredOwnerNames, func(owner codeowners.Slug) bool {
+					_, exists := currentlyRequestedSet[owner.Normalized()]
 					return !exists
 				})
 				if len(ownersToReRequest) > 0 {
-					a.printDebug("Re-requesting Reviews from satisfied team(s) to meet min_reviews: %s\n", ownersToReRequest)
-					if err := a.client.RequestReviewers(ownersToReRequest); err != nil {
+					a.printDebug("Re-requesting Reviews from satisfied team(s) to meet min_reviews: %s\n", codeowners.OriginalStrings(ownersToReRequest))
+					if err := a.client.RequestReviewers(codeowners.OriginalStrings(ownersToReRequest)); err != nil {
 						a.printWarn("WARNING: Error re-requesting reviewers: %v\n", err)
 					}
 				}
@@ -431,10 +433,10 @@ func (a *App) processTokenOwnerApproval() (*gh.CurrentApproval, error) {
 func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 	// Create file reviewer map with normalized names for case-insensitive comparison
 	fileReviewers := f.MapMap(a.codeowners.FileRequired(), func(reviewers codeowners.ReviewerGroups) []string {
-		return codeowners.NormalizeUsernames(reviewers.Flatten())
+		return codeowners.NormalizedStrings(reviewers.Flatten())
 	})
 
-	var approvers []string
+	var approvers []codeowners.Slug
 	var approvalsToDismiss []*gh.CurrentApproval
 
 	if a.Conf.DisableSmartDismissal {
@@ -468,27 +470,27 @@ func (a *App) requestReviews() error {
 
 	unapprovedOwners := a.codeowners.AllRequired()
 	unapprovedOwnerNames := unapprovedOwners.Flatten()
-	a.printDebug("Remaining Required Owners: %s\n", unapprovedOwnerNames)
+	a.printDebug("Remaining Required Owners: %s\n", codeowners.OriginalStrings(unapprovedOwnerNames))
 
 	currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()
 	if err != nil {
 		return fmt.Errorf("GetCurrentlyRequested Error: %v", err)
 	}
-	a.printDebug("Currently Requested Owners: %s\n", currentlyRequestedOwners)
+	a.printDebug("Currently Requested Owners: %s\n", codeowners.OriginalStrings(currentlyRequestedOwners))
 
 	previousReviewers, err := a.client.GetAlreadyReviewed()
 	if err != nil {
 		return fmt.Errorf("GetAlreadyReviewed Error: %v", err)
 	}
-	a.printDebug("Already Reviewed Owners: %s\n", previousReviewers)
+	a.printDebug("Already Reviewed Owners: %s\n", codeowners.OriginalStrings(previousReviewers))
 
 	filteredOwners := unapprovedOwners.FilterOut(currentlyRequestedOwners...)
 	filteredOwners = filteredOwners.FilterOut(previousReviewers...)
 	filteredOwnerNames := filteredOwners.Flatten()
 
 	if len(filteredOwners) > 0 {
-		a.printDebug("Requesting Reviews from: %s\n", filteredOwnerNames)
-		if err := a.client.RequestReviewers(filteredOwnerNames); err != nil {
+		a.printDebug("Requesting Reviews from: %s\n", codeowners.OriginalStrings(filteredOwnerNames))
+		if err := a.client.RequestReviewers(codeowners.OriginalStrings(filteredOwnerNames)); err != nil {
 			return fmt.Errorf("RequestReviewers Error: %v", err)
 		}
 	}
@@ -515,7 +517,7 @@ func (a *App) getFileOwnersMapToString(fileReviewers map[string]codeowners.Revie
 	for _, file := range files {
 		reviewers := fileReviewers[file]
 		// builder.WriteString error return is always nil
-		_, _ = fmt.Fprintf(&builder, "- %s: %+v\n", file, reviewers.Flatten())
+		_, _ = fmt.Fprintf(&builder, "- %s: %+v\n", file, codeowners.OriginalStrings(reviewers.Flatten()))
 	}
 	return builder.String()
 }

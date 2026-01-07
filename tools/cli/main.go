@@ -508,8 +508,9 @@ func mapFilesToOwners(ownersMap codeowners.CodeOwners) map[string][]string {
 
 	for file, reviewerGroups := range allFileOwners {
 		// Flatten, de-duplicate, and sort the owners.
-		owners := f.RemoveDuplicates(reviewerGroups.Flatten())
-		if len(owners) > 0 {
+		ownerSlugs := f.RemoveDuplicates(reviewerGroups.Flatten())
+		if len(ownerSlugs) > 0 {
+			owners := codeowners.OriginalStrings(ownerSlugs)
 			slices.Sort(owners)
 			fileToOwners[file] = owners
 		}
@@ -524,7 +525,8 @@ func mapOwnersToFiles(ownersMap codeowners.CodeOwners) map[string][]string {
 	ownerToFilesSet := make(map[string]map[string]struct{})
 
 	for file, reviewerGroups := range allFileOwners {
-		for _, owner := range reviewerGroups.Flatten() {
+		for _, ownerSlug := range reviewerGroups.Flatten() {
+			owner := ownerSlug.Original()
 			if _, ok := ownerToFilesSet[owner]; !ok {
 				ownerToFilesSet[owner] = make(map[string]struct{})
 			}
@@ -564,28 +566,32 @@ func validateCodeowners(repo string, target string) error {
 
 	codeowners := codeowners.Read(target, rgm, &codeowners.FilesystemReader{}, io.Discard)
 	if codeowners.Fallback != nil {
-		for _, name := range codeowners.Fallback.Names {
+		for _, nameSlug := range codeowners.Fallback.Names {
+			name := nameSlug.Original()
 			if !strings.HasPrefix(name, "@") {
 				_, _ = fmt.Fprintln(warningBuffer, "Fallback owner doesn't start with @: "+name)
 			}
 		}
 	}
 	for _, test := range codeowners.OwnerTests {
-		for _, name := range test.Reviewer.Names {
+		for _, nameSlug := range test.Reviewer.Names {
+			name := nameSlug.Original()
 			if !strings.HasPrefix(name, "@") {
 				_, _ = fmt.Fprintf(warningBuffer, "Owner test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}
 		}
 	}
 	for _, test := range codeowners.AdditionalReviewerTests {
-		for _, name := range test.Reviewer.Names {
+		for _, nameSlug := range test.Reviewer.Names {
+			name := nameSlug.Original()
 			if !strings.HasPrefix(name, "@") {
 				_, _ = fmt.Fprintf(warningBuffer, "Additional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}
 		}
 	}
 	for _, test := range codeowners.OptionalReviewerTests {
-		for _, name := range test.Reviewer.Names {
+		for _, nameSlug := range test.Reviewer.Names {
+			name := nameSlug.Original()
 			if !strings.HasPrefix(name, "@") {
 				_, _ = fmt.Fprintf(warningBuffer, "Optional reviewer test (%s) name doesn't start with @: %s\n", test.Match, name)
 			}

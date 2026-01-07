@@ -26,67 +26,83 @@ func (rgm ReviewerGroupMemo) ToReviewerGroup(names ...string) *ReviewerGroup {
 	if item, found := rgm[key]; found {
 		return item
 	}
-	newReviewers := &ReviewerGroup{names, false}
+	newReviewers := &ReviewerGroup{NewSlugs(names), false}
 	rgm[key] = newReviewers
 	return newReviewers
 }
 
 // Represents a group of ReviewerGroup, with a list of names and an approved status
 type ReviewerGroup struct {
-	Names    []string
+	Names    []Slug
 	Approved bool
 }
 
 type ReviewerGroups []*ReviewerGroup
 
 func (rg *ReviewerGroup) ToCommentString() string {
-	return strings.Join(rg.Names, " or ")
+	return strings.Join(OriginalStrings(rg.Names), " or ")
 }
 
-func (rgs ReviewerGroups) Flatten() []string {
-	names := make([]string, 0)
+func (rgs ReviewerGroups) Flatten() []Slug {
+	names := make([]Slug, 0)
 	for _, rg := range rgs {
 		names = append(names, rg.Names...)
 	}
-	names = f.RemoveDuplicates(names)
-	slices.Sort(names)
-	return names
+	// Use a map for deduplication based on normalized form
+	seen := make(map[string]Slug)
+	for _, name := range names {
+		seen[name.Normalized()] = name
+	}
+	// Extract unique slugs
+	unique := make([]Slug, 0, len(seen))
+	for _, slug := range seen {
+		unique = append(unique, slug)
+	}
+	// Sort by normalized form
+	slices.SortFunc(unique, func(a, b Slug) int {
+		return strings.Compare(a.Normalized(), b.Normalized())
+	})
+	return unique
 }
 
 // ContainsAny returns true if any of the provided names (case-insensitive)
 // are present in any of the reviewer groups
-func (rgs ReviewerGroups) ContainsAny(names []string) bool {
-	normalizedInput := NormalizeUsernames(names)
+func (rgs ReviewerGroups) ContainsAny(names []Slug) bool {
 	for _, rg := range rgs {
-		for _, name := range rg.Names {
-			if slices.Contains(normalizedInput, NormalizeUsername(name)) {
-				return true
+		for _, rgName := range rg.Names {
+			for _, name := range names {
+				if rgName.Equals(name) {
+					return true
+				}
 			}
 		}
 	}
 	return false
 }
 
-func (rgs ReviewerGroups) FilterOut(names ...string) ReviewerGroups {
-	normalizedNames := NormalizeUsernames(names)
+func (rgs ReviewerGroups) FilterOut(names ...Slug) ReviewerGroups {
 	return f.Filtered(rgs, func(rg *ReviewerGroup) bool {
-		found := false
-		for _, name := range rg.Names {
-			if slices.Contains(normalizedNames, NormalizeUsername(name)) {
-				found = true
-				break
+		for _, rgName := range rg.Names {
+			for _, name := range names {
+				if rgName.Equals(name) {
+					return false
+				}
 			}
 		}
-		return !found
+		return true
 	})
 }
 
 // FilterOutNames returns a new slice with names from 'names' that are NOT present
 // in 'exclude' (case-insensitive comparison)
-func FilterOutNames(names []string, exclude []string) []string {
-	normalizedExclude := NormalizeUsernames(exclude)
-	return f.Filtered(names, func(name string) bool {
-		return !slices.Contains(normalizedExclude, NormalizeUsername(name))
+func FilterOutNames(names []Slug, exclude []Slug) []Slug {
+	return f.Filtered(names, func(name Slug) bool {
+		for _, ex := range exclude {
+			if name.Equals(ex) {
+				return false
+			}
+		}
+		return true
 	})
 }
 
@@ -136,12 +152,12 @@ func (fo *fileOwners) OptionalReviewers() ReviewerGroups {
 
 // Returns the names of the required reviewers, excluding those who have already approved
 func (fo *fileOwners) RequiredNames() []string {
-	return fo.RequiredReviewers().Flatten()
+	return OriginalStrings(fo.RequiredReviewers().Flatten())
 }
 
 // Returns the names of the opitonal reviewers
 func (fo *fileOwners) OptionalNames() []string {
-	return fo.OptionalReviewers().Flatten()
+	return OriginalStrings(fo.OptionalReviewers().Flatten())
 }
 
 type reviewerTest struct {

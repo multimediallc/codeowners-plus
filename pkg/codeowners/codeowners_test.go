@@ -16,7 +16,7 @@ func TestInitOwnerTree(t *testing.T) {
 		t.Errorf("Expected name to be ../test_project, got %s", tree.name)
 	}
 
-	if (*tree.fallback).Names[0] != "@base" {
+	if (*tree.fallback).Names[0].Original() != "@base" {
 		t.Errorf("Expected fallback to be @base, got %+v", tree.fallback)
 	}
 
@@ -194,8 +194,9 @@ func TestAllReviewers(t *testing.T) {
 	}
 
 	for _, owner := range allReviewers {
-		if _, ok := expectedOwners[owner]; ok {
-			expectedOwners[owner] = true
+		ownerStr := owner.Original()
+		if _, ok := expectedOwners[ownerStr]; ok {
+			expectedOwners[ownerStr] = true
 		} else {
 			t.Errorf("Unexpected owner %s", owner)
 		}
@@ -251,8 +252,8 @@ func TestSetAuthorCaseInsensitive(t *testing.T) {
 	// Verify that @b-owner was removed from reviewers
 	allReviewers := owners.AllRequired().Flatten()
 	for _, reviewer := range allReviewers {
-		if NormalizeUsername(reviewer) == "@b-owner" {
-			t.Errorf("Expected @b-owner to be removed, but found %s", reviewer)
+		if reviewer.Normalized() == "@b-owner" {
+			t.Errorf("Expected @b-owner to be removed, but found %s", reviewer.Original())
 		}
 	}
 
@@ -277,16 +278,16 @@ func TestApplyApprovalsCaseInsensitive(t *testing.T) {
 	}
 
 	// Apply approvals with different casing
-	owners.ApplyApprovals([]string{"@BASE", "@B-OWNER"}) // .codeowners has @base, @b-owner
+	owners.ApplyApprovals(NewSlugs([]string{"@BASE", "@B-OWNER"})) // .codeowners has @base, @b-owner
 
 	// Verify approvals were applied regardless of case
 	allRequired := owners.AllRequired()
 	for _, rg := range allRequired {
-		normalizedNames := NormalizeUsernames(rg.Names)
-		for _, name := range normalizedNames {
-			if name == "@base" || name == "@b-owner" {
+		for _, name := range rg.Names {
+			normalized := name.Normalized()
+			if normalized == "@base" || normalized == "@b-owner" {
 				if !rg.Approved {
-					t.Errorf("Expected %v to be approved", rg.Names)
+					t.Errorf("Expected %v to be approved", OriginalStrings(rg.Names))
 				}
 			}
 		}
@@ -297,7 +298,7 @@ func TestApplyApprovalsCaseInsensitive(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error getting owners: %v", err)
 	}
-	owners2.ApplyApprovals([]string{"@base", "@b-owner"})
+	owners2.ApplyApprovals(NewSlugs([]string{"@base", "@b-owner"}))
 
 	// Both should produce the same approval state
 	allRequired2 := owners2.AllRequired()
@@ -330,9 +331,9 @@ func TestNameReviewerMapCaseInsensitive(t *testing.T) {
 	for _, fileOwner := range owners.fileToOwner {
 		for _, rg := range fileOwner.requiredReviewers {
 			for _, name := range rg.Names {
-				if NormalizeUsername(name) == "@frontend" {
+				if name.Normalized() == "@frontend" {
 					foundBefore = true
-					t.Logf("Found @frontend before approval: %v, approved=%v", rg.Names, rg.Approved)
+					t.Logf("Found @frontend before approval: %v, approved=%v", OriginalStrings(rg.Names), rg.Approved)
 				}
 			}
 		}
@@ -345,15 +346,15 @@ func TestNameReviewerMapCaseInsensitive(t *testing.T) {
 
 	// Check that the nameReviewerMap uses normalized keys
 	// Apply an approval with uppercase
-	owners.ApplyApprovals([]string{"@FRONTEND"})
+	owners.ApplyApprovals(NewSlugs([]string{"@FRONTEND"}))
 
 	// Verify it matches @frontend by checking if it was approved
 	foundApproved := false
 	for _, fileOwner := range owners.fileToOwner {
 		for _, rg := range fileOwner.requiredReviewers {
 			for _, name := range rg.Names {
-				if NormalizeUsername(name) == "@frontend" {
-					t.Logf("After approval: %v, approved=%v", rg.Names, rg.Approved)
+				if name.Normalized() == "@frontend" {
+					t.Logf("After approval: %v, approved=%v", OriginalStrings(rg.Names), rg.Approved)
 					if rg.Approved {
 						foundApproved = true
 					}
