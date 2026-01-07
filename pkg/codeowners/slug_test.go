@@ -7,10 +7,10 @@ import (
 
 func TestNewSlug(t *testing.T) {
 	tt := []struct {
-		name       string
-		input      string
-		wantOrig   string
-		wantNorm   string
+		name     string
+		input    string
+		wantOrig string
+		wantNorm string
 	}{
 		{
 			name:     "lowercase username",
