@@ -28,9 +28,9 @@ func (gd *fakeDiff) Context() git.DiffContext {
 
 func TestGetApprovalDiffs(t *testing.T) {
 	approvals := []*CurrentApproval{
-		{Reviewers: []string{"@base", "@core"}, CommitID: "123"},
-		{Reviewers: []string{"@b-owner"}, CommitID: "123"},
-		{Reviewers: []string{"@frontend"}, CommitID: "bad"},
+		{Reviewers: codeowners.NewSlugs([]string{"@base", "@core"}), CommitID: "123"},
+		{Reviewers: codeowners.NewSlugs([]string{"@b-owner"}), CommitID: "123"},
+		{Reviewers: codeowners.NewSlugs([]string{"@frontend"}), CommitID: "bad"},
 	}
 	diff := &fakeDiff{}
 

@@ -3,6 +3,7 @@ package codeowners
 import (
 	"errors"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
@@ -29,7 +30,7 @@ type CodeOwners interface {
 	UnownedFiles() []string
 
 	// ApplyApprovals marks the given approvers as satisfied
-	ApplyApprovals(approvers []string)
+	ApplyApprovals(approvers []Slug)
 }
 
 // New creates a new CodeOwners object from a root path and a list of diff files
@@ -54,9 +55,12 @@ type ownersMap struct {
 }
 
 func (om *ownersMap) SetAuthor(author string) {
-	for _, reviewers := range om.nameReviewerMap[author] {
-		// remove author from the reviewers list
-		reviewers.Names = f.RemoveValue(reviewers.Names, author)
+	authorSlug := NewSlug(author)
+	for _, reviewers := range om.nameReviewerMap[authorSlug.Normalized()] {
+		// remove author from the reviewers list (case-insensitive)
+		reviewers.Names = slices.DeleteFunc(reviewers.Names, func(name Slug) bool {
+			return name.Equals(authorSlug)
+		})
 		if len(reviewers.Names) == 0 {
 			// mark the reviewer as approved if they are the author
 			reviewers.Approved = true
@@ -106,14 +110,11 @@ func (om *ownersMap) UnownedFiles() []string {
 }
 
 // Apply approver satisfaction to the owners map, and return the approvals which should be invalidated
-func (om *ownersMap) ApplyApprovals(approvers []string) {
-	applyApproved := func(user string) {
-		for _, reviewer := range om.nameReviewerMap[user] {
+func (om *ownersMap) ApplyApprovals(approvers []Slug) {
+	for _, user := range approvers {
+		for _, reviewer := range om.nameReviewerMap[user.Normalized()] {
 			reviewer.Approved = true
 		}
-	}
-	for _, user := range approvers {
-		applyApproved(user)
 	}
 }
 
@@ -259,10 +260,11 @@ func (otfm ownerTestFileMap) getOwners(fileNames []string) (*ownersMap, error) {
 
 		for _, reviewer := range fileOwner.requiredReviewers {
 			for _, name := range reviewer.Names {
-				if v, ok := nameReviewerMap[name]; ok {
-					nameReviewerMap[name] = append(v, reviewer)
+				normalizedName := name.Normalized()
+				if v, ok := nameReviewerMap[normalizedName]; ok {
+					nameReviewerMap[normalizedName] = append(v, reviewer)
 				} else {
-					nameReviewerMap[name] = []*ReviewerGroup{reviewer}
+					nameReviewerMap[normalizedName] = []*ReviewerGroup{reviewer}
 				}
 			}
 		}

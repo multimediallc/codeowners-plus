@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-github/v63/github"
 	"github.com/multimediallc/codeowners-plus/internal/git"
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
@@ -37,8 +38,8 @@ type Client interface {
 	AllApprovals() ([]*CurrentApproval, error)
 	FindUserApproval(ghUser string) (*CurrentApproval, error)
 	GetCurrentReviewerApprovals() ([]*CurrentApproval, error)
-	GetAlreadyReviewed() ([]string, error)
-	GetCurrentlyRequested() ([]string, error)
+	GetAlreadyReviewed() ([]codeowners.Slug, error)
+	GetCurrentlyRequested() ([]codeowners.Slug, error)
 	DismissStaleReviews(staleApprovals []*CurrentApproval) error
 	RequestReviewers(reviewers []string) error
 	ApprovePR() error
@@ -48,7 +49,7 @@ type Client interface {
 	UpdateComment(commentID int64, body string) error
 	IsInComments(comment string, since *time.Time) (bool, error)
 	IsSubstringInComments(substring string, since *time.Time) (bool, error)
-	CheckApprovals(fileReviewerMap map[string][]string, approvals []*CurrentApproval, originalDiff git.Diff) (approvers []string, staleApprovals []*CurrentApproval)
+	CheckApprovals(fileReviewerMap map[string][]string, approvals []*CurrentApproval, originalDiff git.Diff) (approvers []codeowners.Slug, staleApprovals []*CurrentApproval)
 	IsInLabels(labels []string) (bool, error)
 	IsRepositoryAdmin(username string) (bool, error)
 	ContainsValidBypassApproval(allowedUsers []string) (bool, error)
@@ -171,7 +172,7 @@ func (gh *GHClient) InitReviews() error {
 func (gh *GHClient) approvals() []*github.PullRequestReview {
 	seen := make(map[string]bool, 0)
 	approvals := f.Filtered(gh.reviews, func(approval *github.PullRequestReview) bool {
-		userName := approval.GetUser().GetLogin()
+		userName := strings.ToLower(approval.GetUser().GetLogin())
 		if _, ok := seen[userName]; ok {
 			// we only care about the most recent reviews for each user
 			return false
@@ -203,10 +204,11 @@ func (gh *GHClient) ContainsValidBypassApproval(allowedUsers []string) (bool, er
 		}
 
 		username := review.GetUser().GetLogin()
+		usernameSlug := codeowners.NewSlug(username)
 
 		// Check if user is in allowed users list
 		for _, allowedUser := range allowedUsers {
-			if username == allowedUser {
+			if usernameSlug.EqualsString(allowedUser) {
 				return true, nil
 			}
 		}
@@ -238,7 +240,7 @@ func (gh *GHClient) AllApprovals() ([]*CurrentApproval, error) {
 		}
 	}
 	return f.Map(gh.approvals(), func(approval *github.PullRequestReview) *CurrentApproval {
-		return &CurrentApproval{approval.User.GetLogin(), approval.GetID(), nil, approval.GetCommitID()}
+		return &CurrentApproval{codeowners.NewSlug(approval.User.GetLogin()), approval.GetID(), nil, approval.GetCommitID()}
 	}), nil
 }
 
@@ -252,14 +254,15 @@ func (gh *GHClient) FindUserApproval(ghUser string) (*CurrentApproval, error) {
 			return nil, err
 		}
 	}
+	ghUserSlug := codeowners.NewSlug(ghUser)
 	review, found := f.Find(gh.approvals(), func(review *github.PullRequestReview) bool {
-		return review.GetUser().GetLogin() == ghUser
+		return ghUserSlug.EqualsString(review.GetUser().GetLogin())
 	})
 
 	if !found {
 		return nil, nil
 	}
-	return &CurrentApproval{review.User.GetLogin(), review.GetID(), nil, review.GetCommitID()}, nil
+	return &CurrentApproval{codeowners.NewSlug(review.User.GetLogin()), review.GetID(), nil, review.GetCommitID()}, nil
 }
 
 func (gh *GHClient) GetCurrentReviewerApprovals() ([]*CurrentApproval, error) {
@@ -282,11 +285,12 @@ func currentReviewerApprovalsFromReviews(approvals []*github.PullRequestReview, 
 	filteredApprovals := make([]*CurrentApproval, 0, len(approvals))
 	for _, review := range approvals {
 		reviewingUser := review.GetUser().GetLogin()
-		if reviewers, ok := userReviewerMap[reviewingUser]; ok {
-			newApproval := &CurrentApproval{reviewingUser, review.GetID(), reviewers, review.GetCommitID()}
+		reviewingUserSlug := codeowners.NewSlug(reviewingUser)
+		if reviewers, ok := userReviewerMap[strings.ToLower(reviewingUser)]; ok {
+			newApproval := &CurrentApproval{reviewingUserSlug, review.GetID(), reviewers, review.GetCommitID()}
 			filteredApprovals = append(filteredApprovals, newApproval)
 		} else {
-			newApproval := &CurrentApproval{reviewingUser, review.GetID(), []string{}, review.GetCommitID()}
+			newApproval := &CurrentApproval{reviewingUserSlug, review.GetID(), []codeowners.Slug{}, review.GetCommitID()}
 			filteredApprovals = append(filteredApprovals, newApproval)
 		}
 	}
@@ -294,7 +298,7 @@ func currentReviewerApprovalsFromReviews(approvals []*github.PullRequestReview, 
 	return filteredApprovals
 }
 
-func (gh *GHClient) GetAlreadyReviewed() ([]string, error) {
+func (gh *GHClient) GetAlreadyReviewed() ([]codeowners.Slug, error) {
 	if gh.pr == nil {
 		return nil, &NoPRError{}
 	}
@@ -304,21 +308,21 @@ func (gh *GHClient) GetAlreadyReviewed() ([]string, error) {
 	return reviewerAlreadyReviewed(gh.reviews, gh.userReviewerMap), nil
 }
 
-func reviewerAlreadyReviewed(reviews []*github.PullRequestReview, userReviewerMap ghUserReviewerMap) []string {
-	reviewsReviewers := make(map[string]bool, len(reviews))
+func reviewerAlreadyReviewed(reviews []*github.PullRequestReview, userReviewerMap ghUserReviewerMap) []codeowners.Slug {
+	reviewsReviewers := make(map[string]codeowners.Slug, len(reviews))
 	for _, review := range reviews {
 		reviewingUser := review.GetUser().GetLogin()
-		if reviewers, ok := userReviewerMap[reviewingUser]; ok {
+		if reviewers, ok := userReviewerMap[strings.ToLower(reviewingUser)]; ok {
 			for _, reviewer := range reviewers {
-				reviewsReviewers[reviewer] = true
+				reviewsReviewers[reviewer.Normalized()] = reviewer
 			}
 		}
 	}
 
-	return slices.Collect(maps.Keys(reviewsReviewers))
+	return slices.Collect(maps.Values(reviewsReviewers))
 }
 
-func (gh *GHClient) GetCurrentlyRequested() ([]string, error) {
+func (gh *GHClient) GetCurrentlyRequested() ([]codeowners.Slug, error) {
 	if gh.pr == nil {
 		return nil, &NoPRError{}
 	}
@@ -328,7 +332,7 @@ func (gh *GHClient) GetCurrentlyRequested() ([]string, error) {
 	return currentlyRequested(gh.pr, gh.owner, gh.userReviewerMap), nil
 }
 
-func currentlyRequested(pr *github.PullRequest, owner string, userReviewerMap ghUserReviewerMap) []string {
+func currentlyRequested(pr *github.PullRequest, owner string, userReviewerMap ghUserReviewerMap) []codeowners.Slug {
 	requestedUsers := f.Map(pr.RequestedReviewers, func(user *github.User) string {
 		return user.GetLogin()
 	})
@@ -336,13 +340,18 @@ func currentlyRequested(pr *github.PullRequest, owner string, userReviewerMap gh
 		return fmt.Sprintf("%s/%s", owner, team.GetSlug())
 	})
 	requested := slices.Concat(requestedUsers, requestedTeams)
-	reviewers := make([]string, 0, len(requested))
+	reviewers := make([]codeowners.Slug, 0, len(requested))
 	for _, user := range requested {
-		if reviewer, ok := userReviewerMap[user]; ok {
+		if reviewer, ok := userReviewerMap[strings.ToLower(user)]; ok {
 			reviewers = append(reviewers, reviewer...)
 		}
 	}
-	return f.RemoveDuplicates(reviewers)
+	// Deduplicate based on normalized form
+	seen := make(map[string]codeowners.Slug)
+	for _, rev := range reviewers {
+		seen[rev.Normalized()] = rev
+	}
+	return slices.Collect(maps.Values(seen))
 }
 
 func (gh *GHClient) DismissStaleReviews(staleApprovals []*CurrentApproval) error {
@@ -556,7 +565,7 @@ func (gh *GHClient) CheckApprovals(
 	fileReviewerMap map[string][]string,
 	approvals []*CurrentApproval,
 	originalDiff git.Diff,
-) (approvers []string, staleApprovals []*CurrentApproval) {
+) (approvers []codeowners.Slug, staleApprovals []*CurrentApproval) {
 	appovalsWithDiff, badApprovals := getApprovalDiffs(approvals, originalDiff, gh.warningBuffer, gh.infoBuffer)
 	approvers, staleApprovals = checkStale(fileReviewerMap, appovalsWithDiff)
 	return approvers, append(badApprovals, staleApprovals...)
@@ -576,12 +585,12 @@ func (gh *GHClient) IsRepositoryAdmin(username string) (bool, error) {
 	return permission.GetPermission() == "admin", nil
 }
 
-type ghUserReviewerMap map[string][]string
+type ghUserReviewerMap map[string][]codeowners.Slug
 
 type CurrentApproval struct {
-	GHLogin   string
+	GHLogin   codeowners.Slug
 	ReviewID  int64
-	Reviewers []string
+	Reviewers []codeowners.Slug
 	CommitID  string
 }
 
@@ -592,19 +601,20 @@ func (p *CurrentApproval) String() string {
 func makeGHUserReviwerMap(reviewers []string, teamFetcher func(string, string) []*github.User) ghUserReviewerMap {
 	userReviewerMap := make(ghUserReviewerMap)
 
-	insertReviewer := func(userName string, reviewer string) {
+	insertReviewer := func(userName string, reviewer codeowners.Slug) {
 		reviewers, found := userReviewerMap[userName]
 		if found {
 			userReviewerMap[userName] = append(reviewers, reviewer)
 		} else {
-			userReviewerMap[userName] = []string{reviewer}
+			userReviewerMap[userName] = []codeowners.Slug{reviewer}
 		}
 	}
 
 	for _, reviewer := range reviewers {
+		reviewerSlug := codeowners.NewSlug(reviewer)
 		reviewerString := reviewer[1:] // trim the @
 		// Add the team or user to the map
-		insertReviewer(reviewerString, reviewer)
+		insertReviewer(strings.ToLower(reviewerString), reviewerSlug)
 		if !strings.Contains(reviewerString, "/") {
 			// This is a user
 			continue
@@ -615,7 +625,7 @@ func makeGHUserReviwerMap(reviewers []string, teamFetcher func(string, string) [
 		users := teamFetcher(org, team)
 		// Add the team members to the map
 		for _, user := range users {
-			insertReviewer(user.GetLogin(), reviewer)
+			insertReviewer(strings.ToLower(user.GetLogin()), reviewerSlug)
 		}
 	}
 	return userReviewerMap

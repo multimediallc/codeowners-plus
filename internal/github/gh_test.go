@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v63/github"
+	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
@@ -25,9 +26,9 @@ func setupReviews() *GHClient {
 		{User: &github.User{Login: github.String("reviewer4")}, State: github.String("APPROVED"), ID: github.Int64(3), CommitID: github.String("commit3")},
 	}
 	userReviewerMap := ghUserReviewerMap{
-		"reviewer1": []string{"@a", "@b"},
-		"reviewer2": []string{"@c"},
-		"reviewer4": []string{"@e"},
+		"reviewer1": codeowners.NewSlugs([]string{"@a", "@b"}),
+		"reviewer2": codeowners.NewSlugs([]string{"@c"}),
+		"reviewer4": codeowners.NewSlugs([]string{"@e"}),
 	}
 	gh := &GHClient{
 		reviews:         reviews,
@@ -72,9 +73,9 @@ func TestCurrentApprovalsFromReviews(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	expectedApprovals := []*CurrentApproval{
-		{CommitID: "commit1", Reviewers: []string{"@a", "@b"}},
-		{CommitID: "commit3", Reviewers: []string{"@e"}},
-		{CommitID: "commit3", Reviewers: []string{}},
+		{CommitID: "commit1", Reviewers: codeowners.NewSlugs([]string{"@a", "@b"})},
+		{CommitID: "commit3", Reviewers: codeowners.NewSlugs([]string{"@e"})},
+		{CommitID: "commit3", Reviewers: []codeowners.Slug{}},
 	}
 
 	if len(currentApprovals) != len(expectedApprovals) {
@@ -104,9 +105,9 @@ func TestAllApprovals(t *testing.T) {
 	}
 
 	expectedApprovals := []*CurrentApproval{
-		{CommitID: "commit1", Reviewers: []string{"@a", "@b"}},
-		{CommitID: "commit1", Reviewers: []string{"@a", "@d"}}, // reviewer3
-		{CommitID: "commit3", Reviewers: []string{"@e"}},
+		{CommitID: "commit1", Reviewers: codeowners.NewSlugs([]string{"@a", "@b"})},
+		{CommitID: "commit1", Reviewers: codeowners.NewSlugs([]string{"@a", "@d"})}, // reviewer3
+		{CommitID: "commit3", Reviewers: codeowners.NewSlugs([]string{"@e"})},
 	}
 
 	if len(currentApprovals) != len(expectedApprovals) {
@@ -149,7 +150,7 @@ func TestGetAlreadyReviewed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	expected := []string{"@a", "@b", "@c", "@e"}
+	expected := codeowners.NewSlugs([]string{"@a", "@b", "@c", "@e"})
 	if len(alreadyReviewed) != len(expected) {
 		t.Errorf("Expected %d reviewers, got %d", len(expected), len(alreadyReviewed))
 	}
@@ -160,11 +161,11 @@ func TestGetAlreadyReviewed(t *testing.T) {
 
 func TestCurrentlyRequested(t *testing.T) {
 	userReviewerMap := ghUserReviewerMap{
-		"user1":     []string{"@a", "@b"},
-		"user2":     []string{"@c"},
-		"user3":     []string{"@d"},
-		"org/team1": []string{"@e", "@a"},
-		"org/team2": []string{"@f"},
+		"user1":     codeowners.NewSlugs([]string{"@a", "@b"}),
+		"user2":     codeowners.NewSlugs([]string{"@c"}),
+		"user3":     codeowners.NewSlugs([]string{"@d"}),
+		"org/team1": codeowners.NewSlugs([]string{"@e", "@a"}),
+		"org/team2": codeowners.NewSlugs([]string{"@f"}),
 	}
 	pr := &github.PullRequest{
 		RequestedReviewers: []*github.User{
@@ -188,7 +189,7 @@ func TestCurrentlyRequested(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	expected := []string{"@a", "@b", "@c", "@e", "@f"}
+	expected := codeowners.NewSlugs([]string{"@a", "@b", "@c", "@e", "@f"})
 
 	if len(requested) != len(expected) {
 		t.Errorf("Expected %d requested reviewers, got %d", len(expected), len(requested))
@@ -226,12 +227,12 @@ func TestMakeGHUserReviewerMap(t *testing.T) {
 	}
 	userReviewerMap := makeGHUserReviwerMap([]string{"@user1", "@user2", "@org/team1", "@org/team2", "@other/teamX"}, teamFetcher)
 	expectedUserReviewerMap := ghUserReviewerMap{
-		"user1":       []string{"@user1", "@org/team1", "@org/team2"},
-		"user2":       []string{"@user2"},
-		"user3":       []string{"@org/team1"},
-		"org/team1":   []string{"@org/team1"},
-		"org/team2":   []string{"@org/team2"},
-		"other/teamX": []string{"@other/teamX"},
+		"user1":       codeowners.NewSlugs([]string{"@user1", "@org/team1", "@org/team2"}),
+		"user2":       codeowners.NewSlugs([]string{"@user2"}),
+		"user3":       codeowners.NewSlugs([]string{"@org/team1"}),
+		"org/team1":   codeowners.NewSlugs([]string{"@org/team1"}),
+		"org/team2":   codeowners.NewSlugs([]string{"@org/team2"}),
+		"other/teamx": codeowners.NewSlugs([]string{"@other/teamX"}), // Key is normalized to lowercase
 	}
 
 	if !reflect.DeepEqual(userReviewerMap, expectedUserReviewerMap) {
@@ -1017,9 +1018,9 @@ func TestInitUserReviewerMap(t *testing.T) {
 
 	// Validate the userReviewerMap
 	expectedMap := ghUserReviewerMap{
-		"user1":        []string{"@user1"},
-		"team_member1": []string{"@org1/team1", "@org2/team2"},
-		"team_member2": []string{"@org1/team1"},
+		"user1":        codeowners.NewSlugs([]string{"@user1"}),
+		"team_member1": codeowners.NewSlugs([]string{"@org1/team1", "@org2/team2"}),
+		"team_member2": codeowners.NewSlugs([]string{"@org1/team1"}),
 	}
 
 	for user := range expectedMap {

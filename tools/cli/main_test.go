@@ -416,20 +416,20 @@ func (f *fakeCodeOwners) FileRequired() map[string]codeowners.ReviewerGroups {
 func (f *fakeCodeOwners) FileOptional() map[string]codeowners.ReviewerGroups {
 	return f.optional
 }
-func (f *fakeCodeOwners) SetAuthor(author string)                {}
-func (f *fakeCodeOwners) AllRequired() codeowners.ReviewerGroups { return nil }
-func (f *fakeCodeOwners) AllOptional() codeowners.ReviewerGroups { return nil }
-func (f *fakeCodeOwners) UnownedFiles() []string                 { return nil }
-func (f *fakeCodeOwners) ApplyApprovals(approvers []string)      {}
+func (f *fakeCodeOwners) SetAuthor(author string)                      {}
+func (f *fakeCodeOwners) AllRequired() codeowners.ReviewerGroups       { return nil }
+func (f *fakeCodeOwners) AllOptional() codeowners.ReviewerGroups       { return nil }
+func (f *fakeCodeOwners) UnownedFiles() []string                       { return nil }
+func (f *fakeCodeOwners) ApplyApprovals(approvers []codeowners.Slug) {}
 
 func TestJsonTargets(t *testing.T) {
 	owners := &fakeCodeOwners{
 		required: map[string]codeowners.ReviewerGroups{
-			"file1.txt": {&codeowners.ReviewerGroup{Names: []string{"@alice"}}},
-			"file2.txt": {&codeowners.ReviewerGroup{Names: []string{"@bob"}}},
+			"file1.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@alice"})}},
+			"file2.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@bob"})}},
 		},
 		optional: map[string]codeowners.ReviewerGroups{
-			"file1.txt": {&codeowners.ReviewerGroup{Names: []string{"@carol"}}},
+			"file1.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@carol"})}},
 			"file2.txt": {},
 		},
 	}
@@ -484,11 +484,11 @@ func TestJsonTargets(t *testing.T) {
 func TestPrintTargets(t *testing.T) {
 	owners := &fakeCodeOwners{
 		required: map[string]codeowners.ReviewerGroups{
-			"file1.txt": {&codeowners.ReviewerGroup{Names: []string{"@alice"}}},
-			"file2.txt": {&codeowners.ReviewerGroup{Names: []string{"@bob"}}},
+			"file1.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@alice"})}},
+			"file2.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@bob"})}},
 		},
 		optional: map[string]codeowners.ReviewerGroups{
-			"file1.txt": {&codeowners.ReviewerGroup{Names: []string{"@carol"}}},
+			"file1.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@carol"})}},
 			"file2.txt": {},
 		},
 	}
@@ -752,8 +752,8 @@ func TestMapOwnersToFiles(t *testing.T) {
 			name: "simple case",
 			input: &fakeCodeOwners{
 				required: map[string]codeowners.ReviewerGroups{
-					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
-					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
+					"a.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner1"})}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner2"})}},
 				},
 			},
 			expected: map[string][]string{
@@ -765,8 +765,8 @@ func TestMapOwnersToFiles(t *testing.T) {
 			name: "owner with multiple files",
 			input: &fakeCodeOwners{
 				required: map[string]codeowners.ReviewerGroups{
-					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
-					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"a.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner1"})}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner1"})}},
 				},
 			},
 			expected: map[string][]string{
@@ -777,7 +777,7 @@ func TestMapOwnersToFiles(t *testing.T) {
 			name: "file with multiple owners",
 			input: &fakeCodeOwners{
 				required: map[string]codeowners.ReviewerGroups{
-					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1", "@owner2"}}},
+					"a.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner1", "@owner2"})}},
 				},
 			},
 			expected: map[string][]string{
@@ -789,12 +789,12 @@ func TestMapOwnersToFiles(t *testing.T) {
 			name: "complex case with optional and duplicates",
 			input: &fakeCodeOwners{
 				required: map[string]codeowners.ReviewerGroups{
-					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
-					"b.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
+					"a.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner1"})}},
+					"b.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner2"})}},
 				},
 				optional: map[string]codeowners.ReviewerGroups{
-					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner2"}}},
-					"c.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"a.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner2"})}},
+					"c.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner1"})}},
 				},
 			},
 			expected: map[string][]string{
@@ -806,8 +806,8 @@ func TestMapOwnersToFiles(t *testing.T) {
 			name: "files are sorted for an owner",
 			input: &fakeCodeOwners{
 				required: map[string]codeowners.ReviewerGroups{
-					"z.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
-					"a.txt": {&codeowners.ReviewerGroup{Names: []string{"@owner1"}}},
+					"z.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner1"})}},
+					"a.txt": {&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@owner1"})}},
 				},
 			},
 			expected: map[string][]string{

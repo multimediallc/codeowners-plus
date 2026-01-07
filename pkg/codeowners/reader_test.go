@@ -60,8 +60,8 @@ func TestRead(t *testing.T) {
 				t.Errorf("Expected fallback to be nil, got %+v", rules.Fallback)
 			}
 
-			if tc.fallback && rules.Fallback.Names[0] != tc.fallbackName {
-				t.Errorf("Expected fallback to be %s, got %s", tc.fallbackName, rules.Fallback.Names[0])
+			if tc.fallback && rules.Fallback.Names[0].Original() != tc.fallbackName {
+				t.Errorf("Expected fallback to be %s, got %s", tc.fallbackName, rules.Fallback.Names[0].Original())
 			}
 
 			if len(rules.OwnerTests) != tc.owners {

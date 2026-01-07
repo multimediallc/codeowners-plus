@@ -53,20 +53,23 @@ func getApprovalDiffs(
 func checkStale(
 	fileReviewerMap map[string][]string,
 	approvals []*approvalWithDiff,
-) ([]string, []*CurrentApproval) {
+) ([]codeowners.Slug, []*CurrentApproval) {
 	staleApprovals := make([]*CurrentApproval, 0)
-	approvers := make([]string, 0)
+	approvers := make([]codeowners.Slug, 0)
 	for _, approval := range approvals {
 		// for each file in the changes since approval
 		// if the file is owned by the approval owner, mark stale
 		// else, mark all overlapping owners as satisfied
+		// Note: fileReviewerMap values are normalized strings, approval.inner.Reviewers are Slugs
 		stale := false
 		for _, diffFile := range approval.Diff {
 			fileOwners, ok := fileReviewerMap[diffFile.FileName]
 			if !ok {
 				continue
 			}
-			if len(f.Intersection(fileOwners, approval.inner.Reviewers)) > 0 {
+			// Convert Reviewers to normalized strings for Intersection
+			reviewersNormalized := codeowners.NormalizedStrings(approval.inner.Reviewers)
+			if len(f.Intersection(fileOwners, reviewersNormalized)) > 0 {
 				stale = true
 			}
 		}

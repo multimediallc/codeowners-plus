@@ -13,31 +13,31 @@ func TestToReviewers(t *testing.T) {
 	tt := []struct {
 		name          string
 		input         []string
-		expected      []string
+		expected      []Slug
 		checkExisting bool
 	}{
 		{
 			name:          "empty input",
 			input:         []string{},
-			expected:      []string{},
+			expected:      []Slug{},
 			checkExisting: false,
 		},
 		{
 			name:          "single input",
 			input:         []string{"@a"},
-			expected:      []string{"@a"},
+			expected:      NewSlugs([]string{"@a"}),
 			checkExisting: true,
 		},
 		{
 			name:          "multiple inputs",
 			input:         []string{"@a", "@b"},
-			expected:      []string{"@a", "@b"},
+			expected:      NewSlugs([]string{"@a", "@b"}),
 			checkExisting: false,
 		},
 		{
 			name:          "maintain order",
 			input:         []string{"@b", "@a"},
-			expected:      []string{"@b", "@a"},
+			expected:      NewSlugs([]string{"@b", "@a"}),
 			checkExisting: false,
 		},
 	}
@@ -143,7 +143,7 @@ func TestToCommentString(t *testing.T) {
 func TestReviewerGroupsFlatten(t *testing.T) {
 	rgMan := NewReviewerGroupMemo()
 	rgs := ReviewerGroups{rgMan.ToReviewerGroup("@a", "@c"), rgMan.ToReviewerGroup("@b"), rgMan.ToReviewerGroup("@b", "@c")}
-	if !f.SlicesItemsMatch(rgs.Flatten(), []string{"@a", "@b", "@c"}) {
+	if !f.SlicesItemsMatch(rgs.Flatten(), NewSlugs([]string{"@a", "@b", "@c"})) {
 		t.Error("Flatten should return a list of sorted reviewer names with duplicates removed")
 	}
 }
@@ -151,17 +151,123 @@ func TestReviewerGroupsFlatten(t *testing.T) {
 func TestReviewerGroupsFilter(t *testing.T) {
 	rgMan := NewReviewerGroupMemo()
 	rgs := ReviewerGroups{rgMan.ToReviewerGroup("@a", "@c"), rgMan.ToReviewerGroup("@b")}
-	rgs = rgs.FilterOut("@a")
+	rgs = rgs.FilterOut(NewSlug("@a"))
 	// Filtering "@a" should remove the whole ReviewerGroup from the list
-	if !f.SlicesItemsMatch(rgs.Flatten(), []string{"@b"}) {
+	if !f.SlicesItemsMatch(rgs.Flatten(), NewSlugs([]string{"@b"})) {
 		t.Error("Filter should remove ReviewerGroup[s] with names in the filter list")
 	}
 	rgMan = NewReviewerGroupMemo()
 	rgs = ReviewerGroups{rgMan.ToReviewerGroup("@a", "@c"), rgMan.ToReviewerGroup("@b"), rgMan.ToReviewerGroup("@c", "@d")}
-	rgs = rgs.FilterOut("@a", "@b")
+	rgs = rgs.FilterOut(NewSlug("@a"), NewSlug("@b"))
 
 	// Filtering "@a" should remove the whole ReviewerGroup from the list
-	if !f.SlicesItemsMatch(rgs.Flatten(), []string{"@c", "@d"}) {
+	if !f.SlicesItemsMatch(rgs.Flatten(), NewSlugs([]string{"@c", "@d"})) {
 		t.Error("Filter should work with multiple names")
+	}
+}
+
+func TestReviewerGroupsContainsAny(t *testing.T) {
+	rgMan := NewReviewerGroupMemo()
+	rgs := ReviewerGroups{rgMan.ToReviewerGroup("@alice", "@bob"), rgMan.ToReviewerGroup("@charlie")}
+
+	tt := []struct {
+		name     string
+		input    []string
+		expected bool
+	}{
+		{
+			name:     "contains exact match",
+			input:    []string{"@alice"},
+			expected: true,
+		},
+		{
+			name:     "contains case-insensitive match",
+			input:    []string{"@ALICE"},
+			expected: true,
+		},
+		{
+			name:     "contains mixed case match",
+			input:    []string{"@BoB"},
+			expected: true,
+		},
+		{
+			name:     "contains one of multiple",
+			input:    []string{"@david", "@charlie"},
+			expected: true,
+		},
+		{
+			name:     "does not contain",
+			input:    []string{"@david"},
+			expected: false,
+		},
+		{
+			name:     "empty input",
+			input:    []string{},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			result := rgs.ContainsAny(NewSlugs(tc.input))
+			if result != tc.expected {
+				t.Errorf("ContainsAny(%v) = %v, expected %v", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestFilterOutNames(t *testing.T) {
+	tt := []struct {
+		name     string
+		names    []string
+		exclude  []string
+		expected []string
+	}{
+		{
+			name:     "filter out exact match",
+			names:    []string{"@alice", "@bob", "@charlie"},
+			exclude:  []string{"@bob"},
+			expected: []string{"@alice", "@charlie"},
+		},
+		{
+			name:     "filter out case-insensitive match",
+			names:    []string{"@alice", "@bob", "@charlie"},
+			exclude:  []string{"@BOB"},
+			expected: []string{"@alice", "@charlie"},
+		},
+		{
+			name:     "filter out multiple",
+			names:    []string{"@alice", "@bob", "@charlie"},
+			exclude:  []string{"@alice", "@CHARLIE"},
+			expected: []string{"@bob"},
+		},
+		{
+			name:     "no matches to filter",
+			names:    []string{"@alice", "@bob"},
+			exclude:  []string{"@david"},
+			expected: []string{"@alice", "@bob"},
+		},
+		{
+			name:     "empty exclude list",
+			names:    []string{"@alice", "@bob"},
+			exclude:  []string{},
+			expected: []string{"@alice", "@bob"},
+		},
+		{
+			name:     "empty names list",
+			names:    []string{},
+			exclude:  []string{"@alice"},
+			expected: []string{},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FilterOutNames(NewSlugs(tc.names), NewSlugs(tc.exclude))
+			if !f.SlicesItemsMatch(result, NewSlugs(tc.expected)) {
+				t.Errorf("FilterOutNames(%v, %v) = %v, expected %v", tc.names, tc.exclude, result, tc.expected)
+			}
+		})
 	}
 }
