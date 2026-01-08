@@ -232,6 +232,11 @@ detailed_reviewers = true
 # `disable_smart_dismissal` (default false) means the codeowners will not dismiss stale reviews
 disable_smart_dismissal = true
 
+# `sum_owners` (default false) requires approval from codeowners defined in BOTH the base
+# branch AND the PR branch. This is useful for ownership handoffs where both the outgoing
+# and incoming teams must approve the change.
+sum_owners = false
+
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
 # see "Enforcement Options" below for more details
@@ -307,6 +312,43 @@ To trigger the admin bypass feature, **Create an approval review containing "Cod
 Codeowners Plus automatically detects and validates the bypass approval, immediately marking the PR as passing all codeowner requirements.
 
 The bypass text is case-insensitive, so "codeowners bypass", "Codeowners Bypass", or "CODEOWNERS BYPASS" all work.
+
+#### Sum Owners (Ownership Handoffs)
+
+The `sum_owners` feature enables self-service ownership transfers by requiring approval from codeowners defined in **BOTH** the base branch and the PR branch. This creates an AND relationship between ownership rules from both branches.
+
+**Use Case:** When Team A wants to transfer ownership of files to Team B, they can submit a PR that modifies the `.codeowners` file. With `sum_owners` enabled, the PR will require approval from **both** Team A (base branch owners) and Team B (PR branch owners), ensuring both parties agree to the handoff.
+
+`codeowners.toml`:
+```toml
+# `sum_owners` (default false) requires approval from BOTH base and PR branch codeowners
+sum_owners = true
+```
+
+**Example Ownership Handoff:**
+
+Base branch `.codeowners`:
+```
+*.py @backend-team
+```
+
+PR branch `.codeowners` (modified in the PR):
+```
+*.py @data-team
+```
+
+Result with `sum_owners = true`:
+- Any `.py` file changes require approval from **both** `@backend-team` AND `@data-team`
+- This ensures the outgoing team (`@backend-team`) and incoming team (`@data-team`) both approve the ownership transfer
+
+**Edge Cases:**
+
+- **New files** (only in PR branch): Only PR branch rules apply
+- **Deleted files** (only in base branch): Only base branch rules apply (last owners must approve deletion)
+- **Duplicate owners** (same owner in both branches): Only one approval needed (deduplication)
+- **No rules in one branch**: Only uses rules from the other branch
+
+**Note:** The `sum_owners` setting is read from the base branch's `codeowners.toml` for security. PR authors cannot enable this feature for their own PRs.
 
 ### Quiet Mode
 

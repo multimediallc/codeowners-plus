@@ -108,11 +108,11 @@ func (a *App) Run() (*OutputData, error) {
 
 	// Create file reader for base ref to prevent PR authors from modifying config or .codeowners
 	// This ensures the security policy comes from the protected branch, not the PR branch
-	fileReader := git.NewGitRefFileReader(a.client.PR().Base.GetSHA(), a.config.RepoDir)
+	baseFileReader := git.NewGitRefFileReader(a.client.PR().Base.GetSHA(), a.config.RepoDir)
 	a.printDebug("Using base ref %s for codeowners.toml and .codeowners files\n", a.client.PR().Base.GetSHA())
 
 	// Read config from base ref
-	conf, err := owners.ReadConfig(a.config.RepoDir, fileReader)
+	conf, err := owners.ReadConfig(a.config.RepoDir, baseFileReader)
 	if err != nil {
 		a.printWarn("Error reading codeowners.toml - using default config\n")
 	}
@@ -134,10 +134,35 @@ func (a *App) Run() (*OutputData, error) {
 	}
 	a.gitDiff = gitDiff
 
-	// Initialize codeowners using base ref file reader (same reader as config)
-	codeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), fileReader, a.config.WarningBuffer)
-	if err != nil {
-		return &OutputData{}, fmt.Errorf("NewCodeOwners Error: %v", err)
+	// Initialize codeowners
+	var codeOwners codeowners.CodeOwners
+	if conf.SumOwners {
+		// Sum owners mode: read .codeowners from BOTH base and head, then merge
+		a.printDebug("Sum owners mode enabled - reading .codeowners from both base and head refs\n")
+
+		// Create base codeowners from base ref
+		baseCodeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), baseFileReader, a.config.WarningBuffer)
+		if err != nil {
+			return &OutputData{}, fmt.Errorf("NewCodeOwners (base) Error: %v", err)
+		}
+
+		// Create head file reader and codeowners from head ref
+		headFileReader := git.NewGitRefFileReader(a.client.PR().Head.GetSHA(), a.config.RepoDir)
+		headCodeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), headFileReader, a.config.WarningBuffer)
+		if err != nil {
+			return &OutputData{}, fmt.Errorf("NewCodeOwners (head) Error: %v", err)
+		}
+
+		// Merge base and head codeowners using AND logic
+		reviewerGroupManager := codeowners.NewReviewerGroupMemo()
+		codeOwners = codeowners.MergeCodeOwners(baseCodeOwners, headCodeOwners, reviewerGroupManager)
+		a.printDebug("Merged ownership rules from base and head refs\n")
+	} else {
+		// Standard mode: read .codeowners only from base ref
+		codeOwners, err = codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), baseFileReader, a.config.WarningBuffer)
+		if err != nil {
+			return &OutputData{}, fmt.Errorf("NewCodeOwners Error: %v", err)
+		}
 	}
 	a.codeowners = codeOwners
 

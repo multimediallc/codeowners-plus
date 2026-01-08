@@ -17,6 +17,7 @@ type Config struct {
 	AdminBypass           *AdminBypass `toml:"admin_bypass"`
 	DetailedReviewers     bool         `toml:"detailed_reviewers"`
 	DisableSmartDismissal bool         `toml:"disable_smart_dismissal"`
+	SumOwners             bool         `toml:"sum_owners"`
 }
 
 type Enforcement struct {
@@ -35,14 +36,16 @@ func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) 
 	}
 
 	defaultConfig := &Config{
-		MaxReviews:           nil,
-		MinReviews:           nil,
-		UnskippableReviewers: []string{},
-		Ignore:               []string{},
-		Enforcement:          &Enforcement{Approval: false, FailCheck: true},
-		HighPriorityLabels:   []string{},
-		AdminBypass:          &AdminBypass{Enabled: false, AllowedUsers: []string{}},
-		DetailedReviewers:    false,
+		MaxReviews:            nil,
+		MinReviews:            nil,
+		UnskippableReviewers:  []string{},
+		Ignore:                []string{},
+		Enforcement:           &Enforcement{Approval: false, FailCheck: true},
+		HighPriorityLabels:    []string{},
+		AdminBypass:           &AdminBypass{Enabled: false, AllowedUsers: []string{}},
+		DetailedReviewers:     false,
+		DisableSmartDismissal: false,
+		SumOwners:             false,
 	}
 
 	// Use filesystem reader if none provided

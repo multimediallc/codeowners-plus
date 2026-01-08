@@ -70,6 +70,26 @@ unskippable_reviewers = ["@user1"]
 			expectedErr: false,
 		},
 		{
+			name: "config with sum_owners enabled",
+			configContent: `
+sum_owners = true
+max_reviews = 2
+`,
+			path: "testdata/",
+			expected: &Config{
+				MaxReviews:            intPtr(2),
+				MinReviews:            nil,
+				UnskippableReviewers:  []string{},
+				Ignore:                []string{},
+				Enforcement:           &Enforcement{Approval: false, FailCheck: true},
+				HighPriorityLabels:    []string{},
+				DetailedReviewers:     false,
+				DisableSmartDismissal: false,
+				SumOwners:             true,
+			},
+			expectedErr: false,
+		},
+		{
 			name: "invalid toml",
 			configContent: `
 max_reviews = invalid
@@ -145,6 +165,10 @@ max_reviews = invalid
 
 				if !sliceEqual(got.Ignore, tc.expected.Ignore) {
 					t.Errorf("Ignore: expected %v, got %v", tc.expected.Ignore, got.Ignore)
+				}
+
+				if got.SumOwners != tc.expected.SumOwners {
+					t.Errorf("SumOwners: expected %v, got %v", tc.expected.SumOwners, got.SumOwners)
 				}
 
 				if tc.expected.Enforcement != nil {
