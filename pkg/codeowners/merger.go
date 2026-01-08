@@ -10,10 +10,7 @@ import (
 // MergeCodeOwners combines two CodeOwners objects using AND logic.
 // The result requires satisfaction of ownership rules from BOTH base and head.
 // This is useful for ownership handoffs where both outgoing and incoming teams must approve.
-//
-// The reviewerGroupManager is used to deduplicate ReviewerGroup objects, ensuring
-// that approval tracking works correctly.
-func MergeCodeOwners(base CodeOwners, head CodeOwners, reviewerGroupManager ReviewerGroupManager) CodeOwners {
+func MergeCodeOwners(base CodeOwners, head CodeOwners) CodeOwners {
 	// Get file ownership maps from both branches
 	baseRequired := base.FileRequired()
 	headRequired := head.FileRequired()
@@ -32,10 +29,10 @@ func MergeCodeOwners(base CodeOwners, head CodeOwners, reviewerGroupManager Revi
 		headOpt := headOptional[file]
 
 		// Merge required reviewers (AND logic - both must be satisfied)
-		mergedRequired := mergeReviewerGroups(baseReq, headReq, reviewerGroupManager)
+		mergedRequired := mergeReviewerGroups(baseReq, headReq)
 
 		// Merge optional reviewers (both are CC'd)
-		mergedOptional := mergeReviewerGroups(baseOpt, headOpt, reviewerGroupManager)
+		mergedOptional := mergeReviewerGroups(baseOpt, headOpt)
 
 		mergedFileToOwner[file] = fileOwners{
 			requiredReviewers: mergedRequired,
@@ -77,8 +74,7 @@ func getAllFileNames(maps ...map[string]ReviewerGroups) []string {
 }
 
 // mergeReviewerGroups combines two ReviewerGroups using AND logic.
-// Uses reviewerGroupManager to deduplicate identical groups.
-func mergeReviewerGroups(base ReviewerGroups, head ReviewerGroups, reviewerGroupManager ReviewerGroupManager) ReviewerGroups {
+func mergeReviewerGroups(base ReviewerGroups, head ReviewerGroups) ReviewerGroups {
 	// Combine both groups
 	combined := make([]*ReviewerGroup, 0, len(base)+len(head))
 	seen := make(map[string]bool)

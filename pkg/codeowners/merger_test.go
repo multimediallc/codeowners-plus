@@ -208,11 +208,8 @@ func TestMergeCodeOwners(t *testing.T) {
 			base := createMockCodeOwners(tc.baseRequired, tc.baseOptional, tc.baseUnowned)
 			head := createMockCodeOwners(tc.headRequired, tc.headOptional, tc.headUnowned)
 
-			// Create ReviewerGroupManager for deduplication
-			reviewerGroupManager := NewReviewerGroupMemo()
-
 			// Merge
-			merged := MergeCodeOwners(base, head, reviewerGroupManager)
+			merged := MergeCodeOwners(base, head)
 
 			// Verify required reviewers
 			mergedRequired := merged.FileRequired()
@@ -273,8 +270,7 @@ func TestMergeCodeOwnersApprovalTracking(t *testing.T) {
 	base := createMockCodeOwners(baseRequired, map[string]ReviewerGroups{}, []string{})
 	head := createMockCodeOwners(headRequired, map[string]ReviewerGroups{}, []string{})
 
-	reviewerGroupManager := NewReviewerGroupMemo()
-	merged := MergeCodeOwners(base, head, reviewerGroupManager)
+	merged := MergeCodeOwners(base, head)
 
 	// Initially, both team-a and team-b should be required (unapproved)
 	allRequired := merged.AllRequired()
@@ -325,8 +321,7 @@ func TestMergeCodeOwnersSetAuthor(t *testing.T) {
 	base := createMockCodeOwners(baseRequired, map[string]ReviewerGroups{}, []string{})
 	head := createMockCodeOwners(headRequired, map[string]ReviewerGroups{}, []string{})
 
-	reviewerGroupManager := NewReviewerGroupMemo()
-	merged := MergeCodeOwners(base, head, reviewerGroupManager)
+	merged := MergeCodeOwners(base, head)
 
 	// Set author
 	merged.SetAuthor("@author")

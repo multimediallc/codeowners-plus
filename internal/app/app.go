@@ -154,8 +154,7 @@ func (a *App) Run() (*OutputData, error) {
 		}
 
 		// Merge base and head codeowners using AND logic
-		reviewerGroupManager := codeowners.NewReviewerGroupMemo()
-		codeOwners = codeowners.MergeCodeOwners(baseCodeOwners, headCodeOwners, reviewerGroupManager)
+		codeOwners = codeowners.MergeCodeOwners(baseCodeOwners, headCodeOwners)
 		a.printDebug("Merged ownership rules from base and head refs\n")
 	} else {
 		// Standard mode: read .codeowners only from base ref
