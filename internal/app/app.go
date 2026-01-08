@@ -136,9 +136,9 @@ func (a *App) Run() (*OutputData, error) {
 
 	// Initialize codeowners
 	var codeOwners codeowners.CodeOwners
-	if conf.SumOwners {
-		// Sum owners mode: read .codeowners from BOTH base and head, then merge
-		a.printDebug("Sum owners mode enabled - reading .codeowners from both base and head refs\n")
+	if conf.RequireBothBranchReviewers {
+		// Require both branch reviewers mode: read .codeowners from BOTH base and head, then merge
+		a.printDebug("Require both branch reviewers mode enabled - reading .codeowners from both base and head refs\n")
 
 		// Create base codeowners from base ref
 		baseCodeOwners, err := codeowners.New(a.config.RepoDir, gitDiff.AllChanges(), baseFileReader, a.config.WarningBuffer)

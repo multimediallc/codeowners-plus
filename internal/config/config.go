@@ -15,9 +15,9 @@ type Config struct {
 	Enforcement           *Enforcement `toml:"enforcement"`
 	HighPriorityLabels    []string     `toml:"high_priority_labels"`
 	AdminBypass           *AdminBypass `toml:"admin_bypass"`
-	DetailedReviewers     bool         `toml:"detailed_reviewers"`
-	DisableSmartDismissal bool         `toml:"disable_smart_dismissal"`
-	SumOwners             bool         `toml:"sum_owners"`
+	DetailedReviewers          bool         `toml:"detailed_reviewers"`
+	DisableSmartDismissal      bool         `toml:"disable_smart_dismissal"`
+	RequireBothBranchReviewers bool         `toml:"require_both_branch_reviewers"`
 }
 
 type Enforcement struct {
@@ -43,9 +43,9 @@ func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) 
 		Enforcement:           &Enforcement{Approval: false, FailCheck: true},
 		HighPriorityLabels:    []string{},
 		AdminBypass:           &AdminBypass{Enabled: false, AllowedUsers: []string{}},
-		DetailedReviewers:     false,
-		DisableSmartDismissal: false,
-		SumOwners:             false,
+		DetailedReviewers:          false,
+		DisableSmartDismissal:      false,
+		RequireBothBranchReviewers: false,
 	}
 
 	// Use filesystem reader if none provided

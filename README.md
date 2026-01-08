@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-82.8%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-83.2%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -232,10 +232,10 @@ detailed_reviewers = true
 # `disable_smart_dismissal` (default false) means the codeowners will not dismiss stale reviews
 disable_smart_dismissal = true
 
-# `sum_owners` (default false) requires approval from codeowners defined in BOTH the base
-# branch AND the PR branch. This is useful for ownership handoffs where both the outgoing
-# and incoming teams must approve the change.
-sum_owners = false
+# `require_both_branch_reviewers` (default false) requires approval from codeowners defined
+# in BOTH the base branch AND the PR branch
+# This is useful for ownership handoffs where both the outgoing and incoming teams must review
+require_both_branch_reviewers = false
 
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
@@ -313,16 +313,16 @@ Codeowners Plus automatically detects and validates the bypass approval, immedia
 
 The bypass text is case-insensitive, so "codeowners bypass", "Codeowners Bypass", or "CODEOWNERS BYPASS" all work.
 
-#### Sum Owners (Ownership Handoffs)
+#### Require Both Branch Reviewers (Ownership Handoffs)
 
-The `sum_owners` feature enables self-service ownership transfers by requiring approval from codeowners defined in **BOTH** the base branch and the PR branch. This creates an AND relationship between ownership rules from both branches.
+The `require_both_branch_reviewers` feature enables self-service ownership transfers by requiring approval from codeowners defined in **BOTH** the base branch and the PR branch. This creates an AND relationship between ownership rules from both branches.
 
-**Use Case:** When Team A wants to transfer ownership of files to Team B, they can submit a PR that modifies the `.codeowners` file. With `sum_owners` enabled, the PR will require approval from **both** Team A (base branch owners) and Team B (PR branch owners), ensuring both parties agree to the handoff.
+**Use Case:** When Team A wants to transfer ownership of files to Team B, they can submit a PR that modifies the `.codeowners` file. With `require_both_branch_reviewers` enabled, the PR will require approval from **both** Team A (base branch owners) and Team B (PR branch owners), ensuring both parties agree to the handoff.
 
 `codeowners.toml`:
 ```toml
-# `sum_owners` (default false) requires approval from BOTH base and PR branch codeowners
-sum_owners = true
+# `require_both_branch_reviewers` (default false) requires approval from BOTH base and PR branch codeowners
+require_both_branch_reviewers = true
 ```
 
 **Example Ownership Handoff:**
@@ -337,7 +337,7 @@ PR branch `.codeowners` (modified in the PR):
 *.py @data-team
 ```
 
-Result with `sum_owners = true`:
+Result with `require_both_branch_reviewers = true`:
 - Any `.py` file changes require approval from **both** `@backend-team` AND `@data-team`
 - This ensures the outgoing team (`@backend-team`) and incoming team (`@data-team`) both approve the ownership transfer
 
@@ -348,7 +348,7 @@ Result with `sum_owners = true`:
 - **Duplicate owners** (same owner in both branches): Only one approval needed (deduplication)
 - **No rules in one branch**: Only uses rules from the other branch
 
-**Note:** The `sum_owners` setting is read from the base branch's `codeowners.toml` for security. PR authors cannot enable this feature for their own PRs.
+**Note:** The `require_both_branch_reviewers` setting is read from the base branch's `codeowners.toml` for security. PR authors cannot enable this feature for their own PRs.
 
 ### Quiet Mode
 

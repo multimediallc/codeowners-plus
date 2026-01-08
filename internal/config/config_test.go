@@ -70,22 +70,22 @@ unskippable_reviewers = ["@user1"]
 			expectedErr: false,
 		},
 		{
-			name: "config with sum_owners enabled",
+			name: "config with require_both_branch_reviewers enabled",
 			configContent: `
-sum_owners = true
+require_both_branch_reviewers = true
 max_reviews = 2
 `,
 			path: "testdata/",
 			expected: &Config{
-				MaxReviews:            intPtr(2),
-				MinReviews:            nil,
-				UnskippableReviewers:  []string{},
-				Ignore:                []string{},
-				Enforcement:           &Enforcement{Approval: false, FailCheck: true},
-				HighPriorityLabels:    []string{},
-				DetailedReviewers:     false,
-				DisableSmartDismissal: false,
-				SumOwners:             true,
+				MaxReviews:                 intPtr(2),
+				MinReviews:                 nil,
+				UnskippableReviewers:       []string{},
+				Ignore:                     []string{},
+				Enforcement:                &Enforcement{Approval: false, FailCheck: true},
+				HighPriorityLabels:         []string{},
+				DetailedReviewers:          false,
+				DisableSmartDismissal:      false,
+				RequireBothBranchReviewers: true,
 			},
 			expectedErr: false,
 		},
@@ -167,8 +167,8 @@ max_reviews = invalid
 					t.Errorf("Ignore: expected %v, got %v", tc.expected.Ignore, got.Ignore)
 				}
 
-				if got.SumOwners != tc.expected.SumOwners {
-					t.Errorf("SumOwners: expected %v, got %v", tc.expected.SumOwners, got.SumOwners)
+				if got.RequireBothBranchReviewers != tc.expected.RequireBothBranchReviewers {
+					t.Errorf("RequireBothBranchReviewers: expected %v, got %v", tc.expected.RequireBothBranchReviewers, got.RequireBothBranchReviewers)
 				}
 
 				if tc.expected.Enforcement != nil {
