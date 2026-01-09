@@ -341,13 +341,6 @@ Result with `require_both_branch_reviewers = true`:
 - Any `.py` file changes require approval from **both** `@backend-team` AND `@data-team`
 - This ensures the outgoing team (`@backend-team`) and incoming team (`@data-team`) both approve the ownership transfer
 
-**Edge Cases:**
-
-- **New files** (only in PR branch): Only PR branch rules apply
-- **Deleted files** (only in base branch): Only base branch rules apply (last owners must approve deletion)
-- **Duplicate owners** (same owner in both branches): Only one approval needed (deduplication)
-- **No rules in one branch**: Only uses rules from the other branch
-
 **Note:** The `require_both_branch_reviewers` setting is read from the base branch's `codeowners.toml` for security. PR authors cannot enable this feature for their own PRs.
 
 ### Quiet Mode
