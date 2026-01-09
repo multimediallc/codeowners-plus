@@ -287,13 +287,27 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 			if err != nil {
 				a.printWarn("WARNING: Error getting currently requested owners for re-request: %v\n", err)
 			} else {
+				// Get reviewers who have reviewed but not approved (requested changes or commented)
+				reviewedButNotApproved, err := a.client.GetReviewedButNotApproved()
+				if err != nil {
+					a.printWarn("WARNING: Error getting reviewed but not approved owners for re-request: %v\n", err)
+				}
+				
 				currentlyRequestedSet := make(map[string]struct{}, len(currentlyRequestedOwners))
 				for _, owner := range currentlyRequestedOwners {
 					currentlyRequestedSet[owner.Normalized()] = struct{}{}
 				}
+				
+				reviewedButNotApprovedSet := make(map[string]struct{}, len(reviewedButNotApproved))
+				for _, owner := range reviewedButNotApproved {
+					reviewedButNotApprovedSet[owner.Normalized()] = struct{}{}
+				}
+				
 				ownersToReRequest := f.Filtered(allRequiredOwnerNames, func(owner codeowners.Slug) bool {
-					_, exists := currentlyRequestedSet[owner.Normalized()]
-					return !exists
+					_, isCurrentlyRequested := currentlyRequestedSet[owner.Normalized()]
+					_, hasReviewedButNotApproved := reviewedButNotApprovedSet[owner.Normalized()]
+					// Exclude if already requested or if a member has reviewed but not approved
+					return !isCurrentlyRequested && !hasReviewedButNotApproved
 				})
 				if len(ownersToReRequest) > 0 {
 					a.printDebug("Re-requesting Reviews from satisfied team(s) to meet min_reviews: %s\n", codeowners.OriginalStrings(ownersToReRequest))
