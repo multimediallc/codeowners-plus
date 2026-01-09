@@ -5,6 +5,8 @@ unskippable_reviewers = ["@user1", "@user2"]
 
 ignore = ["ignored"]
 
+require_both_branch_reviewers = false
+
 [enforcement]
 approval = false
 fail_check = true

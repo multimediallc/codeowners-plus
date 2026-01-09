@@ -8,15 +8,16 @@ import (
 )
 
 type Config struct {
-	MaxReviews            *int         `toml:"max_reviews"`
-	MinReviews            *int         `toml:"min_reviews"`
-	UnskippableReviewers  []string     `toml:"unskippable_reviewers"`
-	Ignore                []string     `toml:"ignore"`
-	Enforcement           *Enforcement `toml:"enforcement"`
-	HighPriorityLabels    []string     `toml:"high_priority_labels"`
-	AdminBypass           *AdminBypass `toml:"admin_bypass"`
-	DetailedReviewers     bool         `toml:"detailed_reviewers"`
-	DisableSmartDismissal bool         `toml:"disable_smart_dismissal"`
+	MaxReviews                 *int         `toml:"max_reviews"`
+	MinReviews                 *int         `toml:"min_reviews"`
+	UnskippableReviewers       []string     `toml:"unskippable_reviewers"`
+	Ignore                     []string     `toml:"ignore"`
+	Enforcement                *Enforcement `toml:"enforcement"`
+	HighPriorityLabels         []string     `toml:"high_priority_labels"`
+	AdminBypass                *AdminBypass `toml:"admin_bypass"`
+	DetailedReviewers          bool         `toml:"detailed_reviewers"`
+	DisableSmartDismissal      bool         `toml:"disable_smart_dismissal"`
+	RequireBothBranchReviewers bool         `toml:"require_both_branch_reviewers"`
 }
 
 type Enforcement struct {
@@ -35,14 +36,16 @@ func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) 
 	}
 
 	defaultConfig := &Config{
-		MaxReviews:           nil,
-		MinReviews:           nil,
-		UnskippableReviewers: []string{},
-		Ignore:               []string{},
-		Enforcement:          &Enforcement{Approval: false, FailCheck: true},
-		HighPriorityLabels:   []string{},
-		AdminBypass:          &AdminBypass{Enabled: false, AllowedUsers: []string{}},
-		DetailedReviewers:    false,
+		MaxReviews:                 nil,
+		MinReviews:                 nil,
+		UnskippableReviewers:       []string{},
+		Ignore:                     []string{},
+		Enforcement:                &Enforcement{Approval: false, FailCheck: true},
+		HighPriorityLabels:         []string{},
+		AdminBypass:                &AdminBypass{Enabled: false, AllowedUsers: []string{}},
+		DetailedReviewers:          false,
+		DisableSmartDismissal:      false,
+		RequireBothBranchReviewers: false,
 	}
 
 	// Use filesystem reader if none provided

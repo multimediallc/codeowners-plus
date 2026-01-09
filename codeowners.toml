@@ -12,6 +12,9 @@ high_priority_labels = ["P0"]
 detailed_reviewers = false
 # `disable_smart_dismissal` (default false) means the codeowners will not dismiss stale reviews
 disable_smart_dismissal = false
+# `require_both_branch_reviewers` (default false) requires approval from codeowners defined in BOTH the base branch AND the PR branch
+# This is useful for ownership handoffs where both the outgoing and incoming teams must approve the change
+require_both_branch_reviewers = false
 
 # `enforcement` allows you to specify how the codeowners check should be enforced
 [enforcement]
