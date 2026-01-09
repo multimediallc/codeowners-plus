@@ -39,6 +39,7 @@ type Client interface {
 	FindUserApproval(ghUser string) (*CurrentApproval, error)
 	GetCurrentReviewerApprovals() ([]*CurrentApproval, error)
 	GetAlreadyReviewed() ([]codeowners.Slug, error)
+	GetReviewedButNotApproved() ([]codeowners.Slug, error)
 	GetCurrentlyRequested() ([]codeowners.Slug, error)
 	DismissStaleReviews(staleApprovals []*CurrentApproval) error
 	RequestReviewers(reviewers []string) error
@@ -313,6 +314,52 @@ func reviewerAlreadyReviewed(reviews []*github.PullRequestReview, userReviewerMa
 	for _, review := range reviews {
 		reviewingUser := review.GetUser().GetLogin()
 		if reviewers, ok := userReviewerMap[strings.ToLower(reviewingUser)]; ok {
+			for _, reviewer := range reviewers {
+				reviewsReviewers[reviewer.Normalized()] = reviewer
+			}
+		}
+	}
+
+	return slices.Collect(maps.Values(reviewsReviewers))
+}
+
+func (gh *GHClient) GetReviewedButNotApproved() ([]codeowners.Slug, error) {
+	if gh.pr == nil {
+		return nil, &NoPRError{}
+	}
+	if gh.userReviewerMap == nil {
+		return nil, &UserReviewerMapNotInitError{}
+	}
+	if gh.reviews == nil {
+		err := gh.InitReviews()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return reviewerReviewedButNotApproved(gh.reviews, gh.userReviewerMap), nil
+}
+
+func reviewerReviewedButNotApproved(reviews []*github.PullRequestReview, userReviewerMap ghUserReviewerMap) []codeowners.Slug {
+	// Track the most recent review state for each user
+	// Since reviews are in descending chronological order (most recent first),
+	// the first occurrence of each user is their most recent review
+	userReviewStates := make(map[string]string)
+	for _, review := range reviews {
+		reviewingUser := strings.ToLower(review.GetUser().GetLogin())
+		// Only track if we haven't seen this user yet (most recent review)
+		if _, seen := userReviewStates[reviewingUser]; !seen {
+			state := review.GetState()
+			// Only track non-approved states (CHANGES_REQUESTED or COMMENTED)
+			if state == "CHANGES_REQUESTED" || state == "COMMENTED" {
+				userReviewStates[reviewingUser] = state
+			}
+		}
+	}
+
+	reviewsReviewers := make(map[string]codeowners.Slug)
+	for reviewingUserLower := range userReviewStates {
+		// Include reviewers whose most recent review is CHANGES_REQUESTED or COMMENTED
+		if reviewers, ok := userReviewerMap[reviewingUserLower]; ok {
 			for _, reviewer := range reviewers {
 				reviewsReviewers[reviewer.Normalized()] = reviewer
 			}
