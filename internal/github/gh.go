@@ -350,7 +350,7 @@ func reviewerReviewedButNotApproved(reviews []*github.PullRequestReview, userRev
 		if _, seen := userReviewStates[reviewingUser]; !seen {
 			state := review.GetState()
 			// Only track non-approved states (CHANGES_REQUESTED or COMMENTED)
-			if state == "CHANGES_REQUESTED" || state == "COMMENTED" {
+			if state == github.ReviewStateChangesRequested || state == github.ReviewStateCommented {
 				userReviewStates[reviewingUser] = state
 			}
 		}
