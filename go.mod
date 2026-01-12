@@ -3,7 +3,7 @@ module github.com/multimediallc/codeowners-plus
 go 1.23.1
 
 require (
-	github.com/bmatcuk/doublestar/v4 v4.9.1
+	github.com/bmatcuk/doublestar/v4 v4.9.2
 	github.com/boyter/gocodewalker v1.5.1
 	github.com/google/go-github/v63 v63.0.0
 	github.com/pelletier/go-toml/v2 v2.2.4
