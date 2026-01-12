@@ -80,9 +80,9 @@ func mergeReviewerGroups(base ReviewerGroups, head ReviewerGroups) ReviewerGroup
 	seen := make(map[string]bool)
 
 	// add reviewer group with deduplication
-	addGroup := func(rg *ReviewerGroup, checkSeen bool) {
+	addGroup := func(rg *ReviewerGroup) {
 		key := createReviewerGroupKey(rg)
-		if checkSeen && seen[key] {
+		if seen[key] {
 			return
 		}
 		combined = append(combined, rg)
@@ -90,11 +90,11 @@ func mergeReviewerGroups(base ReviewerGroups, head ReviewerGroups) ReviewerGroup
 	}
 
 	for _, rg := range base {
-		addGroup(rg, false)
+		addGroup(rg)
 	}
 
 	for _, rg := range head {
-		addGroup(rg, true)
+		addGroup(rg)
 	}
 
 	return combined
