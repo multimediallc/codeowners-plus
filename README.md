@@ -92,7 +92,7 @@ jobs:
           fetch-depth: 0
 
       - name: 'Codeowners Plus'
-        uses: multimediallc/codeowners-plus@v1.6.1
+        uses: multimediallc/codeowners-plus@v1.7.0
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
