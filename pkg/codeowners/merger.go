@@ -80,22 +80,19 @@ func mergeReviewerGroups(base ReviewerGroups, head ReviewerGroups) ReviewerGroup
 	seen := make(map[string]bool)
 
 	// add reviewer group with deduplication
-	addGroup := func(rg *ReviewerGroup) {
-		key := createReviewerGroupKey(rg)
-		if seen[key] {
-			return
+	addGroups := func(rgs ReviewerGroups) {
+		for _, rg := range rgs {
+			key := createReviewerGroupKey(rg)
+			if seen[key] {
+				continue
+			}
+			combined = append(combined, rg)
+			seen[key] = true
 		}
-		combined = append(combined, rg)
-		seen[key] = true
 	}
 
-	for _, rg := range base {
-		addGroup(rg)
-	}
-
-	for _, rg := range head {
-		addGroup(rg)
-	}
+	addGroups(base)
+	addGroups(head)
 
 	return combined
 }
@@ -117,16 +114,15 @@ func mergeUnownedFiles(baseUnowned []string, headUnowned []string, filesWithOwne
 
 	// Combine unowned files from both branches
 	unownedSet := f.NewSet[string]()
-	for _, file := range baseUnowned {
-		if !ownedSet.Contains(file) {
-			unownedSet.Add(file)
+	addToUnowned := func(filenames []string) {
+		for _, file := range filenames {
+			if !ownedSet.Contains(file) {
+				unownedSet.Add(file)
+			}
 		}
 	}
-	for _, file := range headUnowned {
-		if !ownedSet.Contains(file) {
-			unownedSet.Add(file)
-		}
-	}
+	addToUnowned(baseUnowned)
+	addToUnowned(headUnowned)
 
 	// Convert to sorted slice
 	unowned := unownedSet.Items()
@@ -138,17 +134,8 @@ func mergeUnownedFiles(baseUnowned []string, headUnowned []string, filesWithOwne
 func buildNameReviewerMap(fileToOwner map[string]fileOwners) map[string]ReviewerGroups {
 	nameReviewerMap := make(map[string]ReviewerGroups)
 
-	for _, owners := range fileToOwner {
-		// Process required reviewers
-		for _, rg := range owners.requiredReviewers {
-			for _, name := range rg.Names {
-				normalizedName := name.Normalized()
-				nameReviewerMap[normalizedName] = append(nameReviewerMap[normalizedName], rg)
-			}
-		}
-
-		// Process optional reviewers
-		for _, rg := range owners.optionalReviewers {
+	addReviewerGroups := func(rgs ReviewerGroups) {
+		for _, rg := range rgs {
 			for _, name := range rg.Names {
 				normalizedName := name.Normalized()
 				nameReviewerMap[normalizedName] = append(nameReviewerMap[normalizedName], rg)
@@ -156,9 +143,9 @@ func buildNameReviewerMap(fileToOwner map[string]fileOwners) map[string]Reviewer
 		}
 	}
 
-	// Deduplicate ReviewerGroups in nameReviewerMap
-	for name, groups := range nameReviewerMap {
-		nameReviewerMap[name] = f.RemoveDuplicates(groups)
+	for _, owners := range fileToOwner {
+		addReviewerGroups(owners.requiredReviewers)
+		addReviewerGroups(owners.optionalReviewers)
 	}
 
 	return nameReviewerMap
