@@ -383,7 +383,7 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 			approvalText = "approvals"
 		}
 		comment += fmt.Sprintf(
-			"\n\nMinimum review requirement not met. Need %d reviews, found %d. Reviews have been re-requested from owning teams, but any additional %s can satsify minimum.",
+			"\n\nMinimum review requirement not met. Need %d reviews, found %d. Reviews have been re-requested from owning teams, but any additional %s can satisfy minimum.",
 			minReviewsNeeded,
 			currentApprovals,
 			approvalText,
