@@ -377,11 +377,11 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 		comment += "\n\nThe PR has received the max number of required reviews. No further action is required."
 	}
 
-	approvalText := "approval"
-	if minReviewsNeeded-currentApprovals > 1 {
-		approvalText = "approvals"
-	}
 	if minReviewsNeeded > 0 {
+		approvalText := "approval"
+		if minReviewsNeeded-currentApprovals > 1 {
+			approvalText = "approvals"
+		}
 		comment += fmt.Sprintf(
 			"\n\nMinimum review requirement not met. Need %d reviews, found %d. Reviews have been re-requested from owning teams, but any additional %s can satsify minimum.",
 			minReviewsNeeded,
