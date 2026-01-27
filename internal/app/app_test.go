@@ -533,10 +533,13 @@ func TestAddReviewStatusComment(t *testing.T) {
 		name                string
 		requiredOwners      codeowners.ReviewerGroups
 		maxReviewsMet       bool
+		minReviewsNeeded    int
+		currentApprovals    int
 		existingComments    []*github.IssueComment
 		expectAddComment    bool
 		expectUpdateComment bool
 		expectError         bool
+		expectMinReviewNote bool
 	}{
 		{
 			name: "no existing comment",
@@ -568,6 +571,16 @@ func TestAddReviewStatusComment(t *testing.T) {
 			expectAddComment: false,
 			expectError:      false,
 		},
+		{
+			name: "min reviews not met shows note",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
+			},
+			minReviewsNeeded:    3,
+			currentApprovals:    2,
+			expectAddComment:    true,
+			expectMinReviewNote: true,
+		},
 	}
 
 	for _, tc := range tt {
@@ -589,7 +602,7 @@ func TestAddReviewStatusComment(t *testing.T) {
 				Conf: &owners.Config{},
 			}
 
-			err := app.addReviewStatusComment(tc.requiredOwners, tc.maxReviewsMet)
+			err := app.addReviewStatusComment(tc.requiredOwners, tc.maxReviewsMet, tc.minReviewsNeeded, tc.currentApprovals)
 			if tc.expectError {
 				if err == nil {
 					t.Error("expected an error, got nil")
@@ -612,6 +625,14 @@ func TestAddReviewStatusComment(t *testing.T) {
 			}
 			if !tc.expectUpdateComment && mockGH.UpdateCommentCalled {
 				t.Error("expected UpdateComment not to be called")
+			}
+
+			// Check min reviews note
+			if tc.expectMinReviewNote {
+				expectedNote := "Minimum review requirement not met"
+				if !strings.Contains(mockGH.AddCommentInput, expectedNote) {
+					t.Errorf("expected comment to contain min reviews note, got: %s", mockGH.AddCommentInput)
+				}
 			}
 		})
 	}
@@ -1243,7 +1264,7 @@ func TestCommentDetailedReviewers(t *testing.T) {
 					DetailedReviewers:  tc.detailedReviewers,
 				},
 			}
-			err := app.addReviewStatusComment(requiredOwners, false)
+			err := app.addReviewStatusComment(requiredOwners, false, 0, 0)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
