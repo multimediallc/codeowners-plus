@@ -257,8 +257,17 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 		}
 	}
 
+	// Calculate min_reviews state for comment
+	// Show note when all codeowners approved but min_reviews threshold not met
+	minReviewsNeeded := 0
+	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
+		if validApprovalCount < *a.Conf.MinReviews && len(unapprovedOwners) == 0 {
+			minReviewsNeeded = *a.Conf.MinReviews
+		}
+	}
+
 	// Add comments to the PR if necessary
-	err = a.addReviewStatusComment(allRequiredOwners, maxReviewsMet)
+	err = a.addReviewStatusComment(allRequiredOwners, maxReviewsMet, minReviewsNeeded, validApprovalCount)
 	if err != nil {
 		return false, message, nil, fmt.Errorf("failed to add review status comment: %w", err)
 	}
@@ -304,7 +313,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
 		// Check if we need to re-request from a satisfied team when min_reviews is not met
 		// Handles the case when there min_reviews is higher than the number of teams required.
-		if validApprovalCount < *a.Conf.MinReviews && len(unapprovedOwners) == 0 {
+		if minReviewsNeeded > 0 {
 			// All required teams have approved, but we need more reviews
 			// Re-request review from the satisfied team(s)
 			currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()
@@ -345,7 +354,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	return true, message, stillRequired, nil
 }
 
-func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups, maxReviewsMet bool) error {
+func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups, maxReviewsMet bool, minReviewsNeeded int, currentApprovals int) error {
 	// Comment on the PR with the codeowner teams required for review
 
 	if a.config.Quiet {
@@ -366,6 +375,19 @@ func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups
 
 	if maxReviewsMet {
 		comment += "\n\nThe PR has received the max number of required reviews. No further action is required."
+	}
+
+	if minReviewsNeeded > 0 {
+		approvalText := "approval"
+		if minReviewsNeeded-currentApprovals > 1 {
+			approvalText = "approvals"
+		}
+		comment += fmt.Sprintf(
+			"\n\nMinimum review requirement not met. Need %d reviews, found %d. Reviews have been re-requested from owning teams, but any additional %s can satisfy minimum.",
+			minReviewsNeeded,
+			currentApprovals,
+			approvalText,
+		)
 	}
 
 	if a.Conf.DetailedReviewers {
