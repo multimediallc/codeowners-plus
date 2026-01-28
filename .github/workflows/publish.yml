@@ -14,7 +14,7 @@ jobs:
       packages: write
     steps:
       - name: 'Checkout Code Repository'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 'Get release version'
         id: get_version
