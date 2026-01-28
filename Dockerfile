@@ -15,7 +15,7 @@ COPY internal ./internal/
 # Statically compile with CGO disabled
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o codeowners main.go
 
-FROM alpine:latest
+FROM alpine:3.23.3
 
 RUN apk update && apk add git
 
