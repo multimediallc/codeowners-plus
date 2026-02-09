@@ -90,6 +90,23 @@ max_reviews = 2
 			expectedErr: false,
 		},
 		{
+			name: "config with suppress_unowned_warning enabled",
+			configContent: `
+suppress_unowned_warning = true
+`,
+			path: "testdata/",
+			expected: &Config{
+				MaxReviews:             nil,
+				MinReviews:             nil,
+				UnskippableReviewers:   []string{},
+				Ignore:                 []string{},
+				Enforcement:            &Enforcement{Approval: false, FailCheck: true},
+				HighPriorityLabels:     []string{},
+				SuppressUnownedWarning: true,
+			},
+			expectedErr: false,
+		},
+		{
 			name: "invalid toml",
 			configContent: `
 max_reviews = invalid
@@ -169,6 +186,10 @@ max_reviews = invalid
 
 				if got.RequireBothBranchReviewers != tc.expected.RequireBothBranchReviewers {
 					t.Errorf("RequireBothBranchReviewers: expected %v, got %v", tc.expected.RequireBothBranchReviewers, got.RequireBothBranchReviewers)
+				}
+
+				if got.SuppressUnownedWarning != tc.expected.SuppressUnownedWarning {
+					t.Errorf("SuppressUnownedWarning: expected %v, got %v", tc.expected.SuppressUnownedWarning, got.SuppressUnownedWarning)
 				}
 
 				if tc.expected.Enforcement != nil {

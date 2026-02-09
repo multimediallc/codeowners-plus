@@ -18,6 +18,7 @@ type Config struct {
 	DetailedReviewers          bool         `toml:"detailed_reviewers"`
 	DisableSmartDismissal      bool         `toml:"disable_smart_dismissal"`
 	RequireBothBranchReviewers bool         `toml:"require_both_branch_reviewers"`
+	SuppressUnownedWarning     bool         `toml:"suppress_unowned_warning"`
 }
 
 type Enforcement struct {
