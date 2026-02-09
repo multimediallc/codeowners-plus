@@ -237,6 +237,10 @@ disable_smart_dismissal = true
 # This is useful for ownership handoffs where both the outgoing and incoming teams must review
 require_both_branch_reviewers = false
 
+# `suppress_unowned_warning` (default false) suppresses the warning messages about unowned files
+# Useful when you intentionally have files without codeowners
+suppress_unowned_warning = true
+
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
 # see "Enforcement Options" below for more details

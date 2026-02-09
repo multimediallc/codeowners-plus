@@ -170,8 +170,10 @@ func (a *App) Run() (*OutputData, error) {
 	codeOwners.SetAuthor(author)
 
 	// Warn about unowned files
-	for _, uFile := range codeOwners.UnownedFiles() {
-		a.printWarn("WARNING: Unowned File: %s\n", uFile)
+	if !conf.SuppressUnownedWarning {
+		for _, uFile := range codeOwners.UnownedFiles() {
+			a.printWarn("WARNING: Unowned File: %s\n", uFile)
+		}
 	}
 
 	// Print file owners if verbose
