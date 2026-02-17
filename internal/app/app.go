@@ -167,7 +167,11 @@ func (a *App) Run() (*OutputData, error) {
 
 	// Set author
 	author := fmt.Sprintf("@%s", a.client.PR().User.GetLogin())
-	codeOwners.SetAuthor(author)
+	authorMode := codeowners.AuthorModeDefault
+	if conf.AllowSelfApproval {
+		authorMode = codeowners.AuthorModeSelfApproval
+	}
+	codeOwners.SetAuthor(author, authorMode)
 
 	// Warn about unowned files
 	if !conf.SuppressUnownedWarning {

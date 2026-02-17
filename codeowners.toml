@@ -15,6 +15,9 @@ disable_smart_dismissal = false
 # `require_both_branch_reviewers` (default false) requires approval from codeowners defined in BOTH the base branch AND the PR branch
 # This is useful for ownership handoffs where both the outgoing and incoming teams must approve the change
 require_both_branch_reviewers = false
+# `allow_self_approval` (default false) treats the PR author as satisfying any OR ownership group they belong to
+# If the author is listed in an OR group (e.g. `*.py @alice @bob`), the group is auto-satisfied without requiring another member to approve
+allow_self_approval = false
 
 # `enforcement` allows you to specify how the codeowners check should be enforced
 [enforcement]
