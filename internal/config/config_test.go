@@ -107,6 +107,23 @@ suppress_unowned_warning = true
 			expectedErr: false,
 		},
 		{
+			name: "config with allow_self_approval enabled",
+			configContent: `
+allow_self_approval = true
+`,
+			path: "testdata/",
+			expected: &Config{
+				MaxReviews:           nil,
+				MinReviews:           nil,
+				UnskippableReviewers: []string{},
+				Ignore:               []string{},
+				Enforcement:          &Enforcement{Approval: false, FailCheck: true},
+				HighPriorityLabels:   []string{},
+				AllowSelfApproval:    true,
+			},
+			expectedErr: false,
+		},
+		{
 			name: "invalid toml",
 			configContent: `
 max_reviews = invalid
@@ -190,6 +207,10 @@ max_reviews = invalid
 
 				if got.SuppressUnownedWarning != tc.expected.SuppressUnownedWarning {
 					t.Errorf("SuppressUnownedWarning: expected %v, got %v", tc.expected.SuppressUnownedWarning, got.SuppressUnownedWarning)
+				}
+
+				if got.AllowSelfApproval != tc.expected.AllowSelfApproval {
+					t.Errorf("AllowSelfApproval: expected %v, got %v", tc.expected.AllowSelfApproval, got.AllowSelfApproval)
 				}
 
 				if tc.expected.Enforcement != nil {

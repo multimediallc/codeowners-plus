@@ -77,14 +77,13 @@ func (m *mockCodeOwners) ApplyApprovals(approvers []codeowners.Slug) {
 	m.appliedApprovals = approvers
 }
 
-func (m *mockCodeOwners) SetAuthor(author string) {
+func (m *mockCodeOwners) SetAuthor(author string, mode codeowners.AuthorMode) {
 	m.author = author
-	// Remove author from reviewers
 	for _, reviewers := range m.requiredOwners {
 		for i, name := range reviewers.Names {
 			if name.EqualsString(author) {
 				reviewers.Names = append(reviewers.Names[:i], reviewers.Names[i+1:]...)
-				if len(reviewers.Names) == 0 {
+				if len(reviewers.Names) == 0 || mode == codeowners.AuthorModeSelfApproval {
 					reviewers.Approved = true
 				}
 				break
@@ -95,7 +94,7 @@ func (m *mockCodeOwners) SetAuthor(author string) {
 		for i, name := range reviewers.Names {
 			if name.EqualsString(author) {
 				reviewers.Names = append(reviewers.Names[:i], reviewers.Names[i+1:]...)
-				if len(reviewers.Names) == 0 {
+				if len(reviewers.Names) == 0 || mode == codeowners.AuthorModeSelfApproval {
 					reviewers.Approved = true
 				}
 				break

@@ -324,7 +324,7 @@ func TestMergeCodeOwnersSetAuthor(t *testing.T) {
 	merged := MergeCodeOwners(base, head)
 
 	// Set author
-	merged.SetAuthor("@author")
+	merged.SetAuthor("@author", AuthorModeDefault)
 
 	// Check that author is removed from reviewer groups or groups are auto-approved
 	allRequired := merged.AllRequired()
@@ -334,6 +334,37 @@ func TestMergeCodeOwnersSetAuthor(t *testing.T) {
 				t.Errorf("author should be removed from reviewer groups, but found in %v", rg.Names)
 			}
 		}
+	}
+}
+
+// With require_both_branch_reviewers, ownership rules from base and head are AND'd together.
+// Self-approval should only satisfy groups the author belongs to. Here the author is in the
+// base branch's OR group but not the head branch's group, so only the base group is satisfied
+// and the head's @team-b still requires an independent review.
+func TestMergeCodeOwnersSetAuthorSelfApproval(t *testing.T) {
+	baseRequired := map[string]ReviewerGroups{
+		"file.py": {
+			{Names: NewSlugs([]string{"@author", "@team-a"}), Approved: false},
+		},
+	}
+	headRequired := map[string]ReviewerGroups{
+		"file.py": {
+			{Names: NewSlugs([]string{"@team-b"}), Approved: false},
+		},
+	}
+
+	base := createMockCodeOwners(baseRequired, map[string]ReviewerGroups{}, []string{})
+	head := createMockCodeOwners(headRequired, map[string]ReviewerGroups{}, []string{})
+
+	merged := MergeCodeOwners(base, head)
+	merged.SetAuthor("@author", AuthorModeSelfApproval)
+
+	allRequired := merged.AllRequired()
+	if len(allRequired) != 1 {
+		t.Fatalf("Expected 1 still-required group (head's @team-b), got %d", len(allRequired))
+	}
+	if allRequired[0].Names[0].Normalized() != "@team-b" {
+		t.Errorf("Expected @team-b to still be required, got %v", OriginalStrings(allRequired[0].Names))
 	}
 }
 

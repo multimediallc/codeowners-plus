@@ -9,10 +9,16 @@ import (
 	"github.com/multimediallc/codeowners-plus/pkg/functional"
 )
 
+type AuthorMode int
+
+const (
+	AuthorModeDefault      AuthorMode = iota // Author is removed from their groups; group is only auto-satisfied if it becomes empty
+	AuthorModeSelfApproval                   // Author auto-satisfies any OR group they belong to
+)
+
 // CodeOwners represents a collection of owned files, with reverse lookups for owners and reviewers
 type CodeOwners interface {
-	// SetAuthor sets the author of the PR
-	SetAuthor(author string)
+	SetAuthor(author string, mode AuthorMode)
 
 	// FileRequired returns a map of file names to their required reviewers
 	FileRequired() map[string]ReviewerGroups
@@ -54,15 +60,13 @@ type ownersMap struct {
 	unownedFiles    []string
 }
 
-func (om *ownersMap) SetAuthor(author string) {
+func (om *ownersMap) SetAuthor(author string, mode AuthorMode) {
 	authorSlug := NewSlug(author)
 	for _, reviewers := range om.nameReviewerMap[authorSlug.Normalized()] {
-		// remove author from the reviewers list (case-insensitive)
 		reviewers.Names = slices.DeleteFunc(reviewers.Names, func(name Slug) bool {
 			return name.Equals(authorSlug)
 		})
-		if len(reviewers.Names) == 0 {
-			// mark the reviewer as approved if they are the author
+		if len(reviewers.Names) == 0 || mode == AuthorModeSelfApproval {
 			reviewers.Approved = true
 		}
 	}

@@ -214,7 +214,7 @@ func TestSetAuthor(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error getting owners: %v", err)
 	}
-	owners.SetAuthor("@b-owner")
+	owners.SetAuthor("@b-owner", AuthorModeDefault)
 	delete(expectedOwners, "@b-owner") // This should be removed by SetAuthor
 
 	allReviewers := f.RemoveDuplicates(append(owners.AllRequired().Flatten(), owners.AllOptional().Flatten()...))
@@ -247,7 +247,7 @@ func TestSetAuthorCaseInsensitive(t *testing.T) {
 	}
 
 	// Set author with different casing than what's in the .codeowners file
-	owners.SetAuthor("@B-OWNER") // .codeowners has @b-owner
+	owners.SetAuthor("@B-OWNER", AuthorModeDefault) // .codeowners has @b-owner
 
 	// Verify that @b-owner was removed from reviewers
 	allReviewers := owners.AllRequired().Flatten()
@@ -262,12 +262,137 @@ func TestSetAuthorCaseInsensitive(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error getting owners: %v", err)
 	}
-	owners2.SetAuthor("@b-owner")
+	owners2.SetAuthor("@b-owner", AuthorModeDefault)
 	allReviewers2 := owners2.AllRequired().Flatten()
 
 	// Both should have the same result
 	if len(allReviewers) != len(allReviewers2) {
 		t.Errorf("Case-insensitive SetAuthor produced different results")
+	}
+}
+
+// When the author is in a multi-member OR group (e.g. `*.py @alice @bob`) and self-approval
+// is enabled, the author implicitly vouches for their own code — the entire group should be
+// satisfied without needing @bob to also approve.
+func TestSetAuthorSelfApprovalMultiMemberORGroup(t *testing.T) {
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {{Names: NewSlugs([]string{"@alice", "@bob"}), Approved: false}},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeSelfApproval)
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 0 {
+		t.Errorf("Expected OR group to be auto-satisfied with self-approval, got %d still required", len(allRequired))
+	}
+}
+
+// Contrast to the self-approval case: with default mode, the author is removed from the OR
+// group but the remaining members still need to approve. So `*.py @alice @bob` with @alice as
+// author means @bob must still review.
+func TestSetAuthorDefaultMultiMemberORGroup(t *testing.T) {
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {{Names: NewSlugs([]string{"@alice", "@bob"}), Approved: false}},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeDefault)
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 1 {
+		t.Fatalf("Expected 1 still-required group, got %d", len(allRequired))
+	}
+	if len(allRequired[0].Names) != 1 || allRequired[0].Names[0].Normalized() != "@bob" {
+		t.Errorf("Expected remaining required reviewer to be @bob, got %v", OriginalStrings(allRequired[0].Names))
+	}
+}
+
+// When the author appears in multiple OR groups across different files, self-approval should
+// satisfy all of them — not just the first one encountered.
+func TestSetAuthorSelfApprovalMultipleORGroups(t *testing.T) {
+	orGroup1 := &ReviewerGroup{Names: NewSlugs([]string{"@alice", "@bob"}), Approved: false}
+	orGroup2 := &ReviewerGroup{Names: NewSlugs([]string{"@alice", "@charlie"}), Approved: false}
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file1.py": {orGroup1},
+			"file2.py": {orGroup2},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeSelfApproval)
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 0 {
+		t.Errorf("Expected all OR groups containing author to be satisfied, got %d still required", len(allRequired))
+	}
+}
+
+// Self-approval only applies to OR groups the author belongs to. If a file also has a separate
+// AND group (e.g. `&*.py @security`), that group must still be independently satisfied —
+// the author being in one OR group doesn't grant them approval power over unrelated AND groups.
+func TestSetAuthorSelfApprovalDoesNotAffectOtherANDGroups(t *testing.T) {
+	orGroup := &ReviewerGroup{Names: NewSlugs([]string{"@alice", "@bob"}), Approved: false}
+	andGroup := &ReviewerGroup{Names: NewSlugs([]string{"@security"}), Approved: false}
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {orGroup, andGroup},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeSelfApproval)
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 1 {
+		t.Fatalf("Expected 1 still-required AND group, got %d", len(allRequired))
+	}
+	if allRequired[0].Names[0].Normalized() != "@security" {
+		t.Errorf("Expected @security to still be required, got %v", OriginalStrings(allRequired[0].Names))
+	}
+}
+
+// GitHub usernames are case-insensitive. If the PR author is `@ALICE` but the .codeowners
+// file lists `@alice`, self-approval should still match and satisfy the group.
+func TestSetAuthorSelfApprovalCaseInsensitive(t *testing.T) {
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {{Names: NewSlugs([]string{"@alice", "@bob"}), Approved: false}},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@ALICE", AuthorModeSelfApproval)
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 0 {
+		t.Errorf("Expected case-insensitive self-approval to satisfy the group, got %d still required", len(allRequired))
+	}
+}
+
+// When self-approval is enabled but the author isn't listed in any ownership group,
+// nothing should change — all groups remain required with their original members.
+func TestSetAuthorSelfApprovalAuthorNotInAnyGroup(t *testing.T) {
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {{Names: NewSlugs([]string{"@bob", "@charlie"}), Approved: false}},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@outsider", AuthorModeSelfApproval)
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 1 {
+		t.Fatalf("Expected group to remain required when author is not a member, got %d", len(allRequired))
+	}
+	if len(allRequired[0].Names) != 2 {
+		t.Errorf("Expected group members unchanged, got %v", OriginalStrings(allRequired[0].Names))
 	}
 }
 
