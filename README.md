@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-83.2%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-83.0%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -240,6 +240,10 @@ require_both_branch_reviewers = false
 # `suppress_unowned_warning` (default false) suppresses the warning messages about unowned files
 # Useful when you intentionally have files without codeowners
 suppress_unowned_warning = true
+
+# `allow_self_approval` (default false) treats the PR author as satisfying any OR ownership group they belong to
+# If the PR author is included an OR group (e.g. `*.py @alice @bob`), the group is auto-satisfied without requiring another member to approve
+allow_self_approval = false
 
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
