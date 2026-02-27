@@ -30,4 +30,4 @@ outputs:
 
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/multimediallc/codeowners-plus:latest'
+  image: 'docker://ghcr.io/multimediallc/codeowners-plus:v1.9.0'
