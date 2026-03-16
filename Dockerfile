@@ -1,4 +1,4 @@
-FROM golang:1.23 AS builder
+FROM golang:1.23@sha256:60deed95d3888cc5e4d9ff8a10c54e5edc008c6ae3fba6187be6fb592e19e8c0 AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY internal ./internal/
 # Statically compile with CGO disabled
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o codeowners main.go
 
-FROM alpine:latest
+FROM alpine:latest@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 
 RUN apk update && apk add git
 
