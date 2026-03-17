@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v63/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/multimediallc/codeowners-plus/internal/git"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
@@ -411,8 +411,8 @@ func (gh *GHClient) ApprovePR() error {
 		return &NoPRError{}
 	}
 	createReviewOptions := &github.PullRequestReviewRequest{
-		Event: github.String("APPROVE"),
-		Body:  github.String("Codeowners reviews satisfied"),
+		Event: github.Ptr("APPROVE"),
+		Body:  github.Ptr("Codeowners reviews satisfied"),
 	}
 	_, res, err := gh.client.PullRequests.CreateReview(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), createReviewOptions)
 	if err != nil {

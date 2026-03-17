@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v63/github"
+	"github.com/google/go-github/v84/github"
 	owners "github.com/multimediallc/codeowners-plus/internal/config"
 	"github.com/multimediallc/codeowners-plus/internal/git"
 	gh "github.com/multimediallc/codeowners-plus/internal/github"
@@ -201,7 +201,7 @@ func (m *mockGitHubClient) InitPR(pr_id int) error {
 		return m.initPRError
 	}
 	if m.pr == nil {
-		m.pr = &github.PullRequest{Number: github.Int(pr_id)}
+		m.pr = &github.PullRequest{Number: github.Ptr(pr_id)}
 	}
 	return nil
 }
@@ -233,7 +233,7 @@ func (m *mockGitHubClient) AddComment(comment string) error {
 	if m.comments == nil {
 		m.comments = make([]*github.IssueComment, 0)
 	}
-	m.comments = append(m.comments, &github.IssueComment{Body: github.String(comment)})
+	m.comments = append(m.comments, &github.IssueComment{Body: github.Ptr(comment)})
 	return nil
 }
 
@@ -555,8 +555,8 @@ func TestAddReviewStatusComment(t *testing.T) {
 			},
 			existingComments: []*github.IssueComment{
 				{
-					ID:   github.Int64(1),
-					Body: github.String("Codeowners approval required for this PR:\n[ ] @user1"),
+					ID:   github.Ptr[int64](1),
+					Body: github.Ptr("Codeowners approval required for this PR:\n[ ] @user1"),
 				},
 			},
 			expectUpdateComment: true,
