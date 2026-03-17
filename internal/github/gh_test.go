@@ -20,10 +20,10 @@ import (
 
 func setupReviews() *GHClient {
 	reviews := []*github.PullRequestReview{
-		{User: &github.User{Login: github.String("reviewer1")}, State: github.String("APPROVED"), ID: github.Int64(1), CommitID: github.String("commit1")},
-		{User: &github.User{Login: github.String("reviewer2")}, State: github.String("REQUEST_CHANGES"), ID: github.Int64(2), CommitID: github.String("commit2")},
-		{User: &github.User{Login: github.String("reviewer3")}, State: github.String("APPROVED"), ID: github.Int64(1), CommitID: github.String("commit1")},
-		{User: &github.User{Login: github.String("reviewer4")}, State: github.String("APPROVED"), ID: github.Int64(3), CommitID: github.String("commit3")},
+		{User: &github.User{Login: github.Ptr("reviewer1")}, State: github.Ptr("APPROVED"), ID: github.Ptr[int64](1), CommitID: github.Ptr("commit1")},
+		{User: &github.User{Login: github.Ptr("reviewer2")}, State: github.Ptr("REQUEST_CHANGES"), ID: github.Ptr[int64](2), CommitID: github.Ptr("commit2")},
+		{User: &github.User{Login: github.Ptr("reviewer3")}, State: github.Ptr("APPROVED"), ID: github.Ptr[int64](1), CommitID: github.Ptr("commit1")},
+		{User: &github.User{Login: github.Ptr("reviewer4")}, State: github.Ptr("APPROVED"), ID: github.Ptr[int64](3), CommitID: github.Ptr("commit3")},
 	}
 	userReviewerMap := ghUserReviewerMap{
 		"reviewer1": codeowners.NewSlugs([]string{"@a", "@b"}),
@@ -33,7 +33,7 @@ func setupReviews() *GHClient {
 	gh := &GHClient{
 		reviews:         reviews,
 		userReviewerMap: userReviewerMap,
-		pr:              &github.PullRequest{Number: github.Int(1)},
+		pr:              &github.PullRequest{Number: github.Ptr(1)},
 	}
 	return gh
 }
@@ -42,9 +42,9 @@ func TestApprovals(t *testing.T) {
 	gh := setupReviews()
 	approvals := gh.approvals()
 	expectedApprovals := []*github.PullRequestReview{
-		{User: &github.User{Login: github.String("reviewer1")}, State: github.String("APPROVED"), ID: github.Int64(1), CommitID: github.String("commit1")},
-		{User: &github.User{Login: github.String("reviewer3")}, State: github.String("APPROVED"), ID: github.Int64(1), CommitID: github.String("commit1")},
-		{User: &github.User{Login: github.String("reviewer4")}, State: github.String("APPROVED"), ID: github.Int64(3), CommitID: github.String("commit3")},
+		{User: &github.User{Login: github.Ptr("reviewer1")}, State: github.Ptr("APPROVED"), ID: github.Ptr[int64](1), CommitID: github.Ptr("commit1")},
+		{User: &github.User{Login: github.Ptr("reviewer3")}, State: github.Ptr("APPROVED"), ID: github.Ptr[int64](1), CommitID: github.Ptr("commit1")},
+		{User: &github.User{Login: github.Ptr("reviewer4")}, State: github.Ptr("APPROVED"), ID: github.Ptr[int64](3), CommitID: github.Ptr("commit3")},
 	}
 
 	if len(approvals) != len(expectedApprovals) {
@@ -169,12 +169,12 @@ func TestCurrentlyRequested(t *testing.T) {
 	}
 	pr := &github.PullRequest{
 		RequestedReviewers: []*github.User{
-			{Login: github.String("user1")},
-			{Login: github.String("user2")},
+			{Login: github.Ptr("user1")},
+			{Login: github.Ptr("user2")},
 		},
 		RequestedTeams: []*github.Team{
-			{Slug: github.String("team1")},
-			{Slug: github.String("team2")},
+			{Slug: github.Ptr("team1")},
+			{Slug: github.Ptr("team2")},
 		},
 	}
 
@@ -217,12 +217,12 @@ func TestMakeGHUserReviewerMap(t *testing.T) {
 		}
 		if team == "team1" {
 			return []*github.User{
-				{Login: github.String("user1")},
-				{Login: github.String("user3")},
+				{Login: github.Ptr("user1")},
+				{Login: github.Ptr("user3")},
 			}
 		}
 		return []*github.User{
-			{Login: github.String("user1")},
+			{Login: github.Ptr("user1")},
 		}
 	}
 	userReviewerMap := makeGHUserReviwerMap([]string{"@user1", "@user2", "@org/team1", "@org/team2", "@other/teamX"}, teamFetcher)
@@ -242,11 +242,11 @@ func TestMakeGHUserReviewerMap(t *testing.T) {
 
 func TestIsInComments(t *testing.T) {
 	gh := &GHClient{
-		pr: &github.PullRequest{Number: github.Int(1)},
+		pr: &github.PullRequest{Number: github.Ptr(1)},
 		comments: []*github.IssueComment{
-			{Body: github.String("comment1"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -2)}},
-			{Body: github.String("comment2"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -1)}},
-			{Body: github.String("comment3"), CreatedAt: &github.Timestamp{Time: time.Now()}},
+			{Body: github.Ptr("comment1"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -2)}},
+			{Body: github.Ptr("comment2"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -1)}},
+			{Body: github.Ptr("comment3"), CreatedAt: &github.Timestamp{Time: time.Now()}},
 		},
 	}
 
@@ -280,11 +280,11 @@ func TestIsInComments(t *testing.T) {
 
 func TestIsSubstringInComments(t *testing.T) {
 	gh := &GHClient{
-		pr: &github.PullRequest{Number: github.Int(1)},
+		pr: &github.PullRequest{Number: github.Ptr(1)},
 		comments: []*github.IssueComment{
-			{Body: github.String("part1 part4"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -2)}},
-			{Body: github.String("part2 part5"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -1)}},
-			{Body: github.String("part3 part6"), CreatedAt: &github.Timestamp{Time: time.Now()}},
+			{Body: github.Ptr("part1 part4"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -2)}},
+			{Body: github.Ptr("part2 part5"), CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -1)}},
+			{Body: github.Ptr("part3 part6"), CreatedAt: &github.Timestamp{Time: time.Now()}},
 		},
 	}
 
@@ -451,7 +451,7 @@ func TestNilPRErr(t *testing.T) {
 
 func TestNilUserReviewerMapErr(t *testing.T) {
 	gh := &GHClient{
-		pr: &github.PullRequest{Number: github.Int(1)},
+		pr: &github.PullRequest{Number: github.Ptr(1)},
 	}
 	tt := []struct {
 		name   string
@@ -489,7 +489,7 @@ func TestNilReviewsErr(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(1)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(1)}
 	gh.userReviewerMap = make(ghUserReviewerMap)
 
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
@@ -540,7 +540,7 @@ func TestNilCommentsErr(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(1)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(1)}
 	gh.userReviewerMap = make(ghUserReviewerMap)
 
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -605,7 +605,7 @@ func TestInitPRSuccess(t *testing.T) {
 	defer server.Close()
 
 	prID := 123
-	mockPR := &github.PullRequest{Number: github.Int(prID)}
+	mockPR := &github.PullRequest{Number: github.Ptr(prID)}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -651,7 +651,7 @@ func TestGetTokenUserSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	mockUser := &github.User{Login: github.String("test-user")}
+	mockUser := &github.User{Login: github.Ptr("test-user")}
 
 	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -691,10 +691,10 @@ func TestInitReviewsSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 	mockReviews := []*github.PullRequestReview{
-		{User: &github.User{Login: github.String("test")}, ID: github.Int64(1)},
-		{User: &github.User{Login: github.String("test")}, ID: github.Int64(2)},
+		{User: &github.User{Login: github.Ptr("test")}, ID: github.Ptr[int64](1)},
+		{User: &github.User{Login: github.Ptr("test")}, ID: github.Ptr[int64](2)},
 	}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
@@ -718,7 +718,7 @@ func TestInitReviewsFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -737,7 +737,7 @@ func TestDismissStaleReviewsSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	staleApprovals := []*CurrentApproval{
 		{ReviewID: 1},
@@ -768,7 +768,7 @@ func TestDismissStaleReviewsFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 	staleApprovals := []*CurrentApproval{
 		{ReviewID: 1},
 	}
@@ -788,7 +788,7 @@ func TestRequestReviewersSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	reviewers := []string{"@reviewer1", "@org/team1"}
 
@@ -823,7 +823,7 @@ func TestRequestReviewersFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	reviewers := []string{"@reviewer1", "@org/team1"}
 
@@ -842,7 +842,7 @@ func TestApprovePRSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	// Mock the GitHub API endpoint
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
@@ -875,7 +875,7 @@ func TestApprovePRFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	// Mock the GitHub API to simulate an error
 	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/reviews", func(w http.ResponseWriter, r *http.Request) {
@@ -892,11 +892,11 @@ func TestInitCommentsSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	mockComments := []*github.IssueComment{
-		{ID: github.Int64(1), Body: github.String("Comment 1")},
-		{ID: github.Int64(2), Body: github.String("Comment 2")},
+		{ID: github.Ptr[int64](1), Body: github.Ptr("Comment 1")},
+		{ID: github.Ptr[int64](2), Body: github.Ptr("Comment 2")},
 	}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -920,7 +920,7 @@ func TestInitCommentsFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -936,7 +936,7 @@ func TestAddCommentSuccess(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	// Mock the GitHub API endpoint
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -966,7 +966,7 @@ func TestAddCommentFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	// Mock the GitHub API to simulate an error
 	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -983,7 +983,7 @@ func TestInitUserReviewerMap(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
 
-	gh.pr = &github.PullRequest{Number: github.Int(123)}
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 	// Mock the GitHub API endpoint
 	reviewers := []string{"@org1/team1", "@user1", "@org2/team2"}
@@ -995,8 +995,8 @@ func TestInitUserReviewerMap(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode([]*github.User{
-			{Login: github.String("team_member1")},
-			{Login: github.String("team_member2")},
+			{Login: github.Ptr("team_member1")},
+			{Login: github.Ptr("team_member2")},
 		})
 	})
 
@@ -1007,7 +1007,7 @@ func TestInitUserReviewerMap(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode([]*github.User{
-			{Login: github.String("team_member1")},
+			{Login: github.Ptr("team_member1")},
 		})
 	})
 
@@ -1043,7 +1043,7 @@ func TestIsInLabels(t *testing.T) {
 			name: "has matching label",
 			pr: &github.PullRequest{
 				Labels: []*github.Label{
-					{Name: github.String("high-priority")},
+					{Name: github.Ptr("high-priority")},
 				},
 			},
 			labels:      []string{"high-priority"},
@@ -1055,8 +1055,8 @@ func TestIsInLabels(t *testing.T) {
 			name: "has multiple labels but no match",
 			pr: &github.PullRequest{
 				Labels: []*github.Label{
-					{Name: github.String("bug")},
-					{Name: github.String("enhancement")},
+					{Name: github.Ptr("bug")},
+					{Name: github.Ptr("enhancement")},
 				},
 			},
 			labels:      []string{"high-priority"},
@@ -1068,7 +1068,7 @@ func TestIsInLabels(t *testing.T) {
 			name: "empty labels list",
 			pr: &github.PullRequest{
 				Labels: []*github.Label{
-					{Name: github.String("high-priority")},
+					{Name: github.Ptr("high-priority")},
 				},
 			},
 			labels:      []string{},
@@ -1080,7 +1080,7 @@ func TestIsInLabels(t *testing.T) {
 			name: "multiple target labels",
 			pr: &github.PullRequest{
 				Labels: []*github.Label{
-					{Name: github.String("urgent")},
+					{Name: github.Ptr("urgent")},
 				},
 			},
 			labels:      []string{"high-priority", "urgent"},
@@ -1135,8 +1135,8 @@ func TestFindExistingComment(t *testing.T) {
 			name: "comment found",
 			comments: []*github.IssueComment{
 				{
-					ID:   github.Int64(1),
-					Body: github.String("Codeowners approval required for this PR:\n- [ ] @user1"),
+					ID:   github.Ptr[int64](1),
+					Body: github.Ptr("Codeowners approval required for this PR:\n- [ ] @user1"),
 				},
 			},
 			prefix:        "Codeowners approval required for this PR:",
@@ -1148,8 +1148,8 @@ func TestFindExistingComment(t *testing.T) {
 			name: "comment not found",
 			comments: []*github.IssueComment{
 				{
-					ID:   github.Int64(1),
-					Body: github.String("Some other comment"),
+					ID:   github.Ptr[int64](1),
+					Body: github.Ptr("Some other comment"),
 				},
 			},
 			prefix:        "Codeowners approval required for this PR:",
@@ -1161,8 +1161,8 @@ func TestFindExistingComment(t *testing.T) {
 			name: "comment too old",
 			comments: []*github.IssueComment{
 				{
-					ID:        github.Int64(1),
-					Body:      github.String("Codeowners approval required for this PR:\n- [ ] @user1"),
+					ID:        github.Ptr[int64](1),
+					Body:      github.Ptr("Codeowners approval required for this PR:\n- [ ] @user1"),
 					CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -6)}, // 6 days old
 				},
 			},
@@ -1176,8 +1176,8 @@ func TestFindExistingComment(t *testing.T) {
 			name: "comment within time range",
 			comments: []*github.IssueComment{
 				{
-					ID:        github.Int64(1),
-					Body:      github.String("Codeowners approval required for this PR:\n- [ ] @user1"),
+					ID:        github.Ptr[int64](1),
+					Body:      github.Ptr("Codeowners approval required for this PR:\n- [ ] @user1"),
 					CreatedAt: &github.Timestamp{Time: time.Now().AddDate(0, 0, -4)}, // 4 days old
 				},
 			},
@@ -1194,7 +1194,7 @@ func TestFindExistingComment(t *testing.T) {
 			mux, server, gh := mockServerAndClient(t)
 			defer server.Close()
 
-			gh.pr = &github.PullRequest{Number: github.Int(123)}
+			gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 			// Mock the GitHub API endpoint
 			mux.HandleFunc("/repos/test-owner/test-repo/issues/123/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -1255,7 +1255,7 @@ func TestUpdateComment(t *testing.T) {
 			mux, server, gh := mockServerAndClient(t)
 			defer server.Close()
 
-			gh.pr = &github.PullRequest{Number: github.Int(123)}
+			gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 
 			if tc.commentID != 0 {
 				// Mock the GitHub API endpoint
@@ -1305,9 +1305,9 @@ func TestContainsValidBypassApproval(t *testing.T) {
 			name: "admin user with bypass text",
 			reviews: []*github.PullRequestReview{
 				{
-					ID:   github.Int64(123),
-					Body: github.String("🔓 Codeowners Bypass Approved by admin"),
-					User: &github.User{Login: github.String("admin-user")},
+					ID:   github.Ptr[int64](123),
+					Body: github.Ptr("🔓 Codeowners Bypass Approved by admin"),
+					User: &github.User{Login: github.Ptr("admin-user")},
 				},
 			},
 			allowedUsers: []string{},
@@ -1319,9 +1319,9 @@ func TestContainsValidBypassApproval(t *testing.T) {
 			name: "allowed user with bypass text",
 			reviews: []*github.PullRequestReview{
 				{
-					ID:   github.Int64(124),
-					Body: github.String("Emergency bypass - codeowners bypass"),
-					User: &github.User{Login: github.String("emergency-user")},
+					ID:   github.Ptr[int64](124),
+					Body: github.Ptr("Emergency bypass - codeowners bypass"),
+					User: &github.User{Login: github.Ptr("emergency-user")},
 				},
 			},
 			allowedUsers: []string{"emergency-user"},
@@ -1333,9 +1333,9 @@ func TestContainsValidBypassApproval(t *testing.T) {
 			name: "non-admin user with bypass text",
 			reviews: []*github.PullRequestReview{
 				{
-					ID:   github.Int64(125),
-					Body: github.String("codeowners bypass"),
-					User: &github.User{Login: github.String("regular-user")},
+					ID:   github.Ptr[int64](125),
+					Body: github.Ptr("codeowners bypass"),
+					User: &github.User{Login: github.Ptr("regular-user")},
 				},
 			},
 			allowedUsers: []string{},
@@ -1347,9 +1347,9 @@ func TestContainsValidBypassApproval(t *testing.T) {
 			name: "admin user without bypass text",
 			reviews: []*github.PullRequestReview{
 				{
-					ID:   github.Int64(126),
-					Body: github.String("LGTM"),
-					User: &github.User{Login: github.String("admin-user")},
+					ID:   github.Ptr[int64](126),
+					Body: github.Ptr("LGTM"),
+					User: &github.User{Login: github.Ptr("admin-user")},
 				},
 			},
 			allowedUsers: []string{},
@@ -1361,9 +1361,9 @@ func TestContainsValidBypassApproval(t *testing.T) {
 			name: "case insensitive bypass text",
 			reviews: []*github.PullRequestReview{
 				{
-					ID:   github.Int64(127),
-					Body: github.String("CODEOWNERS BYPASS"),
-					User: &github.User{Login: github.String("admin-user")},
+					ID:   github.Ptr[int64](127),
+					Body: github.Ptr("CODEOWNERS BYPASS"),
+					User: &github.User{Login: github.Ptr("admin-user")},
 				},
 			},
 			allowedUsers: []string{},
@@ -1375,14 +1375,14 @@ func TestContainsValidBypassApproval(t *testing.T) {
 			name: "multiple reviews with one bypass",
 			reviews: []*github.PullRequestReview{
 				{
-					ID:   github.Int64(128),
-					Body: github.String("LGTM"),
-					User: &github.User{Login: github.String("regular-user")},
+					ID:   github.Ptr[int64](128),
+					Body: github.Ptr("LGTM"),
+					User: &github.User{Login: github.Ptr("regular-user")},
 				},
 				{
-					ID:   github.Int64(129),
-					Body: github.String("codeowners bypass"),
-					User: &github.User{Login: github.String("admin-user")},
+					ID:   github.Ptr[int64](129),
+					Body: github.Ptr("codeowners bypass"),
+					User: &github.User{Login: github.Ptr("admin-user")},
 				},
 			},
 			allowedUsers: []string{},
@@ -1405,7 +1405,7 @@ func TestContainsValidBypassApproval(t *testing.T) {
 			mux, server, gh := mockServerAndClient(t)
 			defer server.Close()
 
-			gh.pr = &github.PullRequest{Number: github.Int(123)}
+			gh.pr = &github.PullRequest{Number: github.Ptr(123)}
 			gh.reviews = tc.reviews
 
 			// Mock the admin permission check
