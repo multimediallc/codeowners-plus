@@ -9,6 +9,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/sourcegraph/go-diff v0.7.0
 	github.com/urfave/cli/v2 v2.27.7
+	github.com/urfave/cli/v3 v3.7.0
 )
 
 require (
