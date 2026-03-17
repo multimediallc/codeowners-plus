@@ -552,9 +552,9 @@ func (a *App) requestReviews() error {
 
 func (a *App) printFileOwners(codeOwners codeowners.CodeOwners) {
 	a.printDebug("File Reviewers:\n")
-	a.printDebug(a.getFileOwnersMapToString(codeOwners.FileRequired()))
+	a.printDebug("%s", a.getFileOwnersMapToString(codeOwners.FileRequired()))
 	a.printDebug("File Optional:\n")
-	a.printDebug(a.getFileOwnersMapToString(codeOwners.FileOptional()))
+	a.printDebug("%s", a.getFileOwnersMapToString(codeOwners.FileOptional()))
 }
 
 func (a *App) getFileOwnersMapToString(fileReviewers map[string]codeowners.ReviewerGroups) string {
