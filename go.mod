@@ -1,6 +1,6 @@
 module github.com/multimediallc/codeowners-plus
 
-go 1.23.1
+go 1.25.0
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
@@ -13,6 +13,7 @@ require (
 
 require (
 	github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964 // indirect
-	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 )
