@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 	"github.com/boyter/gocodewalker"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func stripRoot(root string, path string) string {
@@ -23,10 +24,10 @@ func stripRoot(root string, path string) string {
 	return strings.TrimPrefix(path, root+"/")
 }
 
-func getTargets(cCtx *cli.Context) ([]string, error) {
+func getTargets(cmd *cli.Command) ([]string, error) {
 	var targets []string
-	if cCtx.NArg() > 0 {
-		targets = cCtx.Args().Slice()
+	if cmd.NArg() > 0 {
+		targets = cmd.Args().Slice()
 	} else if isStdinPiped() {
 		var err error
 		targets, err = scanStdin()
@@ -44,10 +45,10 @@ func main() {
 		Aliases: []string{"v"},
 		Usage:   "Print version",
 	}
-	cli.VersionPrinter = func(cCtx *cli.Context) {
-		fmt.Println(cCtx.App.Version)
+	cli.VersionPrinter = func(cmd *cli.Command) {
+		fmt.Println(cmd.Root().Version)
 	}
-	app := &cli.App{
+	app := &cli.Command{
 		Name:        "codeowners-cli",
 		Usage:       "CLI tool for working with .codeowners files",
 		Version:     "v1.9.1.dev",
@@ -86,17 +87,17 @@ func main() {
 						Usage:   "Output format. Allowed values are: default, one-line, and json",
 					},
 				},
-				Action: func(cCtx *cli.Context) error {
-					targets, err := getTargets(cCtx)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					targets, err := getTargets(cmd)
 					if err != nil {
 						return err
 					}
 
-					format, err := validateFormat(cCtx.String("format"))
+					format, err := validateFormat(cmd.String("format"))
 					if err != nil {
 						return err
 					}
-					return unownedFilesWithFormat(repo, targets, cCtx.Int("depth"), cCtx.Bool("dirs_only"), format)
+					return unownedFilesWithFormat(repo, targets, int(cmd.Int("depth")), cmd.Bool("dirs_only"), format)
 				},
 			},
 			{
@@ -120,8 +121,8 @@ func main() {
 						Usage:   "Output format. Allowed values are: default, one-line, and json",
 					},
 				},
-				Action: func(cCtx *cli.Context) error {
-					targets, err := getTargets(cCtx)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					targets, err := getTargets(cmd)
 					if err != nil {
 						return err
 					}
@@ -130,7 +131,7 @@ func main() {
 						return fmt.Errorf("no target files provided (either as arguments or from stdin)")
 					}
 
-					format, err := validateFormat(cCtx.String("format"))
+					format, err := validateFormat(cmd.String("format"))
 					if err != nil {
 						return err
 					}
@@ -158,8 +159,8 @@ func main() {
 						Usage:   "Output format. Allowed values are: default, one-line, and json",
 					},
 				},
-				Action: func(cCtx *cli.Context) error {
-					targets, err := getTargets(cCtx)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					targets, err := getTargets(cmd)
 					if err != nil {
 						return err
 					}
@@ -201,8 +202,8 @@ func main() {
 						Usage: "Map by 'file' (files to owners) or 'owner' (owners to files)",
 					},
 				},
-				Action: func(cCtx *cli.Context) error {
-					mapBy := cCtx.String("by")
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					mapBy := cmd.String("by")
 					if mapBy != "file" && mapBy != "owner" {
 						return fmt.Errorf("invalid value for --by flag: must be 'file' or 'owner'")
 					}
@@ -212,7 +213,7 @@ func main() {
 		},
 	}
 
-	err := app.Run(os.Args)
+	err := app.Run(context.Background(), os.Args)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
