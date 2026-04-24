@@ -7,7 +7,7 @@ require (
 	github.com/boyter/gocodewalker v1.5.1
 	github.com/google/go-github/v85 v85.0.0
 	github.com/pelletier/go-toml/v2 v2.3.0
-	github.com/sourcegraph/go-diff v0.7.0
+	github.com/sourcegraph/go-diff v0.8.0
 	github.com/urfave/cli/v3 v3.8.0
 )
 
