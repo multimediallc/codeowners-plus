@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v84/github"
+	"github.com/google/go-github/v85/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
