@@ -6,6 +6,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/boyter/gocodewalker v1.5.1
 	github.com/google/go-github/v85 v85.0.0
+	github.com/google/go-github/v87 v87.0.0
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/sourcegraph/go-diff v0.8.0
 	github.com/urfave/cli/v3 v3.9.0
