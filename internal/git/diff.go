@@ -112,11 +112,37 @@ type changesSinceContext struct {
 }
 
 func diffToFilename(d *diff.FileDiff) string {
-	if d.NewName == "/dev/null" {
-		// For deleted files, NewName is "/dev/null", so use OrigName instead
+	// For regular diffs, NewName/OrigName come from the "--- a/<path>" /
+	// "+++ b/<path>" headers and carry an "a/"/"b/" prefix to strip. For
+	// deleted files NewName is "/dev/null". For binary files git emits no
+	// "---"/"+++" lines (only "Binary files a/<path> and b/<path> differ"),
+	// leaving both fields empty — recover the path from the "diff --git"
+	// extended header instead.
+	if len(d.NewName) > 2 && d.NewName != "/dev/null" {
+		return d.NewName[2:]
+	}
+	if len(d.OrigName) > 2 && d.OrigName != "/dev/null" {
 		return d.OrigName[2:]
 	}
-	return d.NewName[2:]
+	return filenameFromExtendedHeader(d.Extended)
+}
+
+func filenameFromExtendedHeader(headers []string) string {
+	for _, h := range headers {
+		rest, ok := strings.CutPrefix(h, "diff --git ")
+		if !ok {
+			continue
+		}
+		// Quoted form: "a/<path>" "b/<path>" (paths needing escaping).
+		if idx := strings.LastIndex(rest, ` "b/`); idx >= 0 {
+			return strings.TrimSuffix(rest[idx+len(` "b/`):], `"`)
+		}
+		// Unquoted form: a/<path> b/<path>
+		if idx := strings.LastIndex(rest, " b/"); idx >= 0 {
+			return rest[idx+len(" b/"):]
+		}
+	}
+	return ""
 }
 
 // Parse the diff output to get the file names and hunks
@@ -172,6 +198,8 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 				newDiffFile.Hunks = append(newDiffFile.Hunks, newHunkRange)
 			}
 		}
+		// Binary files have no hunks; staleness is intentionally not tracked
+		// for them (there is no hunk content to hash against the older diff).
 		if len(newDiffFile.Hunks) > 0 {
 			diffFiles = append(diffFiles, newDiffFile)
 		}

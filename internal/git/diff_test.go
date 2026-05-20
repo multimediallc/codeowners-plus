@@ -111,6 +111,83 @@ func TestNewDiff(t *testing.T) {
 			},
 		},
 		{
+			name: "binary file change does not panic",
+			context: DiffContext{
+				Base: "main",
+				Head: "feature",
+				Dir:  ".",
+			},
+			mockOutput: `diff --git a/file1.go b/file1.go
+index abc..def 100644
+--- a/file1.go
++++ b/file1.go
+@@ -10,0 +11 @@ func Example() {
++       fmt.Println("New line")
+diff --git a/assets/img/offline.png b/assets/img/offline.png
+index 1111111..2222222 100644
+Binary files a/assets/img/offline.png and b/assets/img/offline.png differ`,
+			expectedErr:   false,
+			expectedFiles: 2,
+			expectedHunks: map[string]int{
+				"file1.go":                1,
+				"assets/img/offline.png": 0,
+			},
+		},
+		{
+			// Regression for the production panic: a "mode change + binary
+			// patch" entry is parsed by go-diff into a FileDiff with empty
+			// OrigName/NewName (its handleEmpty logic does not cover this
+			// 5-extended-header shape). The pre-fix code did NewName[2:]
+			// and panicked.
+			name: "mode change + binary patch",
+			context: DiffContext{
+				Base: "main",
+				Head: "feature",
+				Dir:  ".",
+			},
+			mockOutput: `diff --git a/assets/img.png b/assets/img.png
+old mode 100755
+new mode 100644
+index 8ed9b15..0bfca45
+Binary files a/assets/img.png and b/assets/img.png differ
+diff --git a/notes.txt b/notes.txt
+index abc..def 100644
+--- a/notes.txt
++++ b/notes.txt
+@@ -1,0 +2 @@ trailing entry forces parser to flush the mode-change+binary above
++ok
+`,
+			expectedErr:   false,
+			expectedFiles: 2,
+			expectedHunks: map[string]int{
+				"assets/img.png": 0,
+				"notes.txt":      1,
+			},
+		},
+		{
+			name: "binary file in ignored directory is filtered",
+			context: DiffContext{
+				Base:       "main",
+				Head:       "feature",
+				Dir:        ".",
+				IgnoreDirs: []string{"assets/"},
+			},
+			mockOutput: `diff --git a/file1.go b/file1.go
+index abc..def 100644
+--- a/file1.go
++++ b/file1.go
+@@ -10,0 +11 @@ func Example() {
++       fmt.Println("New line")
+diff --git a/assets/img/offline.png b/assets/img/offline.png
+index 1111111..2222222 100644
+Binary files a/assets/img/offline.png and b/assets/img/offline.png differ`,
+			expectedErr:   false,
+			expectedFiles: 1,
+			expectedHunks: map[string]int{
+				"file1.go": 1,
+			},
+		},
+		{
 			name: "ignore deleted files in ignored directories",
 			context: DiffContext{
 				Base:       "main",
@@ -439,6 +516,60 @@ func TestToDiffFiles(t *testing.T) {
 							End:   -1,
 						},
 					},
+				},
+			},
+		},
+		{
+			name: "binary file (no --- / +++ headers, filename in extended)",
+			fileDiffs: []*diff.FileDiff{
+				{
+					Extended: []string{
+						"diff --git a/assets/img/offline.png b/assets/img/offline.png",
+						"index abc123..def456 100644",
+						"Binary files a/assets/img/offline.png and b/assets/img/offline.png differ",
+					},
+				},
+			},
+			expected: []codeowners.DiffFile{
+				{
+					FileName: "assets/img/offline.png",
+					Hunks:    []codeowners.HunkRange{},
+				},
+			},
+		},
+		{
+			name: "binary file with quoted path",
+			fileDiffs: []*diff.FileDiff{
+				{
+					Extended: []string{
+						`diff --git "a/assets/some image.png" "b/assets/some image.png"`,
+						"Binary files differ",
+					},
+				},
+			},
+			expected: []codeowners.DiffFile{
+				{
+					FileName: "assets/some image.png",
+					Hunks:    []codeowners.HunkRange{},
+				},
+			},
+		},
+		{
+			name: "binary rename uses new path",
+			fileDiffs: []*diff.FileDiff{
+				{
+					Extended: []string{
+						"diff --git a/old/foo.png b/new/foo.png",
+						"similarity index 100%",
+						"rename from old/foo.png",
+						"rename to new/foo.png",
+					},
+				},
+			},
+			expected: []codeowners.DiffFile{
+				{
+					FileName: "new/foo.png",
+					Hunks:    []codeowners.HunkRange{},
 				},
 			},
 		},
