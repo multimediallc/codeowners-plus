@@ -8,5 +8,8 @@
     "minimumReleaseAge": null,
     "prCreation": "immediate"
   },
-  "postUpdateOptions": ["gomodTidy"]
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths"
+  ]
 }
