@@ -134,6 +134,37 @@ Binary files a/assets/img/offline.png and b/assets/img/offline.png differ`,
 			},
 		},
 		{
+			// Regression for PE-887: PR multimediallc/chaturbate#28358 produced
+			// a "mode change + binary patch" entry that go-diff parses into a
+			// FileDiff with empty OrigName/NewName (its handleEmpty logic does
+			// not cover this 5-extended-header shape). The pre-fix code did
+			// NewName[2:] and panicked.
+			name: "mode change + binary patch (PE-887 production shape)",
+			context: DiffContext{
+				Base: "main",
+				Head: "feature",
+				Dir:  ".",
+			},
+			mockOutput: `diff --git a/assets/img.png b/assets/img.png
+old mode 100755
+new mode 100644
+index 8ed9b15..0bfca45
+Binary files a/assets/img.png and b/assets/img.png differ
+diff --git a/notes.txt b/notes.txt
+index abc..def 100644
+--- a/notes.txt
++++ b/notes.txt
+@@ -1,0 +2 @@ trailing entry forces parser to flush the mode-change+binary above
++ok
+`,
+			expectedErr:   false,
+			expectedFiles: 2,
+			expectedHunks: map[string]int{
+				"assets/img.png": 0,
+				"notes.txt":      1,
+			},
+		},
+		{
 			name: "binary file in ignored directory is filtered",
 			context: DiffContext{
 				Base:       "main",
