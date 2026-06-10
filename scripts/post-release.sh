@@ -3,6 +3,7 @@
 set -e
 set -u
 
+ACTIONS_FILE="action.yml"
 CLI_TOOL_FILE="tools/cli/main.go"
 README_FILE="README.md"
 
@@ -39,23 +40,25 @@ else
   git checkout -b "${BRANCH_NAME}"
 fi
 
-echo "Updating ${CLI_TOOL_FILE} and ${README_FILE}..."
+echo "Updating ${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE}..."
 
 # sed -i works differently on macOS and Linux.
 # For GNU sed (Linux), -i without an argument is fine.
 # For BSD sed (macOS), -i requires an argument (even if empty string for no backup).
 if sed --version 2>/dev/null | grep -q GNU; then # GNU sed
+  sed -i "s|RELEASE_VERSION: '.*'|RELEASE_VERSION: ''|g" "${ACTIONS_FILE}"
   sed -i "s|Version: .*|Version: \"${DEV_TAG}\",|g" "${CLI_TOOL_FILE}"
   sed -i "s|codeowners-plus@.*|codeowners-plus@${VERSION_TAG}|g" "${README_FILE}"
 else # BSD sed (macOS)
+  sed -i '' "s|RELEASE_VERSION: '.*'|RELEASE_VERSION: ''|g" "${ACTIONS_FILE}"
   sed -i '' "s|Version: .*|Version: \"${DEV_TAG}\",|g" "${CLI_TOOL_FILE}"
   sed -i '' "s|codeowners-plus@.*|codeowners-plus@${VERSION_TAG}|g" "${README_FILE}"
 fi
 gofmt -w tools/cli
-echo "${CLI_TOOL_FILE} and ${README_FILE} updated."
+echo "${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE} updated."
 
 echo "Committing changes..."
-git add "${CLI_TOOL_FILE}" "${README_FILE}"
+git add "${ACTIONS_FILE}" "${CLI_TOOL_FILE}" "${README_FILE}"
 git commit -m "${VERSION_TAG}"
 
 echo "--- Post release process completed successfully! ---"

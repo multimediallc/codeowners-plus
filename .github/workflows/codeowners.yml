@@ -25,11 +25,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 'Update action.yml to build locally'
-        run: |
-          sed -i "s/image: .*/image: 'Dockerfile'/" action.yml
-          cat action.yml
-
       - name: 'Codeowners Plus'
         id: codeowners-plus
         uses: ./
