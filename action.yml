@@ -37,16 +37,20 @@ runs:
       shell: bash
       env:
         # Non-empty only in release commits: set by scripts/prepare-release.sh
-        # and cleared by scripts/post-release.sh. When the action is pinned to
-        # exactly this release tag, the prebuilt release binary is downloaded
-        # and checksum-verified; any other ref (branch or commit SHA) builds
-        # from the pinned source instead, so a pin never resolves to anything
-        # newer than itself.
+        # (which reproducibly builds the binaries to compute the checksums)
+        # and cleared by scripts/post-release.sh. A pin to the release tag or
+        # to the release commit's SHA downloads the prebuilt binary and
+        # verifies it against these checksums -- since they live in the
+        # pinned commit, the result is immutable. Any other ref builds from
+        # the pinned source, so a pin never resolves to anything newer than
+        # itself.
         RELEASE_VERSION: ''
+        SHA256_LINUX_AMD64: ''
+        SHA256_LINUX_ARM64: ''
         ACTION_REF: ${{ github.action_ref }}
         ACTION_REPO: ${{ github.action_repository }}
         ACTION_PATH: ${{ github.action_path }}
-      run: '"${ACTION_PATH}/scripts/action-binary.sh" resolve'
+      run: '"${ACTION_PATH}/scripts/action-resolve.sh"'
 
     - name: 'Restore cached binary'
       id: bincache
@@ -56,20 +60,20 @@ runs:
         path: ${{ steps.resolve.outputs.bin }}
         key: ${{ steps.resolve.outputs.cache-key }}
 
-    # Downloads and checksum-verifies the release binary on a cache miss;
-    # re-verifies the restored binary against the release checksums.txt on a
-    # cache hit (Actions caches are repo-scoped and writable by workflows in
-    # the consuming repo, so a cached binary is not trusted blindly).
+    # Downloads the release binary on a cache miss, or re-verifies the
+    # restored binary on a cache hit; both are checked against the checksum
+    # embedded in the pinned commit.
     - name: 'Ensure release binary'
       if: steps.resolve.outputs.mode == 'download'
       shell: bash
       env:
         RELEASE_VERSION: ${{ steps.resolve.outputs.version }}
+        EXPECTED_SHA256: ${{ steps.resolve.outputs.sha256 }}
         ACTION_REPO: ${{ github.action_repository }}
         ACTION_PATH: ${{ github.action_path }}
         ASSET: ${{ steps.resolve.outputs.asset }}
         BIN: ${{ steps.resolve.outputs.bin }}
-      run: '"${ACTION_PATH}/scripts/action-binary.sh" ensure'
+      run: '"${ACTION_PATH}/scripts/action-ensure.sh"'
 
     - name: 'Set up Go'
       if: steps.resolve.outputs.mode == 'build' && steps.bincache.outputs.cache-hit != 'true'
@@ -86,8 +90,7 @@ runs:
         BIN: ${{ steps.resolve.outputs.bin }}
       run: |
         mkdir -p "$(dirname "$BIN")"
-        cd "${ACTION_PATH}"
-        CGO_ENABLED=0 go build -ldflags="-s -w" -o "$BIN" .
+        "${ACTION_PATH}/scripts/build-action-binary.sh" "$BIN"
 
     - name: 'Run codeowners-plus'
       id: run

@@ -23,24 +23,7 @@ builds:
     goarch:
       - amd64
       - arm64
-  - id: "action"
-    main: .
-    binary: codeowners-plus-action
-    env:
-      - CGO_ENABLED=0
-    ldflags:
-      - -s -w
-      - -extldflags=-static
-    goos:
-      - linux
-    goarch:
-      - amd64
-      - arm64
 archives:
-  - id: "action"
-    ids: ["action"]
-    formats: ["binary"]
-    name_template: "codeowners-plus-action_{{ .Os }}_{{ .Arch }}"
   - id: "cli"
     ids: ["cli"]
     name_template: >-

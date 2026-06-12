@@ -1,7 +1,6 @@
 #! /usr/bin/env bash
 
-set -e
-set -u
+set -eu
 
 ACTIONS_FILE="action.yml"
 CLI_TOOL_FILE="tools/cli/main.go"
@@ -47,10 +46,14 @@ echo "Updating ${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE}..."
 # For BSD sed (macOS), -i requires an argument (even if empty string for no backup).
 if sed --version 2>/dev/null | grep -q GNU; then # GNU sed
   sed -i "s|RELEASE_VERSION: '.*'|RELEASE_VERSION: ''|g" "${ACTIONS_FILE}"
+  sed -i "s|SHA256_LINUX_AMD64: '.*'|SHA256_LINUX_AMD64: ''|g" "${ACTIONS_FILE}"
+  sed -i "s|SHA256_LINUX_ARM64: '.*'|SHA256_LINUX_ARM64: ''|g" "${ACTIONS_FILE}"
   sed -i "s|Version: .*|Version: \"${DEV_TAG}\",|g" "${CLI_TOOL_FILE}"
   sed -i "s|codeowners-plus@.*|codeowners-plus@${VERSION_TAG}|g" "${README_FILE}"
 else # BSD sed (macOS)
   sed -i '' "s|RELEASE_VERSION: '.*'|RELEASE_VERSION: ''|g" "${ACTIONS_FILE}"
+  sed -i '' "s|SHA256_LINUX_AMD64: '.*'|SHA256_LINUX_AMD64: ''|g" "${ACTIONS_FILE}"
+  sed -i '' "s|SHA256_LINUX_ARM64: '.*'|SHA256_LINUX_ARM64: ''|g" "${ACTIONS_FILE}"
   sed -i '' "s|Version: .*|Version: \"${DEV_TAG}\",|g" "${CLI_TOOL_FILE}"
   sed -i '' "s|codeowners-plus@.*|codeowners-plus@${VERSION_TAG}|g" "${README_FILE}"
 fi

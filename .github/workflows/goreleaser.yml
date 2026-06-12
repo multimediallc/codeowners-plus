@@ -25,7 +25,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: 1.26
+          go-version-file: go.mod
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7
@@ -34,3 +34,21 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Builds the action binaries with scripts/build-action-binary.sh (the
+      # same reproducible build prepare-release.sh used to embed checksums in
+      # action.yml), refuses to publish anything that does not match those
+      # checksums, and attaches the verified binaries to the release.
+      - name: Build & publish action binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            out="dist/codeowners-plus-action_linux_${arch}"
+            ./scripts/build-action-binary.sh "${out}" "${arch}"
+            ./scripts/verify-release-binary.sh "${out}" "${arch}"
+          done
+          gh release upload "${GITHUB_REF_NAME}" \
+            dist/codeowners-plus-action_linux_amd64 \
+            dist/codeowners-plus-action_linux_arm64

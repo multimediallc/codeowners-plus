@@ -1,7 +1,6 @@
 #! /usr/bin/env bash
 
-set -e
-set -u
+set -eu
 
 ACTIONS_FILE="action.yml"
 CLI_TOOL_FILE="tools/cli/main.go"
@@ -67,6 +66,25 @@ else
   git checkout -b "${BRANCH_NAME}"
 fi
 
+echo "Building action binaries to embed their checksums in ${ACTIONS_FILE}..."
+
+# Reproducible build (scripts/build-action-binary.sh); the release workflow
+# fails (via scripts/verify-release-binary.sh) if the released binaries do
+# not match these checksums.
+# sha256sum is GNU coreutils; older macOS only ships shasum.
+command -v sha256sum >/dev/null && sha256=(sha256sum) || sha256=(shasum -a 256)
+
+build_sha256() {
+  local out
+  out="$(mktemp)"
+  ./scripts/build-action-binary.sh "${out}" "$1"
+  "${sha256[@]}" "${out}" | awk '{print $1}'
+  rm -f "${out}"
+}
+
+SHA_AMD64="$(build_sha256 amd64)"
+SHA_ARM64="$(build_sha256 arm64)"
+
 echo "Updating ${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE} to replace 'latest' or old tag with '${VERSION_TAG}'..."
 
 # sed -i works differently on macOS and Linux.
@@ -74,10 +92,14 @@ echo "Updating ${ACTIONS_FILE}, ${CLI_TOOL_FILE}, and ${README_FILE} to replace 
 # For BSD sed (macOS), -i requires an argument (even if empty string for no backup).
 if sed --version 2>/dev/null | grep -q GNU; then # GNU sed
   sed -i "s|RELEASE_VERSION: '.*'|RELEASE_VERSION: '${VERSION_TAG}'|g" "${ACTIONS_FILE}"
+  sed -i "s|SHA256_LINUX_AMD64: '.*'|SHA256_LINUX_AMD64: '${SHA_AMD64}'|g" "${ACTIONS_FILE}"
+  sed -i "s|SHA256_LINUX_ARM64: '.*'|SHA256_LINUX_ARM64: '${SHA_ARM64}'|g" "${ACTIONS_FILE}"
   sed -i "s|Version: .*|Version: \"${VERSION_TAG}\",|g" "${CLI_TOOL_FILE}"
   sed -i "s|codeowners-plus@.*|codeowners-plus@${VERSION_TAG}|g" "${README_FILE}"
 else # BSD sed (macOS)
   sed -i '' "s|RELEASE_VERSION: '.*'|RELEASE_VERSION: '${VERSION_TAG}'|g" "${ACTIONS_FILE}"
+  sed -i '' "s|SHA256_LINUX_AMD64: '.*'|SHA256_LINUX_AMD64: '${SHA_AMD64}'|g" "${ACTIONS_FILE}"
+  sed -i '' "s|SHA256_LINUX_ARM64: '.*'|SHA256_LINUX_ARM64: '${SHA_ARM64}'|g" "${ACTIONS_FILE}"
   sed -i '' "s|Version: .*|Version: \"${VERSION_TAG}\",|g" "${CLI_TOOL_FILE}"
   sed -i '' "s|codeowners-plus@.*|codeowners-plus@${VERSION_TAG}|g" "${README_FILE}"
 fi
