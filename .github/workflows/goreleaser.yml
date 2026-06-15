@@ -6,15 +6,11 @@ on:
 
 permissions: {}
 
-env:
-  DOCKER_BUILDKIT: 1
-
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
 
     steps:
       - name: Checkout
@@ -34,21 +30,3 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Builds the action binaries with scripts/build-action-binary.sh (the
-      # same reproducible build prepare-release.sh used to embed checksums in
-      # action.yml), refuses to publish anything that does not match those
-      # checksums, and attaches the verified binaries to the release.
-      - name: Build & publish action binaries
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p dist
-          for arch in amd64 arm64; do
-            out="dist/codeowners-plus-action_linux_${arch}"
-            ./scripts/build-action-binary.sh "${out}" "${arch}"
-            ./scripts/verify-release-binary.sh "${out}" "${arch}"
-          done
-          gh release upload "${GITHUB_REF_NAME}" \
-            dist/codeowners-plus-action_linux_amd64 \
-            dist/codeowners-plus-action_linux_arm64

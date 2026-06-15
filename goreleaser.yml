@@ -23,6 +23,21 @@ builds:
     goarch:
       - amd64
       - arm64
+  # The binary the GitHub Action downloads and runs (root main.go).
+  - id: "action"
+    main: .
+    binary: codeowners-plus-action
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s
+      - -w
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
 archives:
   - id: "cli"
     ids: ["cli"]
@@ -34,6 +49,10 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
     files:
       - none*
+  - id: "action"
+    ids: ["action"]
+    formats: ["binary"]
+    name_template: "codeowners-plus-action_{{ .Os }}_{{ .Arch }}"
 checksum:
   name_template: 'checksums.txt'
 snapshot:
