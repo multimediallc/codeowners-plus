@@ -49,13 +49,13 @@ runs:
           echo "bin=${RUNNER_TEMP:-/tmp}/codeowners-plus-action/codeowners-plus"
         } >>"$GITHUB_OUTPUT"
 
-    # No RELEASE_VERSION -> not a release: set up Go and build from source.
+    # RELEASE_VERSION not set -> not a release: set up Go and build from source.
     - name: 'Set up Go'
       if: steps.resolve.outputs.release-version == ''
       uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
       with:
         go-version-file: ${{ github.action_path }}/go.mod
-        cache: false
+        cache-dependency-path: ${{ github.action_path }}/go.sum
 
     - name: 'Build codeowners-plus from source'
       if: steps.resolve.outputs.release-version == ''
@@ -69,13 +69,21 @@ runs:
         CGO_ENABLED=0 \
           go build -trimpath -buildvcs=false -ldflags="-s -w" -o "${BIN}" "${ACTION_PATH}"
 
+    # A tag's binary is immutable, so cache it across runs (key includes the
+    # tag + platform). On a hit the download below is skipped entirely.
+    - name: 'Restore cached binary'
+      id: bincache
+      if: steps.resolve.outputs.release-version != ''
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ steps.resolve.outputs.bin }}
+        key: codeowners-plus-action-${{ steps.resolve.outputs.release-version }}-${{ runner.os }}-${{ runner.arch }}
+
     # RELEASE_VERSION set -> a release: download + verify the prebuilt binary.
     - name: 'Download codeowners-plus release binary'
-      if: steps.resolve.outputs.release-version != ''
+      if: steps.resolve.outputs.release-version != '' && steps.bincache.outputs.cache-hit != 'true'
       shell: bash
       env:
-        # Empty for a local 'uses: ./'; install-action.sh falls back to the canonical
-        # repo, which is correct for that case.
         REPO: ${{ github.action_repository }}
         ACTION_PATH: ${{ github.action_path }}
         TAG: ${{ steps.resolve.outputs.release-version }}

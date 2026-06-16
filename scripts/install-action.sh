@@ -53,7 +53,8 @@ if [ -z "${TAG}" ]; then
   fi
 fi
 
-asset="codeowners-plus-action_${OS}_${ARCH}"
+asset="codeowners-plus-action_${OS}_${ARCH}.tar.gz"
+binname="codeowners-plus-action"
 base="https://github.com/${REPO}/releases/download/${TAG}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
@@ -85,7 +86,10 @@ if ! echo "${expected}  ${tmp}/${asset}" | "${verify[@]}"; then
   exit 1
 fi
 
+echo "Extracting ${binname} from ${asset}" >&2
+tar -xzf "${tmp}/${asset}" -C "${tmp}" "${binname}"
+
 mkdir -p "$(dirname "${BIN}")"
-mv "${tmp}/${asset}" "${BIN}"
+mv "${tmp}/${binname}" "${BIN}"
 chmod +x "${BIN}"
 echo "Installed codeowners-plus ${TAG} to ${BIN}" >&2

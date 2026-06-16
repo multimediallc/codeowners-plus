@@ -51,8 +51,9 @@ archives:
       - none*
   - id: "action"
     ids: ["action"]
-    formats: ["binary"]
     name_template: "codeowners-plus-action_{{ .Os }}_{{ .Arch }}"
+    files:
+      - none*
 checksum:
   name_template: 'checksums.txt'
 snapshot:
