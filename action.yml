@@ -41,7 +41,7 @@ runs:
         # scripts/post-release.sh. When set, the action downloads that
         # release's prebuilt binary; when empty (any non-release ref) it
         # builds from the checked-out source.
-        RELEASE_VERSION: ''
+        RELEASE_VERSION: 'v1.10.0-rc1'
       run: |
         set -euo pipefail
         {
