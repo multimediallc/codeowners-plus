@@ -56,7 +56,7 @@ runs:
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ steps.resolve.outputs.bin }}
-        key: codeowners-plus-build-${{ github.sha }}-${{ runner.os }}-${{ runner.arch }}
+        key: codeowners-plus-build-${{ github.action_ref || github.sha }}-${{ runner.os }}-${{ runner.arch }}
 
     - name: 'Set up Go'
       if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
@@ -74,8 +74,9 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p "$(dirname "${BIN}")"
+        cd "${ACTION_PATH}"
         CGO_ENABLED=0 \
-          go build -trimpath -buildvcs=false -ldflags="-s -w" -o "${BIN}" "${ACTION_PATH}"
+          go build -trimpath -buildvcs=false -ldflags="-s -w" -o "${BIN}" .
 
     # RELEASE_VERSION set -> a release: download + verify the prebuilt binary (cached).
     - name: 'Restore cached release binary'
