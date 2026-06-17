@@ -44,9 +44,12 @@ runs:
         RELEASE_VERSION: ''
       run: |
         set -euo pipefail
+        # Normalize GITHUB_ACTION_PATH so `uses: ./` resolves cleanly
+        ACTION_PATH=$(cd "${GITHUB_ACTION_PATH}" && pwd)
         {
           echo "release-version=${RELEASE_VERSION}"
           echo "bin=${RUNNER_TEMP:-/tmp}/codeowners-plus-action/codeowners-plus"
+          echo "action-path=${ACTION_PATH}"
         } >>"$GITHUB_OUTPUT"
 
     # RELEASE_VERSION not set -> not a release: build from source (cached).
@@ -62,14 +65,14 @@ runs:
       if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
       uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
       with:
-        go-version-file: ${{ github.action_path }}/go.mod
-        cache-dependency-path: ${{ github.action_path }}/go.sum
+        go-version-file: ${{ steps.resolve.outputs.action-path }}/go.mod
+        cache-dependency-path: ${{ steps.resolve.outputs.action-path }}/go.sum
 
     - name: 'Build codeowners-plus from source'
       if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
       shell: bash
       env:
-        ACTION_PATH: ${{ github.action_path }}
+        ACTION_PATH: ${{ steps.resolve.outputs.action-path }}
         BIN: ${{ steps.resolve.outputs.bin }}
       run: |
         set -euo pipefail
@@ -92,7 +95,7 @@ runs:
       shell: bash
       env:
         REPO: ${{ github.action_repository }}
-        ACTION_PATH: ${{ github.action_path }}
+        ACTION_PATH: ${{ steps.resolve.outputs.action-path }}
         TAG: ${{ steps.resolve.outputs.release-version }}
         BIN: ${{ steps.resolve.outputs.bin }}
       run: '"${ACTION_PATH}/scripts/install-action.sh"'
