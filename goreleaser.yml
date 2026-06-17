@@ -58,9 +58,8 @@ checksum:
   name_template: 'checksums.txt'
 snapshot:
   version_template: "{{ .Tag }}-next"
+release:
+  draft: true
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
+  # Notes are generated manually in the GitHub UI before publishing.
+  disable: true
