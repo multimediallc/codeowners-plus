@@ -2,6 +2,8 @@ module github.com/multimediallc/codeowners-plus
 
 go 1.25.0
 
+toolchain go1.26.4
+
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/boyter/gocodewalker v1.5.1

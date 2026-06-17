@@ -27,7 +27,88 @@ inputs:
 outputs:
   data:
     description: 'JSON string containing all the codeowners data (success, message, file-owners, file-optional, still-required)'
+    value: ${{ steps.run.outputs.data }}
 
 runs:
-  using: 'docker'
-  image: 'docker://ghcr.io/multimediallc/codeowners-plus:latest'
+  using: 'composite'
+  steps:
+    - name: 'Resolve codeowners-plus binary'
+      id: resolve
+      shell: bash
+      env:
+        # The release tag this commit belongs to. Non-empty only in release
+        # commits: set by scripts/prepare-release.sh and cleared by
+        # scripts/post-release.sh. When set, the action downloads that
+        # release's prebuilt binary; when empty (any non-release ref) it
+        # builds from the checked-out source.
+        RELEASE_VERSION: ''
+      run: |
+        set -euo pipefail
+        {
+          echo "release-version=${RELEASE_VERSION}"
+          echo "bin=${RUNNER_TEMP:-/tmp}/codeowners-plus-action/codeowners-plus"
+        } >>"$GITHUB_OUTPUT"
+
+    # RELEASE_VERSION not set -> not a release: build from source (cached).
+    - name: 'Restore cached built binary'
+      id: buildcache
+      if: steps.resolve.outputs.release-version == ''
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ steps.resolve.outputs.bin }}
+        key: codeowners-plus-build-${{ github.action_ref || github.sha }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: 'Set up Go'
+      if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache-dependency-path: ${{ github.action_path }}/go.sum
+
+    - name: 'Build codeowners-plus from source'
+      if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        BIN: ${{ steps.resolve.outputs.bin }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$(dirname "${BIN}")"
+        cd "${ACTION_PATH}"
+        CGO_ENABLED=0 \
+          go build -trimpath -buildvcs=false -ldflags="-s -w" -o "${BIN}" .
+
+    # RELEASE_VERSION set -> a release: download + verify the prebuilt binary (cached).
+    - name: 'Restore cached release binary'
+      id: bincache
+      if: steps.resolve.outputs.release-version != ''
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ steps.resolve.outputs.bin }}
+        key: codeowners-plus-action-${{ steps.resolve.outputs.release-version }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: 'Download codeowners-plus release binary'
+      if: steps.resolve.outputs.release-version != '' && steps.bincache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        REPO: ${{ github.action_repository }}
+        ACTION_PATH: ${{ github.action_path }}
+        TAG: ${{ steps.resolve.outputs.release-version }}
+        BIN: ${{ steps.resolve.outputs.bin }}
+      run: '"${ACTION_PATH}/scripts/install-action.sh"'
+
+    - name: 'Run codeowners-plus'
+      id: run
+      shell: bash
+      env:
+        # The hyphenated INPUT_GITHUB-TOKEN name is intentional: it mirrors
+        # what Docker actions export and is exactly what main.go reads via
+        # os.LookupEnv. Bash passes non-identifier env vars through to child
+        # processes untouched.
+        INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
+        INPUT_PR: ${{ inputs.pr }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+        INPUT_QUIET: ${{ inputs.quiet }}
+        BIN: ${{ steps.resolve.outputs.bin }}
+      run: '"${BIN}"'
