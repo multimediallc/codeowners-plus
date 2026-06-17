@@ -56,7 +56,7 @@ runs:
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ steps.resolve.outputs.bin }}
-        key: codeowners-plus-build-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+        key: codeowners-plus-build-${{ github.sha }}-${{ runner.os }}-${{ runner.arch }}
 
     - name: 'Set up Go'
       if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
