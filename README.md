@@ -78,8 +78,7 @@ on:
 
 permissions:
   contents: read       # required for @actions/checkout
-  issues: write        # required to create comments
-  pull-requests: write # required to request reviewers
+  pull-requests: write # required to request reviewers and leave comments
 
 jobs:
   codeowners:
@@ -87,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout Code Repository'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

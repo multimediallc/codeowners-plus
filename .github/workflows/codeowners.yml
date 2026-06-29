@@ -11,8 +11,7 @@ on:
 
 permissions:
   contents: read       # required for @actions/checkout
-  issues: write        # required to create comments
-  pull-requests: write # required to request reviewers
+  pull-requests: write # required to request reviewers and leave comments
   checks: write        # required to export data to check run
 
 jobs:
