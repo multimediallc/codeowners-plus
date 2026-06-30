@@ -363,6 +363,10 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 func (a *App) addReviewStatusComment(allRequiredOwners codeowners.ReviewerGroups, maxReviewsMet bool, minReviewsNeeded int, currentApprovals int) error {
 	// Comment on the PR with the codeowner teams required for review
 
+	if a.Conf.DisableReviewStatusComments {
+		a.printDebug("Skipping review status comment (explicitly disabled in config).\n")
+		return nil
+	}
 	if a.config.Quiet {
 		a.printDebug("Skipping review status comment (disabled or no unapproved owners).\n")
 		return nil

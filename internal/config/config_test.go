@@ -38,16 +38,18 @@ approval = true
 fail_check = false
 high_priority_labels = ["high-priority", "urgent"]
 detailed_reviewers = true
+disable_review_status_comments = true
 `,
 			path: "testdata/",
 			expected: &Config{
-				MaxReviews:           intPtr(2),
-				MinReviews:           intPtr(1),
-				UnskippableReviewers: []string{"@user1", "@user2"},
-				Ignore:               []string{"ignored/"},
-				Enforcement:          &Enforcement{Approval: true, FailCheck: false},
-				HighPriorityLabels:   []string{"high-priority", "urgent"},
-				DetailedReviewers:    true,
+				MaxReviews:                  intPtr(2),
+				MinReviews:                  intPtr(1),
+				UnskippableReviewers:        []string{"@user1", "@user2"},
+				Ignore:                      []string{"ignored/"},
+				Enforcement:                 &Enforcement{Approval: true, FailCheck: false},
+				HighPriorityLabels:          []string{"high-priority", "urgent"},
+				DetailedReviewers:           true,
+				DisableReviewStatusComments: true,
 			},
 			expectedErr: false,
 		},
