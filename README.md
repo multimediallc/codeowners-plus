@@ -244,6 +244,10 @@ suppress_unowned_warning = true
 # If the PR author is included an OR group (e.g. `*.py @alice @bob`), the group is auto-satisfied without requiring another member to approve
 allow_self_approval = false
 
+# `disable_review_status_comments` (default false) suppresses review status comments (required/unapproved reviewers).
+# Optional reviewers are still invited with a CC comment.
+disable_review_status_comments = false
+
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
 # see "Enforcement Options" below for more details

@@ -529,16 +529,17 @@ func setupAppForTest(t *testing.T, quiet bool) (*App, *mockGitHubClient) {
 
 func TestAddReviewStatusComment(t *testing.T) {
 	tt := []struct {
-		name                string
-		requiredOwners      codeowners.ReviewerGroups
-		maxReviewsMet       bool
-		minReviewsNeeded    int
-		currentApprovals    int
-		existingComments    []*github.IssueComment
-		expectAddComment    bool
-		expectUpdateComment bool
-		expectError         bool
-		expectMinReviewNote bool
+		name                  string
+		requiredOwners        codeowners.ReviewerGroups
+		maxReviewsMet         bool
+		minReviewsNeeded      int
+		currentApprovals      int
+		existingComments      []*github.IssueComment
+		expectAddComment      bool
+		expectUpdateComment   bool
+		expectError           bool
+		expectMinReviewNote   bool
+		disableStatusComments bool
 	}{
 		{
 			name: "no existing comment",
@@ -580,6 +581,16 @@ func TestAddReviewStatusComment(t *testing.T) {
 			expectAddComment:    true,
 			expectMinReviewNote: true,
 		},
+		{
+			name: "min reviews not met but status comments disabled",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
+			},
+			minReviewsNeeded:      3,
+			currentApprovals:      2,
+			disableStatusComments: true,
+			expectAddComment:      false,
+		},
 	}
 
 	for _, tc := range tt {
@@ -598,7 +609,7 @@ func TestAddReviewStatusComment(t *testing.T) {
 				codeowners: &mockCodeOwners{
 					requiredOwners: tc.requiredOwners,
 				},
-				Conf: &owners.Config{},
+				Conf: &owners.Config{DisableReviewStatusComments: tc.disableStatusComments},
 			}
 
 			err := app.addReviewStatusComment(tc.requiredOwners, tc.maxReviewsMet, tc.minReviewsNeeded, tc.currentApprovals)
@@ -642,11 +653,12 @@ func TestAddOptionalCcComment(t *testing.T) {
 	optionalMultiple := []string{"@cc-user1", "@cc-user2"}
 
 	tt := []struct {
-		name               string
-		quiet              bool
-		optionalReviewers  []string
-		expectedShouldCall bool
-		expectedComment    string
+		name                        string
+		quiet                       bool
+		disableReviewStatusComments bool
+		optionalReviewers           []string
+		expectedShouldCall          bool
+		expectedComment             string
 	}{
 		{
 			name:               "short circuits in quiet mode",
@@ -662,12 +674,22 @@ func TestAddOptionalCcComment(t *testing.T) {
 			expectedShouldCall: true,
 			expectedComment:    fmt.Sprintf("cc %s", strings.Join(optionalMultiple, " ")),
 		},
+		{
+			name:                        "adds a cc comment even if review status comments are disabled",
+			quiet:                       false,
+			disableReviewStatusComments: true,
+			optionalReviewers:           optionalMultiple,
+			expectedShouldCall:          true,
+			expectedComment:             fmt.Sprintf("cc %s", strings.Join(optionalMultiple, " ")),
+		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			app, mockClient := setupAppForTest(t, tc.quiet)
 			mockClient.ResetGHClientTracking()
+
+			app.Conf.DisableReviewStatusComments = tc.disableReviewStatusComments
 
 			err := app.addOptionalCcComment(tc.optionalReviewers)
 			if err != nil {
