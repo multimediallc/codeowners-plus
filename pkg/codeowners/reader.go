@@ -134,13 +134,13 @@ func Read(path string, reviewerGroupManager ReviewerGroupManager, fileReader Fil
 	}
 
 	slices.Reverse(rules.OwnerTests)
-	sort.Sort(rules.OwnerTests)
+	sort.Stable(rules.OwnerTests)
 
 	slices.Reverse(rules.AdditionalReviewerTests)
-	sort.Sort(rules.AdditionalReviewerTests)
+	sort.Stable(rules.AdditionalReviewerTests)
 
 	slices.Reverse(rules.OptionalReviewerTests)
-	sort.Sort(rules.OptionalReviewerTests)
+	sort.Stable(rules.OptionalReviewerTests)
 
 	return rules
 }
