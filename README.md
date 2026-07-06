@@ -240,9 +240,15 @@ require_both_branch_reviewers = false
 # Useful when you intentionally have files without codeowners
 suppress_unowned_warning = true
 
-# `allow_self_approval` (default false) treats the PR author as satisfying any OR ownership group they belong to
-# If the PR author is included an OR group (e.g. `*.py @alice @bob`), the group is auto-satisfied without requiring another member to approve
+# `allow_self_approval` (default false) treats the PR author as satisfying any OR ownership group they are listed in
+# If the PR author is included in an OR group (e.g. `*.py @alice @bob`), the group is auto-satisfied without requiring another member to approve
+# Note: this matches the author against individually listed logins only; see `self_approval_via_teams` for team membership
 allow_self_approval = false
+
+# `self_approval_via_teams` (default false) extends `allow_self_approval` to team membership:
+# OR groups containing a team the PR author is a member of (e.g. `*.py @org/backend`) are also auto-satisfied
+# Requires a token that can read org team members (same requirement as GitHub Teams support)
+self_approval_via_teams = false
 
 # `disable_review_status_comments` (default false) suppresses review status comments (required/unapproved reviewers).
 # Optional reviewers are still invited with a CC comment.

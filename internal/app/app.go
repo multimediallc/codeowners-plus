@@ -168,10 +168,20 @@ func (a *App) Run() (*OutputData, error) {
 	// Set author
 	author := fmt.Sprintf("@%s", a.client.PR().User.GetLogin())
 	authorMode := codeowners.AuthorModeDefault
+	var authorTeams []codeowners.Slug
 	if conf.AllowSelfApproval {
 		authorMode = codeowners.AuthorModeSelfApproval
+		if conf.SelfApprovalViaTeams {
+			// Resolve the author's team memberships so ownership groups
+			// containing those teams are satisfied by the author, the same
+			// way approvals from team members satisfy them.
+			if err := a.client.InitUserReviewerMap(codeowners.OriginalStrings(codeOwners.AllRequired().Flatten())); err != nil {
+				return &OutputData{}, fmt.Errorf("InitUserReviewerMap Error: %v", err)
+			}
+			authorTeams = a.client.UserReviewers(author)
+		}
 	}
-	codeOwners.SetAuthor(author, authorMode)
+	codeOwners.SetAuthor(author, authorMode, authorTeams...)
 
 	// Warn about unowned files
 	if !conf.SuppressUnownedWarning {

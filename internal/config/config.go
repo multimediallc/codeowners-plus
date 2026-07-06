@@ -20,6 +20,7 @@ type Config struct {
 	RequireBothBranchReviewers  bool         `toml:"require_both_branch_reviewers"`
 	SuppressUnownedWarning      bool         `toml:"suppress_unowned_warning"`
 	AllowSelfApproval           bool         `toml:"allow_self_approval"`
+	SelfApprovalViaTeams        bool         `toml:"self_approval_via_teams"`
 	DisableReviewStatusComments bool         `toml:"disable_review_status_comments"`
 }
 
@@ -47,6 +48,7 @@ func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) 
 		HighPriorityLabels:          []string{},
 		AdminBypass:                 &AdminBypass{Enabled: false, AllowedUsers: []string{}},
 		DetailedReviewers:           false,
+		SelfApprovalViaTeams:        false,
 		DisableSmartDismissal:       false,
 		RequireBothBranchReviewers:  false,
 		DisableReviewStatusComments: false,

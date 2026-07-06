@@ -333,6 +333,64 @@ func TestSetAuthorSelfApprovalMultipleORGroups(t *testing.T) {
 	}
 }
 
+// When self-approval is enabled and the author's team memberships are provided,
+// an OR group containing one of those teams (e.g. `*.py @org/backend @bob`) is
+// auto-satisfied: the author vouches for their own code as a member of the team.
+func TestSetAuthorSelfApprovalViaTeamMembership(t *testing.T) {
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {{Names: NewSlugs([]string{"@org/backend", "@bob"}), Approved: false}},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeSelfApproval, NewSlug("@org/backend"))
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 0 {
+		t.Errorf("Expected OR group containing the author's team to be auto-satisfied, got %d still required", len(allRequired))
+	}
+}
+
+// Team memberships must not satisfy groups in default mode — other members of
+// the team remain valid (and required) reviewers, and the team itself stays in
+// the group.
+func TestSetAuthorTeamsIgnoredInDefaultMode(t *testing.T) {
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {{Names: NewSlugs([]string{"@org/backend", "@bob"}), Approved: false}},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeDefault, NewSlug("@org/backend"))
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 1 {
+		t.Fatalf("Expected 1 still-required group in default mode, got %d", len(allRequired))
+	}
+	if len(allRequired[0].Names) != 2 {
+		t.Errorf("Expected the team to remain in the group, got %v", OriginalStrings(allRequired[0].Names))
+	}
+}
+
+// Team memberships only satisfy groups that actually contain one of the teams.
+func TestSetAuthorTeamsDoNotAffectUnrelatedGroups(t *testing.T) {
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {{Names: NewSlugs([]string{"@bob", "@charlie"}), Approved: false}},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeSelfApproval, NewSlug("@org/backend"))
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 1 {
+		t.Errorf("Expected group without the author or their teams to remain required, got %d", len(allRequired))
+	}
+}
+
 // Self-approval only applies to OR groups the author belongs to. If a file also has a separate
 // AND group (e.g. `&*.py @security`), that group must still be independently satisfied —
 // the author being in one OR group doesn't grant them approval power over unrelated AND groups.

@@ -18,7 +18,10 @@ const (
 
 // CodeOwners represents a collection of owned files, with reverse lookups for owners and reviewers
 type CodeOwners interface {
-	SetAuthor(author string, mode AuthorMode)
+	// SetAuthor marks the PR author in the ownership map. In self-approval
+	// mode, OR groups containing the author (or, when provided, any of the
+	// author's teams) are treated as satisfied.
+	SetAuthor(author string, mode AuthorMode, authorTeams ...Slug)
 
 	// FileRequired returns a map of file names to their required reviewers
 	FileRequired() map[string]ReviewerGroups
@@ -60,7 +63,7 @@ type ownersMap struct {
 	unownedFiles    []string
 }
 
-func (om *ownersMap) SetAuthor(author string, mode AuthorMode) {
+func (om *ownersMap) SetAuthor(author string, mode AuthorMode, authorTeams ...Slug) {
 	authorSlug := NewSlug(author)
 	for _, reviewers := range om.nameReviewerMap[authorSlug.Normalized()] {
 		reviewers.Names = slices.DeleteFunc(reviewers.Names, func(name Slug) bool {
@@ -68,6 +71,16 @@ func (om *ownersMap) SetAuthor(author string, mode AuthorMode) {
 		})
 		if len(reviewers.Names) == 0 || mode == AuthorModeSelfApproval {
 			reviewers.Approved = true
+		}
+	}
+	if mode == AuthorModeSelfApproval {
+		// The author also vouches for groups they belong to via team
+		// membership. Teams are not removed from the group so that other
+		// team members remain valid reviewers.
+		for _, team := range authorTeams {
+			for _, reviewers := range om.nameReviewerMap[team.Normalized()] {
+				reviewers.Approved = true
+			}
 		}
 	}
 	om.author = author
