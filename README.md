@@ -250,6 +250,9 @@ allow_self_approval = false
 # Requires a token that can read org team members (same requirement as GitHub Teams support)
 self_approval_via_teams = false
 
+# Note: self-approval (both by login and via teams) never satisfies additional-reviewer ("&") rules —
+# those represent mandatory extra reviewers and always require an explicit approval from another member
+
 # `disable_review_status_comments` (default false) suppresses review status comments (required/unapproved reviewers).
 # Optional reviewers are still invited with a CC comment.
 disable_review_status_comments = false

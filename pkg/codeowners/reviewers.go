@@ -12,6 +12,9 @@ import (
 
 type ReviewerGroupManager interface {
 	ToReviewerGroup(names ...string) *ReviewerGroup
+	// ToAdditionalReviewerGroup creates a group for an additional-reviewer
+	// ("&") rule. Additional groups are never satisfied by authorship.
+	ToAdditionalReviewerGroup(names ...string) *ReviewerGroup
 }
 
 func NewReviewerGroupMemo() ReviewerGroupManager {
@@ -22,19 +25,35 @@ type ReviewerGroupMemo map[string]*ReviewerGroup
 
 // Create a new Reviewers, memoizing the Reviewers so it is only created once
 func (rgm ReviewerGroupMemo) ToReviewerGroup(names ...string) *ReviewerGroup {
+	return rgm.toGroup(false, names)
+}
+
+// Create a new additional-reviewer ("&") group, memoized separately from
+// owner groups so the Additional flag never leaks between the two roles.
+func (rgm ReviewerGroupMemo) ToAdditionalReviewerGroup(names ...string) *ReviewerGroup {
+	return rgm.toGroup(true, names)
+}
+
+func (rgm ReviewerGroupMemo) toGroup(additional bool, names []string) *ReviewerGroup {
 	key := strings.Join(names, ",")
+	if additional {
+		key = "&|" + key
+	}
 	if item, found := rgm[key]; found {
 		return item
 	}
-	newReviewers := &ReviewerGroup{NewSlugs(names), false}
+	newReviewers := &ReviewerGroup{Names: NewSlugs(names), Approved: false, Additional: additional}
 	rgm[key] = newReviewers
 	return newReviewers
 }
 
-// Represents a group of ReviewerGroup, with a list of names and an approved status
+// Represents a group of ReviewerGroup, with a list of names and an approved status.
+// Additional marks groups created from "&" rules: they represent mandatory
+// extra reviewers and are never satisfied by PR authorship (self-approval).
 type ReviewerGroup struct {
-	Names    []Slug
-	Approved bool
+	Names      []Slug
+	Approved   bool
+	Additional bool
 }
 
 type ReviewerGroups []*ReviewerGroup

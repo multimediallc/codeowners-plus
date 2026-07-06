@@ -123,7 +123,11 @@ func Read(path string, reviewerGroupManager ReviewerGroupManager, fileReader Fil
 				match = "**/*"
 			}
 		}
-		test := &reviewerTest{Match: match, Reviewer: reviewerGroupManager.ToReviewerGroup(owner...)}
+		reviewer := reviewerGroupManager.ToReviewerGroup(owner...)
+		if additional {
+			reviewer = reviewerGroupManager.ToAdditionalReviewerGroup(owner...)
+		}
+		test := &reviewerTest{Match: match, Reviewer: reviewer}
 		if additional {
 			rules.AdditionalReviewerTests = append(rules.AdditionalReviewerTests, test)
 		} else if optional {

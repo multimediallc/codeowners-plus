@@ -39,8 +39,8 @@ func TestInitOwnerTree(t *testing.T) {
 	}
 
 	expectedAdditionalTests := FileTestCases{
-		&reviewerTest{Match: "models*", Reviewer: rgMan.ToReviewerGroup("@devops")},
-		&reviewerTest{Match: "**/*test*", Reviewer: rgMan.ToReviewerGroup("@core")},
+		&reviewerTest{Match: "models*", Reviewer: rgMan.ToAdditionalReviewerGroup("@devops")},
+		&reviewerTest{Match: "**/*test*", Reviewer: rgMan.ToAdditionalReviewerGroup("@core")},
 	}
 
 	for i, test := range tree.additionalReviewerTests {
@@ -388,6 +388,67 @@ func TestSetAuthorTeamsDoNotAffectUnrelatedGroups(t *testing.T) {
 	allRequired := co.AllRequired()
 	if len(allRequired) != 1 {
 		t.Errorf("Expected group without the author or their teams to remain required, got %d", len(allRequired))
+	}
+}
+
+// Additional ("&") groups are mandatory extra reviewers: even when the author
+// is listed in one directly, self-approval must not satisfy it — only another
+// listed reviewer can.
+func TestSetAuthorSelfApprovalDoesNotSatisfyAdditionalGroupWithAuthor(t *testing.T) {
+	andGroup := &ReviewerGroup{Names: NewSlugs([]string{"@alice", "@bob"}), Approved: false, Additional: true}
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {andGroup},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeSelfApproval)
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 1 {
+		t.Fatalf("Expected additional group to remain required despite self-approval, got %d", len(allRequired))
+	}
+	if len(allRequired[0].Names) != 1 || allRequired[0].Names[0].Normalized() != "@bob" {
+		t.Errorf("Expected remaining required reviewer to be @bob, got %v", OriginalStrings(allRequired[0].Names))
+	}
+}
+
+// Same for team membership: an additional group containing the author's team
+// must not be satisfied by authorship.
+func TestSetAuthorTeamsDoNotSatisfyAdditionalGroups(t *testing.T) {
+	andGroup := &ReviewerGroup{Names: NewSlugs([]string{"@org/security"}), Approved: false, Additional: true}
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {andGroup},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeSelfApproval, NewSlug("@org/security"))
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 1 {
+		t.Errorf("Expected additional group containing the author's team to remain required, got %d", len(allRequired))
+	}
+}
+
+// Deadlock prevention is unchanged: if the author was the only listed
+// additional reviewer, the group becomes empty and is satisfied.
+func TestSetAuthorEmptyAdditionalGroupStillSatisfied(t *testing.T) {
+	andGroup := &ReviewerGroup{Names: NewSlugs([]string{"@alice"}), Approved: false, Additional: true}
+	co := createMockCodeOwners(
+		map[string]ReviewerGroups{
+			"file.py": {andGroup},
+		},
+		map[string]ReviewerGroups{},
+		[]string{},
+	)
+	co.SetAuthor("@alice", AuthorModeSelfApproval)
+
+	allRequired := co.AllRequired()
+	if len(allRequired) != 0 {
+		t.Errorf("Expected emptied additional group to be satisfied (deadlock prevention), got %d still required", len(allRequired))
 	}
 }
 

@@ -101,7 +101,11 @@ func mergeReviewerGroups(base ReviewerGroups, head ReviewerGroups) ReviewerGroup
 func createReviewerGroupKey(rg *ReviewerGroup) string {
 	normalizedNames := f.Map(rg.Names, func(s Slug) string { return s.Normalized() })
 	slices.Sort(normalizedNames)
-	return strings.Join(normalizedNames, ",")
+	key := strings.Join(normalizedNames, ",")
+	if rg.Additional {
+		key = "&|" + key
+	}
+	return key
 }
 
 // mergeUnownedFiles combines unowned files from both branches, excluding files that have owners
