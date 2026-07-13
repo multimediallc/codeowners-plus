@@ -69,23 +69,17 @@ func (om *ownersMap) SetAuthor(author string, mode AuthorMode, authorTeams ...Sl
 		reviewers.Names = slices.DeleteFunc(reviewers.Names, func(name Slug) bool {
 			return name.Equals(authorSlug)
 		})
-		// Additional ("&") groups represent mandatory extra reviewers and are
-		// never satisfied by authorship — only by emptiness (the author was
-		// the sole listed reviewer, so requiring them would deadlock the PR).
-		if len(reviewers.Names) == 0 || (mode == AuthorModeSelfApproval && !reviewers.Additional) {
+		if len(reviewers.Names) == 0 || mode == AuthorModeSelfApproval {
 			reviewers.Approved = true
 		}
 	}
 	if mode == AuthorModeSelfApproval {
 		// The author also vouches for groups they belong to via team
 		// membership. Teams are not removed from the group so that other
-		// team members remain valid reviewers. Additional ("&") groups are
-		// excluded here as well.
+		// team members remain valid reviewers.
 		for _, team := range authorTeams {
 			for _, reviewers := range om.nameReviewerMap[team.Normalized()] {
-				if !reviewers.Additional {
-					reviewers.Approved = true
-				}
+				reviewers.Approved = true
 			}
 		}
 	}
