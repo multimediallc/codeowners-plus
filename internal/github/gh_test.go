@@ -8,12 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v86/github"
+	"github.com/google/go-github/v89/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
 )
@@ -323,7 +322,11 @@ func TestIsSubstringInComments(t *testing.T) {
 }
 
 func TestNewGithubClient(t *testing.T) {
-	client, ok := NewClient("owner", "repo", "token").(*GHClient)
+	c, err := NewClient("owner", "repo", "token")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	client, ok := c.(*GHClient)
 	if !ok {
 		t.Fatalf("Expected client to be of type *GHClient, got %T", client)
 	}
@@ -582,12 +585,11 @@ func TestNilCommentsErr(t *testing.T) {
 func mockServerAndClient(t *testing.T) (*http.ServeMux, *httptest.Server, *GHClient) {
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
-	client := github.NewClient(nil)
-	baseURL, err := url.Parse(server.URL + "/")
+	baseURL := server.URL + "/"
+	client, err := github.NewClient(github.WithURLs(&baseURL, &baseURL))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	client.BaseURL = baseURL
 	gh := &GHClient{
 		ctx:           context.Background(),
 		owner:         "test-owner",
@@ -1462,7 +1464,11 @@ func TestContainsValidBypassApproval(t *testing.T) {
 }
 
 func TestContainsValidBypassApprovalNoPR(t *testing.T) {
-	gh := NewClient("test-owner", "test-repo", "test-token").(*GHClient)
+	c, err := NewClient("test-owner", "test-repo", "test-token")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gh := c.(*GHClient)
 
 	result, err := gh.ContainsValidBypassApproval([]string{})
 
