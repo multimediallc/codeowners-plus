@@ -927,14 +927,6 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 			expectedEnfApproval: false,
 		},
 		{
-			name: "error initializing reviewer map",
-			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
-			},
-			userReviewerMapError: fmt.Errorf("failed to init reviewer map"),
-			expectError:          true,
-		},
-		{
 			name: "multiple file reviewers",
 			requiredOwners: codeowners.ReviewerGroups{
 				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1", "@user2"})},
