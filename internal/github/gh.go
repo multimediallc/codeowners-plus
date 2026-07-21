@@ -69,8 +69,11 @@ type GHClient struct {
 	infoBuffer      io.Writer
 }
 
-func NewClient(owner, repo, token string) Client {
-	client := github.NewClient(nil).WithAuthToken(token)
+func NewClient(owner, repo, token string) (Client, error) {
+	client, err := github.NewClient(github.WithAuthToken(token))
+	if err != nil {
+		return nil, err
+	}
 	return &GHClient{
 		context.Background(),
 		owner,
@@ -82,7 +85,7 @@ func NewClient(owner, repo, token string) Client {
 		nil,
 		io.Discard,
 		io.Discard,
-	}
+	}, nil
 }
 
 func (gh *GHClient) PR() *github.PullRequest {
