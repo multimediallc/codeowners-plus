@@ -2,7 +2,7 @@ module github.com/multimediallc/codeowners-plus
 
 go 1.25.0
 
-toolchain go1.26.4
+toolchain go1.26.5
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
