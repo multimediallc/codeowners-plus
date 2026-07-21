@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/multimediallc/codeowners-plus/internal/app"
@@ -15,22 +16,24 @@ import (
 
 // Flags holds the command line flags
 type Flags struct {
-	Token   *string
-	RepoDir *string
-	PR      *int
-	Repo    *string
-	Verbose *bool
-	Quiet   *bool
+	Token       *string
+	RepoDir     *string
+	PR          *int
+	Repo        *string
+	OracleFiles *string
+	Verbose     *bool
+	Quiet       *bool
 }
 
 var (
 	flags = &Flags{
-		Token:   flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
-		RepoDir: flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
-		PR:      flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
-		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
-		Verbose: flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
-		Quiet:   flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Disable PR comments and review requests"),
+		Token:       flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
+		RepoDir:     flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
+		PR:          flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
+		Repo:        flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
+		OracleFiles: flag.String("oracle-files", getEnv("INPUT_ORACLE-FILES", ""), "Comma-separated list of ownership oracle JSON files"),
+		Verbose:     flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
+		Quiet:       flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Disable PR comments and review requests"),
 	}
 	WarningBuffer = bytes.NewBuffer([]byte{})
 	InfoBuffer    = bytes.NewBuffer([]byte{})
@@ -71,6 +74,19 @@ func getEnv(key, fallback string) string {
 
 func ignoreError[V any, E error](res V, _ E) V {
 	return res
+}
+
+// splitOracleFiles parses the comma-separated oracle-files flag, dropping
+// empty entries so an unset input yields no oracle files.
+func splitOracleFiles(value string) []string {
+	parts := strings.Split(value, ",")
+	files := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			files = append(files, trimmed)
+		}
+	}
+	return files
 }
 
 func outputAndExit(w io.Writer, shouldFail bool, message string) {
@@ -130,6 +146,7 @@ func main() {
 		RepoDir:       *flags.RepoDir,
 		PR:            *flags.PR,
 		Repo:          *flags.Repo,
+		OracleFiles:   splitOracleFiles(*flags.OracleFiles),
 		Verbose:       *flags.Verbose,
 		Quiet:         *flags.Quiet,
 		InfoBuffer:    InfoBuffer,
