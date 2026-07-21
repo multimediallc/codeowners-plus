@@ -33,6 +33,7 @@ type Client interface {
 	InitPR(pr_id int) error
 	PR() *github.PullRequest
 	InitUserReviewerMap(reviewers []string) error
+	UserReviewers(user string) []codeowners.Slug
 	GetTokenUser() (string, error)
 	InitReviews() error
 	AllApprovals() ([]*CurrentApproval, error)
@@ -129,6 +130,13 @@ func (gh *GHClient) InitUserReviewerMap(reviewers []string) error {
 	}
 	gh.userReviewerMap = makeGHUserReviwerMap(reviewers, teamFetch)
 	return nil
+}
+
+// UserReviewers returns the owner slugs (their own login and the teams they
+// are a member of) the given user satisfies, based on the map built by
+// InitUserReviewerMap. Returns nil if the map has not been initialized.
+func (gh *GHClient) UserReviewers(user string) []codeowners.Slug {
+	return gh.userReviewerMap[strings.ToLower(strings.TrimPrefix(user, "@"))]
 }
 
 func (gh *GHClient) GetTokenUser() (string, error) {

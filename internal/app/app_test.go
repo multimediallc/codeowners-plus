@@ -77,7 +77,7 @@ func (m *mockCodeOwners) ApplyApprovals(approvers []codeowners.Slug) {
 	m.appliedApprovals = approvers
 }
 
-func (m *mockCodeOwners) SetAuthor(author string, mode codeowners.AuthorMode) {
+func (m *mockCodeOwners) SetAuthor(author string, mode codeowners.AuthorMode, authorTeams ...codeowners.Slug) {
 	m.author = author
 	for _, reviewers := range m.requiredOwners {
 		for i, name := range reviewers.Names {
@@ -110,6 +110,7 @@ func (m *mockCodeOwners) UnownedFiles() []string {
 type mockGitHubClient struct {
 	pr                        *github.PullRequest
 	userReviewerMapError      error
+	userReviewers             []codeowners.Slug
 	currentApprovals          []*gh.CurrentApproval
 	currentApprovalsError     error
 	tokenUser                 string
@@ -143,6 +144,10 @@ func (m *mockGitHubClient) PR() *github.PullRequest {
 
 func (m *mockGitHubClient) InitUserReviewerMap(owners []string) error {
 	return m.userReviewerMapError
+}
+
+func (m *mockGitHubClient) UserReviewers(user string) []codeowners.Slug {
+	return m.userReviewers
 }
 
 func (m *mockGitHubClient) GetCurrentReviewerApprovals() ([]*gh.CurrentApproval, error) {
@@ -920,14 +925,6 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 			expectError:         false,
 			enforcementApproval: true,
 			expectedEnfApproval: false,
-		},
-		{
-			name: "error initializing reviewer map",
-			requiredOwners: codeowners.ReviewerGroups{
-				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
-			},
-			userReviewerMapError: fmt.Errorf("failed to init reviewer map"),
-			expectError:          true,
 		},
 		{
 			name: "multiple file reviewers",

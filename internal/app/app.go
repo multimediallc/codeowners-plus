@@ -165,13 +165,25 @@ func (a *App) Run() (*OutputData, error) {
 	}
 	a.codeowners = codeOwners
 
+	// Initialize user reviewer map
+	if err := a.client.InitUserReviewerMap(codeowners.OriginalStrings(codeOwners.AllRequired().Flatten())); err != nil {
+		return &OutputData{}, fmt.Errorf("InitUserReviewerMap Error: %v", err)
+	}
+
 	// Set author
 	author := fmt.Sprintf("@%s", a.client.PR().User.GetLogin())
 	authorMode := codeowners.AuthorModeDefault
+	var authorTeams []codeowners.Slug
 	if conf.AllowSelfApproval {
 		authorMode = codeowners.AuthorModeSelfApproval
+		if conf.SelfApprovalViaTeams {
+			// Resolve the author's team memberships so ownership groups
+			// containing those teams are satisfied by the author, the same
+			// way approvals from team members satisfy them.
+			authorTeams = a.client.UserReviewers(author)
+		}
 	}
-	codeOwners.SetAuthor(author, authorMode)
+	codeOwners.SetAuthor(author, authorMode, authorTeams...)
 
 	// Warn about unowned files
 	if !conf.SuppressUnownedWarning {
@@ -209,11 +221,6 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	allOptionalReviewerNames := a.codeowners.AllOptional().Flatten()
 	allOptionalReviewerNames = codeowners.FilterOutNames(allOptionalReviewerNames, allRequiredOwnerNames)
 	a.printDebug("All Optional Reviewers: %s\n", codeowners.OriginalStrings(allOptionalReviewerNames))
-
-	// Initialize user reviewer map
-	if err := a.client.InitUserReviewerMap(codeowners.OriginalStrings(allRequiredOwnerNames)); err != nil {
-		return false, message, nil, fmt.Errorf("InitUserReviewerMap Error: %v", err)
-	}
 
 	// Get current approvals
 	ghApprovals, err := a.client.GetCurrentReviewerApprovals()
