@@ -16,7 +16,7 @@ jobs:
       checks: read
     steps:
       - name: 'Rerun Checks'
-        uses: shqear93/rerun-checks@cafa5c1c11c880f9b23e6a73ad8628483fdae798  # @v3
+        uses: shqear93/rerun-checks@b14eb6a7f66a0b9cffd79e9e85336c78d8c9e21b  # @v3
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           check-names: 'Run Codeowners Plus'
