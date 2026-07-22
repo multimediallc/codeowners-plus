@@ -232,7 +232,7 @@ func (a *App) applyOracles(codeOwners codeowners.CodeOwners, gitDiff git.Diff) (
 	for _, path := range a.config.OracleFiles {
 		ruleSet, err := oracle.Load(path)
 		if err != nil {
-			return nil, fmt.Errorf("Oracle Error: %v", err)
+			return nil, fmt.Errorf("oracle error: %v", err)
 		}
 		merged.Rules = append(merged.Rules, ruleSet.Rules...)
 	}

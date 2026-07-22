@@ -104,7 +104,7 @@ func TestApplyOraclesMergesRequirements(t *testing.T) {
 func TestApplyOraclesMissingFile(t *testing.T) {
 	app := oracleTestApp([]string{"/nonexistent/oracle.json"})
 	_, err := app.applyOracles(baseCodeOwnersForOracleTest(), mockGitDiff{changes: []string{"a.go"}})
-	if err == nil || !strings.Contains(err.Error(), "Oracle Error") {
+	if err == nil || !strings.Contains(err.Error(), "oracle error") {
 		t.Errorf("expected hard error for missing oracle file, got %v", err)
 	}
 }
