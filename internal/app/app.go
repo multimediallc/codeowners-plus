@@ -81,7 +81,10 @@ func New(cfg Config) (*App, error) {
 	owner := repoSplit[0]
 	repo := repoSplit[1]
 
-	client := gh.NewClient(owner, repo, cfg.Token)
+	client, err := gh.NewClient(owner, repo, cfg.Token)
+	if err != nil {
+		return nil, err
+	}
 	app := &App{
 		config: &cfg,
 		client: client,

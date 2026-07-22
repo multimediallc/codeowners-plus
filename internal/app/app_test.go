@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v86/github"
+	"github.com/google/go-github/v89/github"
 	owners "github.com/multimediallc/codeowners-plus/internal/config"
 	"github.com/multimediallc/codeowners-plus/internal/git"
 	gh "github.com/multimediallc/codeowners-plus/internal/github"
