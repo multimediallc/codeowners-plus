@@ -48,7 +48,6 @@ func New(root string, files []DiffFile, fileReader FileReader, warningWriter io.
 	reviewerGroupManager := NewReviewerGroupMemo()
 	tree := initOwnerTreeNode(root, root, reviewerGroupManager, nil, fileReader, warningWriter)
 	tree.warningWriter = warningWriter
-	// TODO - support inline ownership rules (issue #3)
 	fileNames := f.Map(files, func(file DiffFile) string { return file.FileName })
 	testMap := tree.BuildFromFiles(fileNames, reviewerGroupManager)
 	ownersMap, err := testMap.getOwners(fileNames)
