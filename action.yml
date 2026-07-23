@@ -15,6 +15,10 @@ inputs:
     description: 'The owner and repository name.  For example `octocat/Hello-World`'
     required: true
     default: '${{ github.repository }}'
+  oracle-files:
+    description: 'Comma-separated list of ownership oracle JSON files to AND-merge into .codeowners requirements'
+    required: false
+    default: ''
   verbose:
     description: 'Print debug info'
     required: false
@@ -111,6 +115,7 @@ runs:
         INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
         INPUT_PR: ${{ inputs.pr }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_ORACLE-FILES: ${{ inputs.oracle-files }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
         INPUT_QUIET: ${{ inputs.quiet }}
         BIN: ${{ steps.resolve.outputs.bin }}

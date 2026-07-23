@@ -14,11 +14,12 @@ import (
 func init() {
 	// Initialize test flags with default values
 	flags = &Flags{
-		Token:   new(string),
-		RepoDir: new(string),
-		PR:      new(int),
-		Repo:    new(string),
-		Verbose: new(bool),
+		Token:       new(string),
+		RepoDir:     new(string),
+		PR:          new(int),
+		Repo:        new(string),
+		OracleFiles: new(string),
+		Verbose:     new(bool),
 	}
 	*flags.Token = "test-token"
 	*flags.RepoDir = "/test/dir"
@@ -96,6 +97,33 @@ func TestIgnoreError(t *testing.T) {
 			got := ignoreError(tc.value, tc.err)
 			if got != tc.expected {
 				t.Errorf("expected %d, got %d", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestSplitOracleFiles(t *testing.T) {
+	tt := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{name: "empty input", input: "", expected: []string{}},
+		{name: "single file", input: "a.json", expected: []string{"a.json"}},
+		{name: "multiple files", input: "a.json,b.json", expected: []string{"a.json", "b.json"}},
+		{name: "whitespace trimmed", input: " a.json , b.json ", expected: []string{"a.json", "b.json"}},
+		{name: "empty entries dropped", input: ",a.json,,", expected: []string{"a.json"}},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			result := splitOracleFiles(tc.input)
+			if len(result) != len(tc.expected) {
+				t.Fatalf("expected %v, got %v", tc.expected, result)
+			}
+			for i := range result {
+				if result[i] != tc.expected[i] {
+					t.Errorf("expected %v, got %v", tc.expected, result)
+				}
 			}
 		})
 	}
