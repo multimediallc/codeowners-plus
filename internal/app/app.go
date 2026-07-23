@@ -12,6 +12,8 @@ import (
 	gh "github.com/multimediallc/codeowners-plus/internal/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
+	"github.com/multimediallc/codeowners-plus/pkg/inlineowners"
+	"github.com/multimediallc/codeowners-plus/pkg/oracle"
 )
 
 // OutputData holds the data that will be written to GITHUB_OUTPUT
@@ -55,6 +57,7 @@ type Config struct {
 	RepoDir       string
 	PR            int
 	Repo          string
+	OracleFiles   []string
 	Verbose       bool
 	Quiet         bool
 	InfoBuffer    io.Writer
@@ -166,6 +169,29 @@ func (a *App) Run() (*OutputData, error) {
 			return &OutputData{}, fmt.Errorf("NewCodeOwners Error: %v", err)
 		}
 	}
+	// Merge in computed ownership from oracle files, if any
+	codeOwners, err = a.applyOracles(codeOwners, gitDiff)
+	if err != nil {
+		return &OutputData{}, err
+	}
+
+	// Merge in inline ownership blocks touched by the diff, if enabled.
+	// The diff is three-dot (merge-base...head), so base-side hunk line
+	// numbers are relative to the merge base, not the base branch tip;
+	// base-revision blocks must be read at the merge base or their line
+	// ranges drift whenever the base branch has advanced.
+	if conf.EnableInlineOwnership {
+		mergeBase, err := git.MergeBase(a.config.RepoDir, a.client.PR().Base.GetSHA(), a.client.PR().Head.GetSHA())
+		if err != nil {
+			return &OutputData{}, fmt.Errorf("inline ownership error: %v", err)
+		}
+		mergeBaseReader := git.NewGitRefFileReader(mergeBase, a.config.RepoDir)
+		headFileReader := git.NewGitRefFileReader(a.client.PR().Head.GetSHA(), a.config.RepoDir)
+		codeOwners, err = a.applyInlineOwnership(codeOwners, gitDiff, mergeBaseReader, headFileReader)
+		if err != nil {
+			return &OutputData{}, err
+		}
+	}
 	a.codeowners = codeOwners
 
 	// Initialize user reviewer map
@@ -210,6 +236,64 @@ func (a *App) Run() (*OutputData, error) {
 	outputData.UpdateOutputData(success, message, stillRequired)
 
 	return outputData, nil
+}
+
+// applyOracles AND-merges computed ownership from the configured oracle
+// files into the .codeowners-derived ownership. Oracle rules can only add
+// reviewer requirements, so a missing or malformed oracle file is a hard
+// error: silently skipping one would drop required reviews.
+func (a *App) applyOracles(codeOwners codeowners.CodeOwners, gitDiff git.Diff) (codeowners.CodeOwners, error) {
+	if len(a.config.OracleFiles) == 0 {
+		return codeOwners, nil
+	}
+
+	merged := &oracle.RuleSet{}
+	for _, path := range a.config.OracleFiles {
+		ruleSet, err := oracle.Load(path)
+		if err != nil {
+			return nil, fmt.Errorf("oracle error: %v", err)
+		}
+		merged.Rules = append(merged.Rules, ruleSet.Rules...)
+	}
+	if len(merged.Rules) == 0 {
+		a.printDebug("Oracle files contain no rules\n")
+		return codeOwners, nil
+	}
+
+	for _, rule := range merged.Rules {
+		a.printDebug("Oracle rule: files=%v owners=%v optional=%t reason=%q\n", rule.Files, rule.Owners, rule.Optional, rule.Reason)
+	}
+
+	changedFiles := f.Map(gitDiff.AllChanges(), func(file codeowners.DiffFile) string { return file.FileName })
+	oracleOwners := merged.ToCodeOwners(changedFiles, a.config.WarningBuffer)
+	return codeowners.MergeCodeOwners(codeOwners, oracleOwners), nil
+}
+
+// applyInlineOwnership AND-merges ownership from inline <CO-inline> blocks
+// touched by the diff, via the same MergeCodeOwners path as oracle files
+// and require_both_branch_reviewers. A failure to read a file is a hard
+// error, matching the fail-closed handling of oracle files.
+func (a *App) applyInlineOwnership(
+	codeOwners codeowners.CodeOwners,
+	gitDiff git.Diff,
+	baseFileReader codeowners.FileReader,
+	headFileReader codeowners.FileReader,
+) (codeowners.CodeOwners, error) {
+	requirements, err := inlineowners.Requirements(gitDiff.AllChanges(), baseFileReader, headFileReader, a.config.WarningBuffer)
+	if err != nil {
+		return nil, fmt.Errorf("inline ownership error: %v", err)
+	}
+	if len(requirements) == 0 {
+		a.printDebug("No inline ownership blocks touched by this diff\n")
+		return codeOwners, nil
+	}
+	rgm := codeowners.NewReviewerGroupMemo()
+	required := make(map[string]codeowners.ReviewerGroups)
+	for _, requirement := range requirements {
+		a.printDebug("Inline ownership: file=%s owners=%v reason=%q\n", requirement.File, requirement.Owners, requirement.Reason)
+		required[requirement.File] = append(required[requirement.File], rgm.ToReviewerGroup(requirement.Owners...))
+	}
+	return codeowners.MergeCodeOwners(codeOwners, codeowners.NewFromFileOwners(required, nil)), nil
 }
 
 func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {

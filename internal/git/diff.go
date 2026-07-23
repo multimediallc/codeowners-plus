@@ -127,6 +127,15 @@ func diffToFilename(d *diff.FileDiff) string {
 	return filenameFromExtendedHeader(d.Extended)
 }
 
+// diffToBaseFilename returns the file's name in the base revision, or ""
+// when the diff carries no usable original name (e.g. added files).
+func diffToBaseFilename(d *diff.FileDiff) string {
+	if len(d.OrigName) > 2 && d.OrigName != "/dev/null" {
+		return d.OrigName[2:]
+	}
+	return ""
+}
+
 func filenameFromExtendedHeader(headers []string) string {
 	for _, h := range headers {
 		rest, ok := strings.CutPrefix(h, "diff --git ")
@@ -152,9 +161,15 @@ func toDiffFiles(fileDiffs []*diff.FileDiff) ([]codeowners.DiffFile, error) {
 	for _, d := range fileDiffs {
 		fileName := diffToFilename(d)
 
+		baseFileName := diffToBaseFilename(d)
+		if baseFileName == fileName {
+			baseFileName = ""
+		}
 		newDiffFile := codeowners.DiffFile{
-			FileName: fileName,
-			Hunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
+			FileName:     fileName,
+			BaseFileName: baseFileName,
+			Hunks:        make([]codeowners.HunkRange, 0, len(d.Hunks)),
+			BaseHunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
 		}
 		for _, hunk := range d.Hunks {
 			newHunkRange := codeowners.HunkRange{
@@ -162,6 +177,11 @@ func toDiffFiles(fileDiffs []*diff.FileDiff) ([]codeowners.DiffFile, error) {
 				End:   int(hunk.NewStartLine + hunk.NewLines - 1),
 			}
 			newDiffFile.Hunks = append(newDiffFile.Hunks, newHunkRange)
+			baseHunkRange := codeowners.HunkRange{
+				Start: int(hunk.OrigStartLine),
+				End:   int(hunk.OrigStartLine + hunk.OrigLines - 1),
+			}
+			newDiffFile.BaseHunks = append(newDiffFile.BaseHunks, baseHunkRange)
 		}
 		diffFiles = append(diffFiles, newDiffFile)
 	}
@@ -185,9 +205,15 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 	for _, d := range context.newerDiff {
 		fileName := diffToFilename(d)
 
+		baseFileName := diffToBaseFilename(d)
+		if baseFileName == fileName {
+			baseFileName = ""
+		}
 		newDiffFile := codeowners.DiffFile{
-			FileName: fileName,
-			Hunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
+			FileName:     fileName,
+			BaseFileName: baseFileName,
+			Hunks:        make([]codeowners.HunkRange, 0, len(d.Hunks)),
+			BaseHunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
 		}
 		for _, hunk := range d.Hunks {
 			if !oldHunkHashes[hunkHash(hunk)] {
@@ -196,6 +222,11 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 					End:   int(hunk.NewStartLine + hunk.NewLines - 1),
 				}
 				newDiffFile.Hunks = append(newDiffFile.Hunks, newHunkRange)
+				baseHunkRange := codeowners.HunkRange{
+					Start: int(hunk.OrigStartLine),
+					End:   int(hunk.OrigStartLine + hunk.OrigLines - 1),
+				}
+				newDiffFile.BaseHunks = append(newDiffFile.BaseHunks, baseHunkRange)
 			}
 		}
 		// Binary files have no hunks; staleness is intentionally not tracked
@@ -217,16 +248,25 @@ func getGitDiff(data DiffContext, executor gitCommandExecutor) ([]*diff.FileDiff
 		return nil, err
 	}
 	gitDiff = slices.DeleteFunc(gitDiff, func(d *diff.FileDiff) bool {
-		fileName := diffToFilename(d)
-
-		for _, dir := range data.IgnoreDirs {
-			if strings.HasPrefix(fileName, dir) {
-				return true
-			}
-		}
-		return false
+		// A file is dropped only when BOTH its old and new paths are
+		// ignored; otherwise renaming a file into an ignored directory
+		// would hide it from ownership checks.
+		return isIgnored(diffToFilename(d), data.IgnoreDirs) &&
+			isIgnored(diffToBaseFilename(d), data.IgnoreDirs)
 	})
 	return gitDiff, nil
+}
+
+func isIgnored(fileName string, ignoreDirs []string) bool {
+	if fileName == "" {
+		return true
+	}
+	for _, dir := range ignoreDirs {
+		if strings.HasPrefix(fileName, dir) {
+			return true
+		}
+	}
+	return false
 }
 
 func hunkHash(hunk *diff.Hunk) [32]byte {
