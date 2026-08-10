@@ -40,9 +40,8 @@ func MergeCodeOwners(base CodeOwners, head CodeOwners) CodeOwners {
 		}
 	}
 
-	// Merge unowned files. Only required owners confer ownership: a file
-	// with only optional reviewers is still unowned, matching the base
-	// .codeowners semantics.
+	// Only required owners confer ownership: a file with only optional
+	// reviewers is still unowned, matching .codeowners semantics.
 	filesWithRequiredOwners := make([]string, 0, len(mergedFileToOwner))
 	for file, owners := range mergedFileToOwner {
 		if len(owners.requiredReviewers) > 0 {

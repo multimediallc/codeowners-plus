@@ -147,7 +147,6 @@ func TestToCodeOwners(t *testing.T) {
 	warnings := &bytes.Buffer{}
 	co := ruleSet.ToCodeOwners(changed, warnings)
 
-	// Two rules match events.ts: their groups AND together
 	names := requiredNames(co, "src/telemetry/events.ts")
 	if !slices.Contains(names, "@org/data-platform") || !slices.Contains(names, "@org/frontend") {
 		t.Errorf("expected both oracle owners for events.ts, got %v", names)
@@ -156,12 +155,10 @@ func TestToCodeOwners(t *testing.T) {
 		t.Errorf("expected 2 AND groups for events.ts, got %d", len(co.FileRequired()["src/telemetry/events.ts"]))
 	}
 
-	// Globstar matches nested files
 	if names := requiredNames(co, "src/telemetry/nested/deep.py"); !slices.Contains(names, "@org/data-platform") {
 		t.Errorf("expected data-platform for nested file, got %v", names)
 	}
 
-	// Optional rules go to FileOptional, not FileRequired
 	if _, ok := co.FileRequired()["docs/readme.md"]; ok {
 		t.Error("optional rule should not create required reviewers")
 	}
@@ -170,7 +167,6 @@ func TestToCodeOwners(t *testing.T) {
 		t.Errorf("expected optional docs owner, got %v", optional)
 	}
 
-	// Unmatched files are not tracked and not unowned
 	if _, ok := co.FileRequired()["unrelated/main.go"]; ok {
 		t.Error("unmatched file should not be tracked")
 	}
@@ -178,7 +174,6 @@ func TestToCodeOwners(t *testing.T) {
 		t.Errorf("oracle CodeOwners should report no unowned files, got %v", co.UnownedFiles())
 	}
 
-	// Approvals satisfy oracle groups, case-insensitively
 	co.ApplyApprovals([]codeowners.Slug{codeowners.NewSlug("@ORG/Data-Platform")})
 	if names := requiredNames(co, "src/telemetry/nested/deep.py"); len(names) != 0 {
 		t.Errorf("expected no remaining required reviewers after approval, got %v", names)
@@ -189,7 +184,6 @@ func TestToCodeOwnersNilWarningWriter(t *testing.T) {
 	ruleSet := &RuleSet{Rules: []Rule{
 		{Files: []string{"[invalid"}, Owners: []string{"@org/data-platform"}},
 	}}
-	// Must not panic: the bad pattern's warning goes to io.Discard.
 	co := ruleSet.ToCodeOwners([]string{"a.go"}, nil)
 	if len(co.FileRequired()) != 0 {
 		t.Errorf("bad pattern should match nothing, got %v", co.FileRequired())
@@ -197,8 +191,6 @@ func TestToCodeOwnersNilWarningWriter(t *testing.T) {
 }
 
 func TestToCodeOwnersBadPattern(t *testing.T) {
-	// Parse rejects invalid patterns, but a RuleSet constructed directly
-	// can still carry one; matching warns and skips the pattern.
 	ruleSet := &RuleSet{Rules: []Rule{
 		{Files: []string{"[invalid"}, Owners: []string{"@org/data-platform"}},
 	}}

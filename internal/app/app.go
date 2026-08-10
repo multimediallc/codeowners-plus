@@ -168,7 +168,6 @@ func (a *App) Run() (*OutputData, error) {
 			return &OutputData{}, fmt.Errorf("NewCodeOwners Error: %v", err)
 		}
 	}
-	// Merge in computed ownership from oracle files, if any
 	codeOwners, err = a.applyOracles(codeOwners, gitDiff)
 	if err != nil {
 		return &OutputData{}, err

@@ -137,8 +137,6 @@ func TestApplyOraclesMultipleFiles(t *testing.T) {
 }
 
 func TestApplyOraclesUnownedFileBecomesOwned(t *testing.T) {
-	// A file .codeowners reports as unowned stops being reported once an
-	// oracle rule matches it (documented behavior).
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("package a"), 0o644); err != nil {
 		t.Fatal(err)
