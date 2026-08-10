@@ -55,9 +55,7 @@ func New(root string, files []DiffFile, fileReader FileReader, warningWriter io.
 	return ownersMap, err
 }
 
-// NewFromFileOwners creates a CodeOwners from explicit file-to-reviewers
-// maps. Files absent from both maps are untracked, leaving their unowned
-// status to the other side of a MergeCodeOwners merge.
+// NewFromFileOwners creates a CodeOwners from explicit file-to-reviewers maps; files absent from both maps are untracked, not unowned.
 func NewFromFileOwners(required map[string]ReviewerGroups, optional map[string]ReviewerGroups) CodeOwners {
 	fileToOwner := make(map[string]fileOwners)
 	for file, groups := range required {

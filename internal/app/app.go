@@ -218,9 +218,7 @@ func (a *App) Run() (*OutputData, error) {
 	return outputData, nil
 }
 
-// applyOracles AND-merges ownership from the configured oracle files.
-// A missing or malformed file is a hard error: silently skipping it
-// would drop required reviews.
+// applyOracles AND-merges ownership from the configured oracle files; a missing or malformed file is a hard error.
 func (a *App) applyOracles(codeOwners codeowners.CodeOwners, gitDiff git.Diff) (codeowners.CodeOwners, error) {
 	if len(a.config.OracleFiles) == 0 {
 		return codeOwners, nil

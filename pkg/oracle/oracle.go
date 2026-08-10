@@ -1,6 +1,4 @@
-// Package oracle loads reviewer requirements computed by external tooling
-// (JSON format documented in the README under "Ownership Oracles"). Oracle
-// rules can only add reviewer requirements, never weaken .codeowners ones.
+// Package oracle loads externally computed reviewer requirements (see "Ownership Oracles" in the README).
 package oracle
 
 import (
@@ -31,8 +29,7 @@ type RuleSet struct {
 	Rules []Rule `json:"rules"`
 }
 
-// Parse decodes and validates oracle JSON. A rule that cannot take effect
-// is an error, since silently skipping it would drop required reviews.
+// Parse decodes oracle JSON; rules that cannot take effect are errors, not skipped.
 func Parse(data []byte) (*RuleSet, error) {
 	var ruleSet RuleSet
 	if err := json.Unmarshal(data, &ruleSet); err != nil {
@@ -77,8 +74,7 @@ func Load(path string) (*RuleSet, error) {
 	return ruleSet, nil
 }
 
-// ToCodeOwners builds the rule set's requirements for the changed files,
-// suitable for AND-merging via codeowners.MergeCodeOwners.
+// ToCodeOwners builds the rules' requirements for changedFiles, for AND-merging via codeowners.MergeCodeOwners.
 func (rs *RuleSet) ToCodeOwners(changedFiles []string, warningWriter io.Writer) codeowners.CodeOwners {
 	if warningWriter == nil {
 		warningWriter = io.Discard
