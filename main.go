@@ -76,8 +76,6 @@ func ignoreError[V any, E error](res V, _ E) V {
 	return res
 }
 
-// splitOracleFiles parses the comma-separated oracle-files flag, dropping
-// empty entries so an unset input yields no oracle files.
 func splitOracleFiles(value string) []string {
 	parts := strings.Split(value, ",")
 	files := make([]string, 0, len(parts))

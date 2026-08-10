@@ -218,10 +218,9 @@ func (a *App) Run() (*OutputData, error) {
 	return outputData, nil
 }
 
-// applyOracles AND-merges computed ownership from the configured oracle
-// files into the .codeowners-derived ownership. Oracle rules can only add
-// reviewer requirements, so a missing or malformed oracle file is a hard
-// error: silently skipping one would drop required reviews.
+// applyOracles AND-merges ownership from the configured oracle files.
+// A missing or malformed file is a hard error: silently skipping it
+// would drop required reviews.
 func (a *App) applyOracles(codeOwners codeowners.CodeOwners, gitDiff git.Diff) (codeowners.CodeOwners, error) {
 	if len(a.config.OracleFiles) == 0 {
 		return codeOwners, nil

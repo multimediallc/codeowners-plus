@@ -11,8 +11,6 @@ import (
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 )
 
-// NewFromFileOwners is covered here (rather than pkg/codeowners) because
-// its consumers are the oracle and inline-ownership merge paths.
 func TestNewFromFileOwners(t *testing.T) {
 	rgm := codeowners.NewReviewerGroupMemo()
 	co := codeowners.NewFromFileOwners(

@@ -55,12 +55,9 @@ func New(root string, files []DiffFile, fileReader FileReader, warningWriter io.
 	return ownersMap, err
 }
 
-// NewFromFileOwners creates a CodeOwners directly from file-to-reviewers
-// maps, for ownership computed outside the .codeowners file tree (oracle
-// rules, inline ownership blocks). Files absent from both maps are not
-// tracked, so merging the result via MergeCodeOwners treats every file it
-// names as owned and leaves all other files' unowned status to the other
-// side of the merge.
+// NewFromFileOwners creates a CodeOwners from explicit file-to-reviewers
+// maps. Files absent from both maps are untracked, leaving their unowned
+// status to the other side of a MergeCodeOwners merge.
 func NewFromFileOwners(required map[string]ReviewerGroups, optional map[string]ReviewerGroups) CodeOwners {
 	fileToOwner := make(map[string]fileOwners)
 	for file, groups := range required {
