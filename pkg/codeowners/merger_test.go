@@ -179,6 +179,24 @@ func TestMergeCodeOwners(t *testing.T) {
 			expectedUnowned:  []string{}, // Should not be in unowned since it has owners
 		},
 		{
+			name:         "optional-only owners do not confer ownership",
+			baseRequired: map[string]ReviewerGroups{},
+			headRequired: map[string]ReviewerGroups{},
+			baseOptional: map[string]ReviewerGroups{},
+			headOptional: map[string]ReviewerGroups{
+				"file.py": {
+					{Names: NewSlugs([]string{"@watcher"}), Approved: false},
+				},
+			},
+			baseUnowned:      []string{"file.py"},
+			headUnowned:      []string{},
+			expectedRequired: map[string][]string{},
+			expectedOptional: map[string][]string{
+				"file.py": {"@watcher"},
+			},
+			expectedUnowned: []string{"file.py"},
+		},
+		{
 			name: "OR groups within each branch",
 			baseRequired: map[string]ReviewerGroups{
 				"file.py": {

@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
@@ -67,12 +68,17 @@ func Parse(data []byte) (*RuleSet, error) {
 			if pattern == "" || !doublestar.ValidatePattern(pattern) {
 				return nil, fmt.Errorf("oracle rule %d has an invalid pattern %q", i, pattern)
 			}
+			// Doublestar patterns are already repo-root-anchored; a
+			// CODEOWNERS-style leading slash would silently never match.
+			if strings.HasPrefix(pattern, "/") {
+				return nil, fmt.Errorf("oracle rule %d has a leading-slash pattern %q (patterns are repo-root-relative; drop the leading slash)", i, pattern)
+			}
 		}
 		if len(rule.Owners) == 0 {
 			return nil, fmt.Errorf("oracle rule %d has no owners", i)
 		}
 		for _, owner := range rule.Owners {
-			if owner == "" {
+			if strings.TrimSpace(owner) == "" {
 				return nil, fmt.Errorf("oracle rule %d has an empty owner", i)
 			}
 		}

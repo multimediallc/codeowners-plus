@@ -163,6 +163,62 @@ func TestApplyOraclesUnownedFileBecomesOwned(t *testing.T) {
 	}
 }
 
+func TestApplyOraclesUnmatchedFileStaysUnowned(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a.go", "b.go"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("package x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	diff := mockGitDiff{changes: []string{"a.go", "b.go"}}
+	base, err := codeowners.New(dir, diff.AllChanges(), nil, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(base.UnownedFiles()) != 2 {
+		t.Fatalf("expected both files to start unowned, got %v", base.UnownedFiles())
+	}
+
+	path := writeOracleFile(t, `{"rules": [{"files": ["a.go"], "owners": ["@org/adopters"]}]}`)
+	app := oracleTestApp([]string{path})
+	result, err := app.applyOracles(base, diff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if unowned := result.UnownedFiles(); !slices.Equal(unowned, []string{"b.go"}) {
+		t.Errorf("expected only b.go to remain unowned, got %v", unowned)
+	}
+}
+
+func TestApplyOraclesOptionalRuleKeepsUnowned(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("package a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	diff := mockGitDiff{changes: []string{"a.go"}}
+	base, err := codeowners.New(dir, diff.AllChanges(), nil, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(base.UnownedFiles()) != 1 {
+		t.Fatalf("expected a.go to start unowned, got %v", base.UnownedFiles())
+	}
+
+	path := writeOracleFile(t, `{"rules": [{"files": ["a.go"], "owners": ["@org/watchers"], "optional": true}]}`)
+	app := oracleTestApp([]string{path})
+	result, err := app.applyOracles(base, diff)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if unowned := result.UnownedFiles(); !slices.Equal(unowned, []string{"a.go"}) {
+		t.Errorf("optional-only oracle match should not confer ownership, got unowned: %v", unowned)
+	}
+	optional := result.FileOptional()["a.go"]
+	if len(optional) != 1 {
+		t.Errorf("expected the optional group to still be attached, got %v", optional)
+	}
+}
+
 func TestApplyOraclesEmptyRules(t *testing.T) {
 	path := writeOracleFile(t, `{"rules": []}`)
 	app := oracleTestApp([]string{path})

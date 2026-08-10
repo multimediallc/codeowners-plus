@@ -393,7 +393,7 @@ An oracle file is JSON, written by any earlier workflow step:
 }
 ```
 
-* `files`: doublestar glob patterns matched against the full repo-relative paths of files changed in the PR
+* `files`: doublestar glob patterns matched against the full repo-relative paths of files changed in the PR (no leading slash; patterns are already anchored to the repo root, and a leading slash is rejected)
 * `owners`: a single OR group where any one of the listed owners satisfies the rule (same semantics as a `.codeowners` line)
 * `optional`: when `true`, owners are CC'd instead of required
 * `reason`: human-readable explanation, shown in verbose output
@@ -418,8 +418,9 @@ Oracle requirements are AND-merged with `.codeowners` requirements, the same mec
 Notes:
 
 * Oracle rules can only add reviewer requirements, never remove or weaken requirements from `.codeowners` files, so a tampered oracle file can at worst request extra reviews.
+* The script that *generates* the oracle file is a different story: in a `pull_request`-triggered workflow it runs from the PR checkout, so a PR author could modify it in the same PR to emit no rules. If an oracle enforces security-critical reviews, protect the generator script with a `.codeowners` rule, or run it from the base branch (for example via a `pull_request_target` workflow).
 * A missing or malformed oracle file is a hard error (the check fails), since silently skipping one would drop required reviews.
-* A file matched by an oracle rule counts as owned, so it is not reported as an unowned file.
+* A file matched by a required (non-`optional`) oracle rule counts as owned, so it is not reported as an unowned file. Optional rules CC reviewers but do not confer ownership.
 
 ## CLI Tool
 

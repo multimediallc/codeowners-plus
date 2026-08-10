@@ -54,6 +54,11 @@ func TestParse(t *testing.T) {
 			expectedErr: `rule 0 has an invalid pattern ""`,
 		},
 		{
+			name:        "rule with leading-slash pattern",
+			input:       `{"rules": [{"files": ["/src/**"], "owners": ["@team-a"]}]}`,
+			expectedErr: `rule 0 has a leading-slash pattern "/src/**"`,
+		},
+		{
 			name:        "rule without owners",
 			input:       `{"rules": [{"files": ["a.go"], "owners": []}]}`,
 			expectedErr: "rule 0 has no owners",
@@ -61,6 +66,11 @@ func TestParse(t *testing.T) {
 		{
 			name:        "rule with empty owner",
 			input:       `{"rules": [{"files": ["a.go"], "owners": [""]}]}`,
+			expectedErr: "rule 0 has an empty owner",
+		},
+		{
+			name:        "rule with whitespace-only owner",
+			input:       `{"rules": [{"files": ["a.go"], "owners": [" "]}]}`,
 			expectedErr: "rule 0 has an empty owner",
 		},
 	}
