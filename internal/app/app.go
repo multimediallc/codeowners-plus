@@ -258,6 +258,12 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 		return false, message, nil, err
 	}
 
+	// Drop review requests for owners the PR no longer needs
+	err = a.removeStaleReviewRequests(slices.Concat(allRequiredOwnerNames, allOptionalReviewerNames))
+	if err != nil {
+		return false, message, nil, err
+	}
+
 	// Request reviews from required owners
 	err = a.requestReviews()
 	if err != nil {
@@ -527,6 +533,56 @@ func (a *App) processApprovals(ghApprovals []*gh.CurrentApproval) (int, error) {
 	}
 
 	return len(ghApprovals) - len(approvalsToDismiss), nil
+}
+
+// removeStaleReviewRequests drops the review requests this action made for
+// owners the PR no longer involves - for example when the author reverts the
+// changes which pulled a team in.  currentOwners is every owner of the current
+// diff (required and optional), and only review requests made by the token user
+// are removed, so reviewers somebody added by hand are left alone.
+//
+// This is opt-in via the remove_stale_review_requests config setting.
+func (a *App) removeStaleReviewRequests(currentOwners []codeowners.Slug) error {
+	if a.config.Quiet {
+		return nil
+	}
+	if !a.Conf.RemoveStaleReviewRequests {
+		a.printDebug("Skipping stale review request removal (not enabled in config).\n")
+		return nil
+	}
+
+	requestedReviewers, err := a.client.GetRequestedReviewers()
+	if err != nil {
+		return fmt.Errorf("GetRequestedReviewers Error: %v", err)
+	}
+	staleCandidates := codeowners.FilterOutNames(requestedReviewers, currentOwners)
+	if len(staleCandidates) == 0 {
+		return nil
+	}
+	a.printDebug("Requested Reviewers no longer owning changed files: %s\n", codeowners.OriginalStrings(staleCandidates))
+
+	// Only remove the requests we made ourselves - anything a human requested
+	// stays, even when they do not own any of the changed files.
+	selfRequested, err := a.client.GetSelfRequestedReviewers()
+	if err != nil {
+		a.printWarn("WARNING: Error finding review requests to remove: %v\n", err)
+		return nil
+	}
+	staleReviewers := f.Filtered(staleCandidates, func(reviewer codeowners.Slug) bool {
+		return codeowners.ContainsSlug(selfRequested, reviewer)
+	})
+
+	if len(staleReviewers) == 0 {
+		a.printDebug("No stale review requests to remove.\n")
+		return nil
+	}
+
+	a.printDebug("Removing Review Requests from: %s\n", codeowners.OriginalStrings(staleReviewers))
+	if err := a.client.RemoveReviewers(codeowners.OriginalStrings(staleReviewers)); err != nil {
+		return fmt.Errorf("RemoveReviewers Error: %v", err)
+	}
+
+	return nil
 }
 
 func (a *App) requestReviews() error {

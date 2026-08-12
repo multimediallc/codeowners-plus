@@ -126,6 +126,23 @@ allow_self_approval = true
 			expectedErr: false,
 		},
 		{
+			name: "config with remove_stale_review_requests enabled",
+			configContent: `
+remove_stale_review_requests = true
+`,
+			path: "testdata/",
+			expected: &Config{
+				MaxReviews:                nil,
+				MinReviews:                nil,
+				UnskippableReviewers:      []string{},
+				Ignore:                    []string{},
+				Enforcement:               &Enforcement{Approval: false, FailCheck: true},
+				HighPriorityLabels:        []string{},
+				RemoveStaleReviewRequests: true,
+			},
+			expectedErr: false,
+		},
+		{
 			name: "invalid toml",
 			configContent: `
 max_reviews = invalid
@@ -213,6 +230,10 @@ max_reviews = invalid
 
 				if got.AllowSelfApproval != tc.expected.AllowSelfApproval {
 					t.Errorf("AllowSelfApproval: expected %v, got %v", tc.expected.AllowSelfApproval, got.AllowSelfApproval)
+				}
+
+				if got.RemoveStaleReviewRequests != tc.expected.RemoveStaleReviewRequests {
+					t.Errorf("RemoveStaleReviewRequests: expected %v, got %v", tc.expected.RemoveStaleReviewRequests, got.RemoveStaleReviewRequests)
 				}
 
 				if tc.expected.Enforcement != nil {

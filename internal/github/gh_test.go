@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -409,6 +410,26 @@ func TestNilPRErr(t *testing.T) {
 			name: "RequestReviewers",
 			testFn: func() error {
 				return gh.RequestReviewers([]string{})
+			},
+		},
+		{
+			name: "RemoveReviewers",
+			testFn: func() error {
+				return gh.RemoveReviewers([]string{})
+			},
+		},
+		{
+			name: "GetRequestedReviewers",
+			testFn: func() error {
+				_, err := gh.GetRequestedReviewers()
+				return err
+			},
+		},
+		{
+			name: "GetSelfRequestedReviewers",
+			testFn: func() error {
+				_, err := gh.GetSelfRequestedReviewers()
+				return err
 			},
 		},
 		{
@@ -836,6 +857,282 @@ func TestRequestReviewersFailure(t *testing.T) {
 
 	err := gh.RequestReviewers(reviewers)
 	if err == nil {
+		t.Error("expected an error, got nil")
+	}
+}
+
+func TestRemoveReviewersSuccess(t *testing.T) {
+	mux, server, gh := mockServerAndClient(t)
+	defer server.Close()
+
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
+
+	reviewers := []string{"@reviewer1", "@org/team1"}
+
+	// Mock the GitHub API endpoint
+	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/requested_reviewers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("expected method DELETE, got %s", r.Method)
+		}
+
+		// Validate the request payload
+		var req github.ReviewersRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+		}
+		if len(req.Reviewers) != 1 || req.Reviewers[0] != "reviewer1" {
+			t.Errorf("expected reviewers [reviewer1], got %v", req.Reviewers)
+		}
+		if len(req.TeamReviewers) != 1 || req.TeamReviewers[0] != "team1" {
+			t.Errorf("expected team reviewers [team1], got %v", req.TeamReviewers)
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	err := gh.RemoveReviewers(reviewers)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRemoveReviewersNoReviewers(t *testing.T) {
+	mux, server, gh := mockServerAndClient(t)
+	defer server.Close()
+
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
+
+	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/requested_reviewers", func(w http.ResponseWriter, r *http.Request) {
+		t.Error("expected no request to be made for an empty reviewer list")
+	})
+
+	if err := gh.RemoveReviewers([]string{}); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRemoveReviewersFailure(t *testing.T) {
+	mux, server, gh := mockServerAndClient(t)
+	defer server.Close()
+
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
+
+	reviewers := []string{"@reviewer1", "@org/team1"}
+
+	// Mock the GitHub API to simulate an error
+	mux.HandleFunc("/repos/test-owner/test-repo/pulls/123/requested_reviewers", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	})
+
+	err := gh.RemoveReviewers(reviewers)
+	if err == nil {
+		t.Error("expected an error, got nil")
+	}
+}
+
+func TestGetRequestedReviewers(t *testing.T) {
+	c, err := NewClient("test-owner", "test-repo", "test-token")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gh := c.(*GHClient)
+	gh.pr = &github.PullRequest{
+		Number: github.Ptr(123),
+		RequestedReviewers: []*github.User{
+			{Login: github.Ptr("user1")},
+		},
+		RequestedTeams: []*github.Team{
+			{Slug: github.Ptr("team1")},
+			{Slug: github.Ptr("team2")},
+		},
+	}
+
+	requested, err := gh.GetRequestedReviewers()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := []string{"@user1", "@test-owner/team1", "@test-owner/team2"}
+	if !slices.Equal(codeowners.OriginalStrings(requested), expected) {
+		t.Errorf("expected %v, got %v", expected, codeowners.OriginalStrings(requested))
+	}
+}
+
+func TestSelfRequestedReviewers(t *testing.T) {
+	requested := func(actor string, reviewer *github.User, team *github.Team) *github.Timeline {
+		return &github.Timeline{
+			Event:         github.Ptr("review_requested"),
+			Actor:         &github.User{Login: github.Ptr(actor)},
+			Reviewer:      reviewer,
+			RequestedTeam: team,
+		}
+	}
+	removed := func(actor string, reviewer *github.User, team *github.Team) *github.Timeline {
+		return &github.Timeline{
+			Event:         github.Ptr("review_request_removed"),
+			Actor:         &github.User{Login: github.Ptr(actor)},
+			Reviewer:      reviewer,
+			RequestedTeam: team,
+		}
+	}
+	user := func(login string) *github.User { return &github.User{Login: github.Ptr(login)} }
+	team := func(slug string) *github.Team { return &github.Team{Slug: github.Ptr(slug)} }
+
+	tt := []struct {
+		name     string
+		pr       *github.PullRequest
+		timeline []*github.Timeline
+		expected []string
+	}{
+		{
+			name: "requests made by the token user",
+			pr: &github.PullRequest{
+				RequestedReviewers: []*github.User{user("user1")},
+				RequestedTeams:     []*github.Team{team("team1")},
+			},
+			timeline: []*github.Timeline{
+				requested("bot-user", user("user1"), nil),
+				requested("bot-user", nil, team("team1")),
+			},
+			expected: []string{"@user1", "@test-owner/team1"},
+		},
+		{
+			name: "requests made by somebody else are excluded",
+			pr: &github.PullRequest{
+				RequestedReviewers: []*github.User{user("user1")},
+				RequestedTeams:     []*github.Team{team("team1")},
+			},
+			timeline: []*github.Timeline{
+				requested("human", user("user1"), nil),
+				requested("bot-user", nil, team("team1")),
+			},
+			expected: []string{"@test-owner/team1"},
+		},
+		{
+			name: "the most recent request wins",
+			pr: &github.PullRequest{
+				RequestedTeams: []*github.Team{team("team1"), team("team2")},
+			},
+			timeline: []*github.Timeline{
+				requested("human", nil, team("team1")),
+				requested("bot-user", nil, team("team2")),
+				requested("bot-user", nil, team("team1")),
+				removed("human", nil, team("team2")),
+				requested("human", nil, team("team2")),
+			},
+			expected: []string{"@test-owner/team1"},
+		},
+		{
+			name: "reviewers no longer requested on the PR are excluded",
+			pr: &github.PullRequest{
+				RequestedTeams: []*github.Team{team("team1")},
+			},
+			timeline: []*github.Timeline{
+				requested("bot-user", nil, team("team1")),
+				requested("bot-user", nil, team("team2")),
+			},
+			expected: []string{"@test-owner/team1"},
+		},
+		{
+			name: "reviewers without a request event are excluded",
+			pr: &github.PullRequest{
+				RequestedTeams: []*github.Team{team("team1")},
+			},
+			timeline: []*github.Timeline{
+				{Event: github.Ptr("commented"), Actor: user("bot-user")},
+			},
+			expected: []string{},
+		},
+		{
+			name: "actor matching is case insensitive",
+			pr: &github.PullRequest{
+				RequestedTeams: []*github.Team{team("team1")},
+			},
+			timeline: []*github.Timeline{
+				requested("Bot-User", nil, team("team1")),
+			},
+			expected: []string{"@test-owner/team1"},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			result := selfRequestedReviewers(tc.pr, "test-owner", tc.timeline, "bot-user")
+			if !slices.Equal(codeowners.OriginalStrings(result), tc.expected) {
+				t.Errorf("expected %v, got %v", tc.expected, codeowners.OriginalStrings(result))
+			}
+		})
+	}
+}
+
+func TestGetSelfRequestedReviewers(t *testing.T) {
+	mux, server, gh := mockServerAndClient(t)
+	defer server.Close()
+
+	gh.pr = &github.PullRequest{
+		Number:             github.Ptr(123),
+		RequestedReviewers: []*github.User{{Login: github.Ptr("user1")}},
+		RequestedTeams:     []*github.Team{{Slug: github.Ptr("team1")}},
+	}
+
+	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(&github.User{Login: github.Ptr("bot-user")})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/timeline", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]*github.Timeline{
+			{
+				Event:    github.Ptr("review_requested"),
+				Actor:    &github.User{Login: github.Ptr("human")},
+				Reviewer: &github.User{Login: github.Ptr("user1")},
+			},
+			{
+				Event:         github.Ptr("review_requested"),
+				Actor:         &github.User{Login: github.Ptr("bot-user")},
+				RequestedTeam: &github.Team{Slug: github.Ptr("team1")},
+			},
+		})
+	})
+
+	requested, err := gh.GetSelfRequestedReviewers()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := []string{"@test-owner/team1"}
+	if !slices.Equal(codeowners.OriginalStrings(requested), expected) {
+		t.Errorf("expected %v, got %v", expected, codeowners.OriginalStrings(requested))
+	}
+}
+
+func TestGetSelfRequestedReviewersTokenUserFailure(t *testing.T) {
+	mux, server, gh := mockServerAndClient(t)
+	defer server.Close()
+
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
+
+	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Resource not accessible by integration", http.StatusForbidden)
+	})
+
+	if _, err := gh.GetSelfRequestedReviewers(); err == nil {
+		t.Error("expected an error, got nil")
+	}
+}
+
+func TestGetSelfRequestedReviewersTimelineFailure(t *testing.T) {
+	mux, server, gh := mockServerAndClient(t)
+	defer server.Close()
+
+	gh.pr = &github.PullRequest{Number: github.Ptr(123)}
+
+	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(&github.User{Login: github.Ptr("bot-user")})
+	})
+	mux.HandleFunc("/repos/test-owner/test-repo/issues/123/timeline", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	})
+
+	if _, err := gh.GetSelfRequestedReviewers(); err == nil {
 		t.Error("expected an error, got nil")
 	}
 }
