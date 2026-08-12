@@ -879,7 +879,8 @@ func TestRemoveStaleReviewRequests(t *testing.T) {
 			expectError:             true,
 		},
 		{
-			name:                   "errors when removal fails",
+			// Removal is cosmetic, so a failed cleanup must not fail the check
+			name:                   "warns and continues when removal fails",
 			removalEnabled:         true,
 			currentOwners:          codeowners.NewSlugs([]string{"@org/team1"}),
 			requestedReviewers:     codeowners.NewSlugs([]string{"@org/team2"}),
@@ -887,7 +888,7 @@ func TestRemoveStaleReviewRequests(t *testing.T) {
 			removeReviewersError:   fmt.Errorf("api error"),
 			expectedShouldCall:     true,
 			expectedRemoved:        []string{"@org/team2"},
-			expectError:            true,
+			expectError:            false,
 		},
 	}
 

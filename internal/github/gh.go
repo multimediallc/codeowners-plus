@@ -68,6 +68,7 @@ type GHClient struct {
 	userReviewerMap ghUserReviewerMap
 	comments        []*github.IssueComment
 	reviews         []*github.PullRequestReview
+	tokenUser       string
 	warningBuffer   io.Writer
 	infoBuffer      io.Writer
 }
@@ -78,16 +79,12 @@ func NewClient(owner, repo, token string) (Client, error) {
 		return nil, err
 	}
 	return &GHClient{
-		context.Background(),
-		owner,
-		repo,
-		client,
-		nil,
-		nil,
-		nil,
-		nil,
-		io.Discard,
-		io.Discard,
+		ctx:           context.Background(),
+		owner:         owner,
+		repo:          repo,
+		client:        client,
+		warningBuffer: io.Discard,
+		infoBuffer:    io.Discard,
 	}, nil
 }
 
@@ -145,12 +142,18 @@ func (gh *GHClient) UserReviewers(user string) []codeowners.Slug {
 	return gh.userReviewerMap[strings.ToLower(strings.TrimPrefix(user, "@"))]
 }
 
+// GetTokenUser returns the login of the user the client token belongs to,
+// caching it so repeat callers do not each cost a GET /user.
 func (gh *GHClient) GetTokenUser() (string, error) {
+	if gh.tokenUser != "" {
+		return gh.tokenUser, nil
+	}
 	user, _, err := gh.client.Users.Get(gh.ctx, "")
 	if err != nil {
 		return "", err
 	}
-	return user.GetLogin(), nil
+	gh.tokenUser = user.GetLogin()
+	return gh.tokenUser, nil
 }
 
 func (gh *GHClient) InitReviews() error {
@@ -492,8 +495,8 @@ func (gh *GHClient) RequestReviewers(reviewers []string) error {
 	if len(reviewers) == 0 {
 		return nil
 	}
-	indvidualReviewers, teamReviewers := splitReviewers(reviewers)
-	reviewersRequest := github.ReviewersRequest{Reviewers: indvidualReviewers, TeamReviewers: teamReviewers}
+	individualReviewers, teamReviewers := splitReviewers(reviewers)
+	reviewersRequest := github.ReviewersRequest{Reviewers: individualReviewers, TeamReviewers: teamReviewers}
 	_, res, err := gh.client.PullRequests.RequestReviewers(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), reviewersRequest)
 	if err != nil {
 		return err
@@ -511,8 +514,8 @@ func (gh *GHClient) RemoveReviewers(reviewers []string) error {
 	if len(reviewers) == 0 {
 		return nil
 	}
-	indvidualReviewers, teamReviewers := splitReviewers(reviewers)
-	reviewersRequest := github.ReviewersRequest{Reviewers: indvidualReviewers, TeamReviewers: teamReviewers}
+	individualReviewers, teamReviewers := splitReviewers(reviewers)
+	reviewersRequest := github.ReviewersRequest{Reviewers: individualReviewers, TeamReviewers: teamReviewers}
 	res, err := gh.client.PullRequests.RemoveReviewers(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), reviewersRequest)
 	if err != nil {
 		return err
@@ -524,7 +527,7 @@ func (gh *GHClient) RemoveReviewers(reviewers []string) error {
 }
 
 func splitReviewers(reviewers []string) ([]string, []string) {
-	indvidualReviewers := make([]string, 0, len(reviewers))
+	individualReviewers := make([]string, 0, len(reviewers))
 	teamReviewers := make([]string, 0, len(reviewers))
 	for _, reviewer := range reviewers {
 		reviewerString := reviewer[1:] // trim the @
@@ -532,10 +535,10 @@ func splitReviewers(reviewers []string) ([]string, []string) {
 			split := strings.SplitN(reviewerString, "/", 2)
 			teamReviewers = append(teamReviewers, split[1])
 		} else {
-			indvidualReviewers = append(indvidualReviewers, reviewerString)
+			individualReviewers = append(individualReviewers, reviewerString)
 		}
 	}
-	return indvidualReviewers, teamReviewers
+	return individualReviewers, teamReviewers
 }
 
 func (gh *GHClient) ApprovePR() error {

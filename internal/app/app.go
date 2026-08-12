@@ -579,7 +579,8 @@ func (a *App) removeStaleReviewRequests(currentOwners []codeowners.Slug) error {
 
 	a.printDebug("Removing Review Requests from: %s\n", codeowners.OriginalStrings(staleReviewers))
 	if err := a.client.RemoveReviewers(codeowners.OriginalStrings(staleReviewers)); err != nil {
-		return fmt.Errorf("RemoveReviewers Error: %v", err)
+		// Removal is cosmetic - a transient API error should not fail the check
+		a.printWarn("WARNING: Error removing stale review requests: %v\n", err)
 	}
 
 	return nil

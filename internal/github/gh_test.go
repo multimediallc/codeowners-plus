@@ -693,6 +693,32 @@ func TestGetTokenUserSuccess(t *testing.T) {
 	}
 }
 
+func TestGetTokenUserCached(t *testing.T) {
+	mux, server, gh := mockServerAndClient(t)
+	defer server.Close()
+
+	calls := 0
+	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&github.User{Login: github.Ptr("test-user")})
+	})
+
+	for range 3 {
+		user, err := gh.GetTokenUser()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if user != "test-user" {
+			t.Errorf("expected user 'test-user', got '%s'", user)
+		}
+	}
+
+	if calls != 1 {
+		t.Errorf("expected 1 call to GET /user, got %d", calls)
+	}
+}
+
 func TestGetTokenUserFailure(t *testing.T) {
 	mux, server, gh := mockServerAndClient(t)
 	defer server.Close()
