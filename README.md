@@ -261,6 +261,10 @@ disable_review_status_comments = false
 # `admin_bypass` allows repository administrators to bypass codeowner requirements
 [admin_bypass]
 # see "Admin Bypass" below for more details
+
+# `approval_retention` allows you to specify which kinds of changes may keep an existing approval
+[approval_retention]
+# see "Approval Retention" below for more details
 ```
 
 When a PR has any of the `high_priority_labels`, the comment will look like this:
@@ -329,6 +333,38 @@ To trigger the admin bypass feature, **Create an approval review containing "Cod
 Codeowners Plus automatically detects and validates the bypass approval, immediately marking the PR as passing all codeowner requirements.
 
 The bypass text is case-insensitive, so "codeowners bypass", "Codeowners Bypass", or "CODEOWNERS BYPASS" all work.
+
+#### Approval Retention
+
+The `approval_retention` section lists the kinds of changes which may keep an existing approval instead of dismissing it. Everything in it is opt-in: `enabled` turns the section on, and each kind of change has to be named as well. Upgrading never changes how your approvals behave.
+
+`codeowners.toml`:
+```toml
+[approval_retention]
+# `enabled` (default false) turns the section on. On its own it retains nothing.
+enabled = true
+# Each flag below defaults to false and has to be asked for by name.
+# `whitespace` retains approvals across whitespace-only changes
+whitespace = true
+# `comments` retains approvals across comment-only changes
+comments = true
+# `formatting` retains approvals across formatting-only changes
+formatting = true
+# `string_literals` retains approvals across string literal changes
+string_literals = false
+# `renames` retains approvals across renames
+renames = false
+# `fetch_orphaned_approval` looks for approvals which are no longer
+#  attached to the current commit
+fetch_orphaned_approval = false
+```
+
+- Nothing set: every flag is off
+- `enabled = true` and nothing else: every flag is still off
+- `enabled = false` with flags set to `true`: every flag is off, so the section is a single kill switch
+- `enabled = true` with `whitespace = true`: whitespace only
+
+What counts as a change not worth re-reviewing is a judgement about a particular codebase, not something to inherit from a default. Two flags deserve extra thought before you name them. A change to a string literal or a rename can alter behavior without changing the shape of the code the approver reviewed, so retaining an approval across one is a stronger claim than the other categories. And `fetch_orphaned_approval` is the only flag in the section which reaches outside the checkout, so it adds network calls to a run.
 
 #### Require Both Branch Reviewers (Ownership Handoffs)
 

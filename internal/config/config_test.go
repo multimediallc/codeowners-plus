@@ -250,6 +250,193 @@ func TestReadConfigFileError(t *testing.T) {
 	}
 }
 
+func TestApprovalRetention(t *testing.T) {
+	type resolved struct {
+		whitespace            bool
+		comments              bool
+		formatting            bool
+		stringLiterals        bool
+		renames               bool
+		fetchOrphanedApproval bool
+	}
+
+	tt := []struct {
+		name          string
+		configContent string
+		expected      resolved
+	}{
+		{
+			name:          "section absent",
+			configContent: "max_reviews = 2",
+			expected:      resolved{},
+		},
+		{
+			name: "umbrella off with nothing else set",
+			configContent: `
+[approval_retention]
+enabled = false
+`,
+			expected: resolved{},
+		},
+		{
+			name: "umbrella off ignores explicitly enabled flags",
+			configContent: `
+[approval_retention]
+enabled = false
+whitespace = true
+string_literals = true
+renames = true
+fetch_orphaned_approval = true
+`,
+			expected: resolved{},
+		},
+		{
+			name: "master switch on retains nothing on its own",
+			configContent: `
+[approval_retention]
+enabled = true
+`,
+			expected: resolved{},
+		},
+		// One flag per case, so an accessor reading the wrong field fails one.
+		{
+			name: "only whitespace asked for",
+			configContent: `
+[approval_retention]
+enabled = true
+whitespace = true
+`,
+			expected: resolved{whitespace: true},
+		},
+		{
+			name: "only comments asked for",
+			configContent: `
+[approval_retention]
+enabled = true
+comments = true
+`,
+			expected: resolved{comments: true},
+		},
+		{
+			name: "only formatting asked for",
+			configContent: `
+[approval_retention]
+enabled = true
+formatting = true
+`,
+			expected: resolved{formatting: true},
+		},
+		{
+			name: "only string_literals asked for",
+			configContent: `
+[approval_retention]
+enabled = true
+string_literals = true
+`,
+			expected: resolved{stringLiterals: true},
+		},
+		{
+			name: "only renames asked for",
+			configContent: `
+[approval_retention]
+enabled = true
+renames = true
+`,
+			expected: resolved{renames: true},
+		},
+		{
+			name: "only fetch_orphaned_approval asked for",
+			configContent: `
+[approval_retention]
+enabled = true
+fetch_orphaned_approval = true
+`,
+			expected: resolved{fetchOrphanedApproval: true},
+		},
+		{
+			name: "a flag asked for without the master switch stays off",
+			configContent: `
+[approval_retention]
+whitespace = true
+comments = true
+formatting = true
+`,
+			expected: resolved{},
+		},
+		{
+			name: "every flag asked for",
+			configContent: `
+[approval_retention]
+enabled = true
+whitespace = true
+comments = true
+formatting = true
+string_literals = true
+renames = true
+fetch_orphaned_approval = true
+`,
+			expected: resolved{
+				whitespace: true, comments: true, formatting: true,
+				stringLiterals: true, renames: true, fetchOrphanedApproval: true,
+			},
+		},
+		{
+			name: "every flag explicitly false",
+			configContent: `
+[approval_retention]
+enabled = true
+whitespace = false
+comments = false
+formatting = false
+string_literals = false
+renames = false
+fetch_orphaned_approval = false
+`,
+			expected: resolved{},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			testDir := t.TempDir()
+			err := os.WriteFile(filepath.Join(testDir, "codeowners.toml"), []byte(tc.configContent), 0644)
+			if err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			config, err := ReadConfig(testDir, nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if config.ApprovalRetention == nil {
+				t.Fatal("expected ApprovalRetention to be set")
+			}
+
+			got := resolved{
+				whitespace:            config.ApprovalRetention.WhitespaceEnabled(),
+				comments:              config.ApprovalRetention.CommentsEnabled(),
+				formatting:            config.ApprovalRetention.FormattingEnabled(),
+				stringLiterals:        config.ApprovalRetention.StringLiteralsEnabled(),
+				renames:               config.ApprovalRetention.RenamesEnabled(),
+				fetchOrphanedApproval: config.ApprovalRetention.FetchOrphanedApprovalEnabled(),
+			}
+			if got != tc.expected {
+				t.Errorf("resolved flags: expected %+v, got %+v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestApprovalRetentionNilSection(t *testing.T) {
+	var retention *ApprovalRetention
+
+	if retention.WhitespaceEnabled() || retention.CommentsEnabled() || retention.FormattingEnabled() ||
+		retention.StringLiteralsEnabled() || retention.RenamesEnabled() || retention.FetchOrphanedApprovalEnabled() {
+		t.Error("expected all flags to be disabled for a nil section")
+	}
+}
+
 // Helper functions
 func intPtr(i int) *int {
 	return &i

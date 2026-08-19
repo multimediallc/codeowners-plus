@@ -129,7 +129,7 @@ Binary files a/assets/img/offline.png and b/assets/img/offline.png differ`,
 			expectedErr:   false,
 			expectedFiles: 2,
 			expectedHunks: map[string]int{
-				"file1.go":                1,
+				"file1.go":               1,
 				"assets/img/offline.png": 0,
 			},
 		},
