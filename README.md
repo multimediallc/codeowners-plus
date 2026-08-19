@@ -368,7 +368,15 @@ What counts as a change not worth re-reviewing is a judgement about a particular
 
 A change is checked one hunk at a time. Everything the hunk adds is compared against everything it removes, as two whole blocks rather than line by line, so a statement rewrapped across several lines still matches the single line it replaced. A hunk whose two sides are equal once the enabled flags have had their say is treated as if the approver had already seen it. Anything the enabled flags cannot account for dismisses the approval as before.
 
+<<<<<<< HEAD
 `formatting` ignores everything `whitespace` ignores and, on top of that, braces, semicolons and trailing commas. Parentheses are always significant, since their placement decides operator precedence and separates a call from a reference. Only the shape of the code is compared, so dropping the braces around a multi-statement body reads as formatting. Indentation is the exception: where a language delimits a block by it, the same lines moved to a different depth are a change in what runs, so they dismiss. A pair of braces which closes over nothing is an exception: an empty argument, body or literal says something the code does not say without it, so adding or removing one is a change like any other.
+=======
+A flag only retains a hunk it read. Where a hunk's two sides are already the same text before any flag has looked at them - a line deleted and added back, a line moved, a hunk of nothing but blank lines - what changed is where the lines sit, so `whitespace` and `formatting` are the only flags which may keep it. `comments`, `string_literals` and `renames` rewrite something else, and a flag which rewrote nothing here has nothing to vouch for.
+
+`whitespace` ignores indentation, alignment padding, trailing whitespace, blank lines and which line a token happens to sit on. It rewrites only the gaps between tokens, never the tokens themselves, so a change which runs two names together into one is not whitespace.
+
+`formatting` ignores everything `whitespace` ignores and, on top of that, braces, semicolons and trailing commas. Parentheses are always significant, since their placement decides operator precedence and separates a call from a reference. Only the shape of the code is compared, so a change which moves a statement into or out of a block without editing the statement itself - re-indenting a line in an indentation-sensitive language, or dropping the braces around a multi-statement body - reads as formatting. A pair of braces which closes over nothing is an exception: an empty argument, body or literal says something the code does not say without it, so adding or removing one is a change like any other. `formatting` therefore covers `whitespace`; enable `whitespace` alone for the narrower reading.
+>>>>>>> 503b85f (feat: retain approvals across whitespace-only hunks)
 
 #### Require Both Branch Reviewers (Ownership Handoffs)
 
