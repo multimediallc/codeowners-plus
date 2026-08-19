@@ -26,6 +26,11 @@ func inAnyLanguage(step func(string) string) normalizeStep {
 
 func newNormalizer(retention *owners.ApprovalRetention) normalizer {
 	n := normalizer{}
+	// Blanked while the block still spells them in full: the steps below rewrite
+	// the punctuation the whitelist reads to decide whether a string is copy.
+	if retention.StringLiteralsEnabled() {
+		n.steps = append(n.steps, inAnyLanguage(blankTranslatedCopy))
+	}
 	if retention.FormattingEnabled() {
 		n.steps = append(n.steps, inAnyLanguage(collapseFormatting))
 	}
