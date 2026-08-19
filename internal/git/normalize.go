@@ -12,7 +12,8 @@ import (
 // normalizer reports whether a hunk's two sides are the same code once the enabled
 // flags' noise is stripped.  Renames is not a step: it compares what they leave.
 type normalizer struct {
-	steps []normalizeStep
+	steps   []normalizeStep
+	renames bool
 }
 
 // normalizeStep rewrites one side of a hunk, its lines joined by newlines.  The
@@ -34,13 +35,14 @@ func newNormalizer(retention *owners.ApprovalRetention) normalizer {
 	if retention.FormattingEnabled() {
 		n.steps = append(n.steps, inAnyLanguage(collapseFormatting))
 	}
+	n.renames = retention.RenamesEnabled()
 	return n
 }
 
 // A flag may only retain a hunk it actually read, so anything the enabled steps
 // cannot account for stays non-trivial and an approval is kept only on purpose.
 func (n normalizer) isTrivial(fileName string, hunk *diff.Hunk) bool {
-	if len(n.steps) == 0 {
+	if len(n.steps) == 0 && !n.renames {
 		return false
 	}
 	added, removed, ok := hunkBlocks(hunk.Body)
@@ -51,7 +53,19 @@ func (n normalizer) isTrivial(fileName string, hunk *diff.Hunk) bool {
 	if reindentsBlock(fileName, added, removed) {
 		return false
 	}
-	return n.normalize(fileName, added) == n.normalize(fileName, removed)
+	normalizedAdded, normalizedRemoved := n.normalize(fileName, added), n.normalize(fileName, removed)
+	// Renames needs a substitution to point at, so it never carries a hunk alone.
+	if len(n.steps) > 0 && normalizedAdded == normalizedRemoved {
+		return true
+	}
+	// Renames reads punctuation - a call's parens, a decorator's `@`, an access's
+	// `.` - and what that means is a fact about a language, so refuse unknown files.
+	if !n.renames || !knownLanguage(fileName) || !isPureRename(normalizedAdded, normalizedRemoved) {
+		return false
+	}
+	// A word inside a directive names a rule or an error code, read by a tool, so
+	// substituting one changes what is enforced rather than what anything is called.
+	return !holdsDirective(fileName, added) && !holdsDirective(fileName, removed)
 }
 
 func (n normalizer) normalize(fileName, block string) string {
