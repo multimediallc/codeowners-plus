@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	owners "github.com/multimediallc/codeowners-plus/internal/config"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/sourcegraph/go-diff/diff"
 )
@@ -85,8 +86,9 @@ func (gd *GitDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 		return nil, fmt.Errorf("failed to get older diff: %w", err)
 	}
 	changesContext := changesSinceContext{
-		newerDiff: gd.diff,
-		olderDiff: olderDiff,
+		newerDiff:  gd.diff,
+		olderDiff:  olderDiff,
+		normalizer: newNormalizer(gd.context.ApprovalRetention),
 	}
 	diffFiles, err := changesSince(changesContext)
 	if err != nil {
@@ -104,11 +106,15 @@ type DiffContext struct {
 	Head       string
 	Dir        string
 	IgnoreDirs []string
+	// ApprovalRetention decides which changes may keep an existing approval.
+	// A nil section retains nothing.
+	ApprovalRetention *owners.ApprovalRetention
 }
 
 type changesSinceContext struct {
-	newerDiff []*diff.FileDiff
-	olderDiff []*diff.FileDiff
+	newerDiff  []*diff.FileDiff
+	olderDiff  []*diff.FileDiff
+	normalizer normalizer
 }
 
 func diffToFilename(d *diff.FileDiff) string {
@@ -190,7 +196,9 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 			Hunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
 		}
 		for _, hunk := range d.Hunks {
-			if !oldHunkHashes[hunkHash(hunk)] {
+			// A hunk which normalizes away leaves nothing new to review.  The file
+			// name goes too: what normalizes away depends on the language.
+			if !oldHunkHashes[hunkHash(hunk)] && !context.normalizer.isTrivial(fileName, hunk) {
 				newHunkRange := codeowners.HunkRange{
 					Start: int(hunk.NewStartLine),
 					End:   int(hunk.NewStartLine + hunk.NewLines - 1),

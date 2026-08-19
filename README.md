@@ -366,6 +366,10 @@ fetch_orphaned_approval = false
 
 What counts as a change not worth re-reviewing is a judgement about a particular codebase, not something to inherit from a default. Two flags deserve extra thought before you name them. A change to a string literal or a rename can alter behavior without changing the shape of the code the approver reviewed, so retaining an approval across one is a stronger claim than the other categories. And `fetch_orphaned_approval` is the only flag in the section which reaches outside the checkout, so it adds network calls to a run.
 
+A change is checked one hunk at a time. Everything the hunk adds is compared against everything it removes, as two whole blocks rather than line by line, so a statement rewrapped across several lines still matches the single line it replaced. A hunk whose two sides are equal once the enabled flags have had their say is treated as if the approver had already seen it. Anything the enabled flags cannot account for dismisses the approval as before.
+
+`formatting` ignores everything `whitespace` ignores and, on top of that, braces, semicolons and trailing commas. Parentheses are always significant, since their placement decides operator precedence and separates a call from a reference. Only the shape of the code is compared, so dropping the braces around a multi-statement body reads as formatting. Indentation is the exception: where a language delimits a block by it, the same lines moved to a different depth are a change in what runs, so they dismiss. A pair of braces which closes over nothing is an exception: an empty argument, body or literal says something the code does not say without it, so adding or removing one is a change like any other.
+
 #### Require Both Branch Reviewers (Ownership Handoffs)
 
 The `require_both_branch_reviewers` feature enables self-service ownership transfers by requiring approval from codeowners defined in **BOTH** the base branch and the PR branch. This creates an AND relationship between ownership rules from both branches.

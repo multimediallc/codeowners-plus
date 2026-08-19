@@ -123,10 +123,11 @@ func (a *App) Run() (*OutputData, error) {
 
 	// Setup diff context
 	diffContext := git.DiffContext{
-		Base:       a.client.PR().Base.GetSHA(),
-		Head:       a.client.PR().Head.GetSHA(),
-		Dir:        a.config.RepoDir,
-		IgnoreDirs: conf.Ignore,
+		Base:              a.client.PR().Base.GetSHA(),
+		Head:              a.client.PR().Head.GetSHA(),
+		Dir:               a.config.RepoDir,
+		IgnoreDirs:        conf.Ignore,
+		ApprovalRetention: conf.ApprovalRetention,
 	}
 
 	// Get the diff of the PR
