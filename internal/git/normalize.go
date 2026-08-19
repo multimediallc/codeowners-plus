@@ -26,6 +26,11 @@ func inAnyLanguage(step func(string) string) normalizeStep {
 
 func newNormalizer(retention *owners.ApprovalRetention) normalizer {
 	n := normalizer{}
+	// Comments come off first, while the block still has its lines: every later
+	// step reads the text a comment could otherwise have contributed to.
+	if retention.CommentsEnabled() {
+		n.steps = append(n.steps, dropComments)
+	}
 	if retention.FormattingEnabled() {
 		n.steps = append(n.steps, inAnyLanguage(collapseFormatting))
 	}
