@@ -806,3 +806,96 @@ func TestDiffOfDiffs(t *testing.T) {
 		}
 	}
 }
+
+func TestToDiffFilesBaseFields(t *testing.T) {
+	fileDiffs := []*diff.FileDiff{
+		{
+			OrigName: "a/old.go",
+			NewName:  "b/new.go",
+			Hunks: []*diff.Hunk{
+				{
+					OrigStartLine: 5,
+					OrigLines:     2,
+					NewStartLine:  10,
+					NewLines:      3,
+				},
+			},
+		},
+		{
+			OrigName: "a/same.go",
+			NewName:  "b/same.go",
+			Hunks: []*diff.Hunk{
+				{
+					OrigStartLine: 3,
+					OrigLines:     0,
+					NewStartLine:  4,
+					NewLines:      1,
+				},
+			},
+		},
+	}
+
+	result, err := toDiffFiles(fileDiffs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	renamed := result[0]
+	if renamed.FileName != "new.go" || renamed.BaseFileName != "old.go" || renamed.BaseName() != "old.go" {
+		t.Errorf("expected rename tracked as new.go/old.go, got %q/%q", renamed.FileName, renamed.BaseFileName)
+	}
+	expectedBase := codeowners.HunkRange{Start: 5, End: 6}
+	if len(renamed.BaseHunks) != 1 || renamed.BaseHunks[0] != expectedBase {
+		t.Errorf("expected base hunks [%+v], got %+v", expectedBase, renamed.BaseHunks)
+	}
+
+	same := result[1]
+	if same.BaseFileName != "" || same.BaseName() != "same.go" {
+		t.Errorf("expected no base name for unrenamed file, got %q", same.BaseFileName)
+	}
+	// A pure insertion has a zero-length base hunk (End < Start)
+	expectedEmpty := codeowners.HunkRange{Start: 3, End: 2}
+	if len(same.BaseHunks) != 1 || same.BaseHunks[0] != expectedEmpty {
+		t.Errorf("expected empty base hunk %+v, got %+v", expectedEmpty, same.BaseHunks)
+	}
+}
+
+const renameIntoIgnoredDiff = `diff --git a/src/secure.go b/test_project/secure.go
+similarity index 90%
+rename from src/secure.go
+rename to test_project/secure.go
+index abc..def 100644
+--- a/src/secure.go
++++ b/test_project/secure.go
+@@ -1 +1 @@
+-var token = "old"
++var token = "new"
+diff --git a/test_project/existing.go b/test_project/existing.go
+index ghi..jkl 100644
+--- a/test_project/existing.go
++++ b/test_project/existing.go
+@@ -1 +1 @@
+-var a = 1
++var a = 2`
+
+func TestIgnoreDirsKeepsRenamesOutOfIgnored(t *testing.T) {
+	executor := NewMockGitExecutor(renameIntoIgnoredDiff, nil)
+	gitDiff, err := NewDiffWithExecutor(DiffContext{
+		Base:       "base",
+		Head:       "head",
+		IgnoreDirs: []string{"test_project"},
+	}, executor)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	changes := gitDiff.AllChanges()
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change (rename kept, ignored-only file dropped), got %+v", changes)
+	}
+	// A file renamed INTO an ignored directory stays visible, since its
+	// old path is still owned.
+	if changes[0].FileName != "test_project/secure.go" || changes[0].BaseName() != "src/secure.go" {
+		t.Errorf("expected the rename out of src/ to be kept, got %+v", changes[0])
+	}
+}

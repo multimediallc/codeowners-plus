@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-82.6%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-82.7%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -22,6 +22,8 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
   - [Advanced Configuration](#advanced-configuration)
     - [Enforcement Options](#enforcement-options)
   - [Quiet Mode](#quiet-mode)
+  - [Inline Ownership](#inline-ownership)
+  - [Ownership Oracles](#ownership-oracles)
 - [CLI Tool](#cli-tool)
 - [Contributing](#contributing)
 - [Future Features](#future-features)
@@ -48,6 +50,8 @@ These are features missing from GitHub code owners that are supported by Codeown
   * GitHub CODEOWNERS supports only `OR` ownership rules, in contrast
 * Directory-level code ownership files to assign fine-grained code ownership
 * Supports optional reviewers (cc users/teams for non-blocking reviews)
+* Inline ownership: comment tags that assign owners to specific regions inside a file (see [Inline Ownership](#inline-ownership))
+* Ownership oracles: external tooling can compute additional reviewer requirements from PR content (see [Ownership Oracles](#ownership-oracles))
 * Advanced global configuration (see [Advanced Configuration](#advanced-configuration))
 
 ## Getting Started
@@ -254,6 +258,11 @@ self_approval_via_teams = false
 # Optional reviewers are still invited with a CC comment.
 disable_review_status_comments = false
 
+# `enable_inline_ownership` (default false) enables inline ownership blocks:
+# <CO-inline={@owner}> ... </CO-inline> comment tags in source files
+# See "Inline Ownership" below for more details
+enable_inline_ownership = false
+
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
 # see "Enforcement Options" below for more details
@@ -372,6 +381,82 @@ Using the `quiet` input on the action will change the behavior in a couple ways:
 * **Draft Pull Requests:** This is a common use case. You might want the Codeowners Plus logic to run and report a status (e.g., pending or failed) on draft PRs, but without notifying reviewers prematurely by adding comments or requesting reviews until the PR is marked "Ready for review".
 * **Custom Notification Workflows:** You might prefer to handle notifications or review requests through a different mechanism and only use Codeowners Plus for the status check enforcement.
 
+### Inline Ownership
+
+A specific function, class, or config section sometimes needs different owners than the file around it. With `enable_inline_ownership = true` in `codeowners.toml`, you can mark a region of a source file as owned using comment tags:
+
+```go
+// <CO-inline={@alice,@security-team}>
+func ValidateToken(token string) bool {
+    ...
+}
+// </CO-inline>
+```
+
+```python
+# <CO-inline={@model-owner @devops}>
+class PaymentRecord(models.Model):
+    ...
+# </CO-inline>
+```
+
+When a PR's diff touches lines inside a block (including the tag lines), the block's owners are added as required reviewers for that file, AND-merged with the `.codeowners`-derived requirements.
+
+Semantics:
+
+* Owners inside one tag form an OR group (any listed owner satisfies it), like a `.codeowners` line, and may be separated by commas or spaces. Overlapping blocks AND together.
+* Both `//` and `#` comment prefixes are supported; tag names are case-insensitive.
+* Blocks are parsed from both the base and head revisions of each changed file, so deleting an owned region or editing the ownership tag itself still requires the owners recorded at base. Renaming a file requires approval from all of its block owners (the base revision is read under the old name).
+* Nested or unmatched tags and empty owner lists produce warnings and are skipped. An unclosed block extends to end-of-file, so a missing end tag cannot silently remove protection.
+* Inline ownership can only add reviewer requirements; it never removes or weakens `.codeowners` rules.
+
+### Ownership Oracles
+
+Some ownership requirements cannot be expressed as path patterns: "changes to telemetry events need data-platform review" depends on what changed inside a file, not which file changed. Ownership oracles let external tooling compute these requirements and feed them to Codeowners Plus as data.
+
+An oracle file is JSON, written by any earlier workflow step:
+
+```json
+{
+  "rules": [
+    {
+      "files": ["src/telemetry/**"],
+      "owners": ["@your-org/data-platform"],
+      "optional": false,
+      "reason": "telemetry event schema changed in this PR"
+    }
+  ]
+}
+```
+
+* `files`: doublestar glob patterns matched against the full repo-relative paths of files changed in the PR
+* `owners`: a single OR group where any one of the listed owners satisfies the rule (same semantics as a `.codeowners` line)
+* `optional`: when `true`, owners are CC'd instead of required
+* `reason`: human-readable explanation, shown in verbose output
+
+Pass oracle files to the action with the `oracle-files` input (comma-separated):
+
+```yaml
+      - name: 'Detect telemetry changes'
+        id: detect
+        run: ./scripts/detect-telemetry-changes.sh > /tmp/telemetry-oracle.json
+
+      - name: 'Codeowners Plus'
+        uses: multimediallc/codeowners-plus@v1
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          pr: '${{ github.event.pull_request.number }}'
+          oracle-files: '/tmp/telemetry-oracle.json'
+```
+
+Oracle requirements are AND-merged with `.codeowners` requirements, the same mechanism as `require_both_branch_reviewers`: review requesting, approval tracking, smart dismissal, and the status check all apply to oracle-derived owners the same as file-derived owners.
+
+Notes:
+
+* Oracle rules can only add reviewer requirements, never remove or weaken requirements from `.codeowners` files, so a tampered oracle file can at worst request extra reviews.
+* A missing or malformed oracle file is a hard error (the check fails), since silently skipping one would drop required reviews.
+* A file matched by an oracle rule counts as owned, so it is not reported as an unowned file.
+
 ## CLI Tool
 
 A CLI tool is available which provides some utilities for working with `.codeowners` files.
@@ -393,4 +478,4 @@ See [CONTRIBUTING.md](https://github.com/multimediallc/codeowners-plus/blob/main
 
 ## Future Features
 
-* Inline ownership comments for having owners for specific functions, classes, etc.
+* AST-aware inline ownership (attach a single ownership comment to a function/class and have the range tracked automatically)

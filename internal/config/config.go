@@ -22,6 +22,7 @@ type Config struct {
 	AllowSelfApproval           bool         `toml:"allow_self_approval"`
 	SelfApprovalViaTeams        bool         `toml:"self_approval_via_teams"`
 	DisableReviewStatusComments bool         `toml:"disable_review_status_comments"`
+	EnableInlineOwnership       bool         `toml:"enable_inline_ownership"`
 }
 
 type Enforcement struct {
@@ -52,6 +53,7 @@ func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) 
 		DisableSmartDismissal:       false,
 		RequireBothBranchReviewers:  false,
 		DisableReviewStatusComments: false,
+		EnableInlineOwnership:       false,
 	}
 
 	// Use filesystem reader if none provided

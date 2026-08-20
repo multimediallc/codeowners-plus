@@ -126,6 +126,23 @@ allow_self_approval = true
 			expectedErr: false,
 		},
 		{
+			name: "config with enable_inline_ownership enabled",
+			configContent: `
+enable_inline_ownership = true
+`,
+			path: "testdata/",
+			expected: &Config{
+				MaxReviews:            nil,
+				MinReviews:            nil,
+				UnskippableReviewers:  []string{},
+				Ignore:                []string{},
+				Enforcement:           &Enforcement{Approval: false, FailCheck: true},
+				HighPriorityLabels:    []string{},
+				EnableInlineOwnership: true,
+			},
+			expectedErr: false,
+		},
+		{
 			name: "invalid toml",
 			configContent: `
 max_reviews = invalid
@@ -205,6 +222,10 @@ max_reviews = invalid
 
 				if got.RequireBothBranchReviewers != tc.expected.RequireBothBranchReviewers {
 					t.Errorf("RequireBothBranchReviewers: expected %v, got %v", tc.expected.RequireBothBranchReviewers, got.RequireBothBranchReviewers)
+				}
+
+				if got.EnableInlineOwnership != tc.expected.EnableInlineOwnership {
+					t.Errorf("EnableInlineOwnership: expected %v, got %v", tc.expected.EnableInlineOwnership, got.EnableInlineOwnership)
 				}
 
 				if got.SuppressUnownedWarning != tc.expected.SuppressUnownedWarning {
