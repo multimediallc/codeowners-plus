@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -117,10 +118,15 @@ type mockGitHubClient struct {
 	tokenUserError            error
 	currentlyRequested        []codeowners.Slug
 	currentlyRequestedError   error
+	requestedReviewers        []codeowners.Slug
+	requestedReviewersError   error
+	selfRequestedReviewers    []codeowners.Slug
+	selfRequestedError        error
 	alreadyReviewed           []codeowners.Slug
 	alreadyReviewedError      error
 	dismissError              error
 	requestReviewersError     error
+	removeReviewersError      error
 	warningBuffer             io.Writer
 	infoBuffer                io.Writer
 	comments                  []*github.IssueComment
@@ -132,6 +138,8 @@ type mockGitHubClient struct {
 	AddCommentCalled          bool
 	AddCommentInput           string
 	RequestReviewersCalled    bool
+	RemoveReviewersCalled     bool
+	RemoveReviewersInput      []string
 	FindExistingCommentCalled bool
 	FindExistingCommentInput  string
 	UpdateCommentCalled       bool
@@ -171,6 +179,14 @@ func (m *mockGitHubClient) GetCurrentlyRequested() ([]codeowners.Slug, error) {
 	return m.currentlyRequested, m.currentlyRequestedError
 }
 
+func (m *mockGitHubClient) GetRequestedReviewers() ([]codeowners.Slug, error) {
+	return m.requestedReviewers, m.requestedReviewersError
+}
+
+func (m *mockGitHubClient) GetSelfRequestedReviewers() ([]codeowners.Slug, error) {
+	return m.selfRequestedReviewers, m.selfRequestedError
+}
+
 func (m *mockGitHubClient) GetAlreadyReviewed() ([]codeowners.Slug, error) {
 	return m.alreadyReviewed, m.alreadyReviewedError
 }
@@ -182,6 +198,12 @@ func (m *mockGitHubClient) DismissStaleReviews(approvals []*gh.CurrentApproval) 
 func (m *mockGitHubClient) RequestReviewers(reviewers []string) error {
 	m.RequestReviewersCalled = true
 	return m.requestReviewersError
+}
+
+func (m *mockGitHubClient) RemoveReviewers(reviewers []string) error {
+	m.RemoveReviewersCalled = true
+	m.RemoveReviewersInput = reviewers
+	return m.removeReviewersError
 }
 
 func (m *mockGitHubClient) CheckApprovals(fileReviewers map[string][]string, approvals []*gh.CurrentApproval, diff git.Diff) ([]codeowners.Slug, []*gh.CurrentApproval) {
@@ -265,6 +287,8 @@ func (m *mockGitHubClient) ResetGHClientTracking() {
 	m.AddCommentCalled = false
 	m.AddCommentInput = ""
 	m.RequestReviewersCalled = false
+	m.RemoveReviewersCalled = false
+	m.RemoveReviewersInput = nil
 }
 
 func (m *mockGitHubClient) IsSubstringInComments(substring string, since *time.Time) (bool, error) {
@@ -755,6 +779,199 @@ func TestRequestReviews(t *testing.T) {
 				t.Errorf("Expected mockClient.RequestReviewersCalled to be %t, but got %t", tc.expectedShouldCall, mockClient.RequestReviewersCalled)
 			}
 		})
+	}
+}
+
+func TestRemoveStaleReviewRequests(t *testing.T) {
+	tt := []struct {
+		name                    string
+		quiet                   bool
+		removalEnabled          bool
+		currentOwners           []codeowners.Slug
+		requestedReviewers      []codeowners.Slug
+		requestedReviewersError error
+		selfRequestedReviewers  []codeowners.Slug
+		selfRequestedError      error
+		removeReviewersError    error
+		expectedShouldCall      bool
+		expectedRemoved         []string
+		expectError             bool
+	}{
+		{
+			name:                   "short circuits when not enabled in config",
+			currentOwners:          codeowners.NewSlugs([]string{"@org/team1"}),
+			requestedReviewers:     codeowners.NewSlugs([]string{"@org/team2"}),
+			selfRequestedReviewers: codeowners.NewSlugs([]string{"@org/team2"}),
+			expectedShouldCall:     false,
+		},
+		{
+			name:                   "short circuits in quiet mode",
+			quiet:                  true,
+			removalEnabled:         true,
+			currentOwners:          codeowners.NewSlugs([]string{"@org/team1"}),
+			requestedReviewers:     codeowners.NewSlugs([]string{"@org/team2"}),
+			selfRequestedReviewers: codeowners.NewSlugs([]string{"@org/team2"}),
+			expectedShouldCall:     false,
+		},
+		{
+			name:               "no requested reviewers",
+			removalEnabled:     true,
+			currentOwners:      codeowners.NewSlugs([]string{"@org/team1"}),
+			requestedReviewers: []codeowners.Slug{},
+			expectedShouldCall: false,
+		},
+		{
+			name:                   "all requested reviewers still own changed files",
+			removalEnabled:         true,
+			currentOwners:          codeowners.NewSlugs([]string{"@org/team1", "@user1"}),
+			requestedReviewers:     codeowners.NewSlugs([]string{"@org/team1", "@user1"}),
+			selfRequestedReviewers: codeowners.NewSlugs([]string{"@org/team1", "@user1"}),
+			expectedShouldCall:     false,
+		},
+		{
+			name:                   "removes stale requests made by the action",
+			removalEnabled:         true,
+			currentOwners:          codeowners.NewSlugs([]string{"@org/team1"}),
+			requestedReviewers:     codeowners.NewSlugs([]string{"@org/team1", "@org/team2", "@org/team3"}),
+			selfRequestedReviewers: codeowners.NewSlugs([]string{"@org/team1", "@org/team2", "@org/team3"}),
+			expectedShouldCall:     true,
+			expectedRemoved:        []string{"@org/team2", "@org/team3"},
+		},
+		{
+			name:                   "leaves stale requests made by somebody else",
+			removalEnabled:         true,
+			currentOwners:          codeowners.NewSlugs([]string{"@org/team1"}),
+			requestedReviewers:     codeowners.NewSlugs([]string{"@org/team2", "@user2"}),
+			selfRequestedReviewers: codeowners.NewSlugs([]string{"@org/team2"}),
+			expectedShouldCall:     true,
+			expectedRemoved:        []string{"@org/team2"},
+		},
+		{
+			name:                   "keeps optional owners which are no longer required",
+			removalEnabled:         true,
+			currentOwners:          codeowners.NewSlugs([]string{"@org/team1", "@org/optional"}),
+			requestedReviewers:     codeowners.NewSlugs([]string{"@org/optional"}),
+			selfRequestedReviewers: codeowners.NewSlugs([]string{"@org/optional"}),
+			expectedShouldCall:     false,
+		},
+		{
+			name:                   "matches owners case insensitively",
+			removalEnabled:         true,
+			currentOwners:          codeowners.NewSlugs([]string{"@Org/Team1"}),
+			requestedReviewers:     codeowners.NewSlugs([]string{"@org/team1"}),
+			selfRequestedReviewers: codeowners.NewSlugs([]string{"@org/team1"}),
+			expectedShouldCall:     false,
+		},
+		{
+			name:               "skips removal when self requested lookup fails",
+			removalEnabled:     true,
+			currentOwners:      codeowners.NewSlugs([]string{"@org/team1"}),
+			requestedReviewers: codeowners.NewSlugs([]string{"@org/team2"}),
+			selfRequestedError: fmt.Errorf("token user unavailable"),
+			expectedShouldCall: false,
+		},
+		{
+			name:                    "errors when requested reviewers cannot be read",
+			removalEnabled:          true,
+			currentOwners:           codeowners.NewSlugs([]string{"@org/team1"}),
+			requestedReviewersError: fmt.Errorf("no PR"),
+			expectedShouldCall:      false,
+			expectError:             true,
+		},
+		{
+			// Removal is cosmetic, so a failed cleanup must not fail the check
+			name:                   "warns and continues when removal fails",
+			removalEnabled:         true,
+			currentOwners:          codeowners.NewSlugs([]string{"@org/team1"}),
+			requestedReviewers:     codeowners.NewSlugs([]string{"@org/team2"}),
+			selfRequestedReviewers: codeowners.NewSlugs([]string{"@org/team2"}),
+			removeReviewersError:   fmt.Errorf("api error"),
+			expectedShouldCall:     true,
+			expectedRemoved:        []string{"@org/team2"},
+			expectError:            false,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			app, mockClient := setupAppForTest(t, tc.quiet)
+			mockClient.ResetGHClientTracking()
+
+			app.Conf.RemoveStaleReviewRequests = tc.removalEnabled
+			mockClient.requestedReviewers = tc.requestedReviewers
+			mockClient.requestedReviewersError = tc.requestedReviewersError
+			mockClient.selfRequestedReviewers = tc.selfRequestedReviewers
+			mockClient.selfRequestedError = tc.selfRequestedError
+			mockClient.removeReviewersError = tc.removeReviewersError
+
+			err := app.removeStaleReviewRequests(tc.currentOwners)
+
+			if tc.expectError && err == nil {
+				t.Error("Expected an error during removeStaleReviewRequests, but got nil")
+			}
+			if !tc.expectError && err != nil {
+				t.Errorf("Unexpected error during removeStaleReviewRequests: %v", err)
+			}
+
+			if mockClient.RemoveReviewersCalled != tc.expectedShouldCall {
+				t.Errorf("Expected mockClient.RemoveReviewersCalled to be %t, but got %t", tc.expectedShouldCall, mockClient.RemoveReviewersCalled)
+			}
+			if !slices.Equal(mockClient.RemoveReviewersInput, tc.expectedRemoved) {
+				t.Errorf("Expected removed reviewers %v, got %v", tc.expectedRemoved, mockClient.RemoveReviewersInput)
+			}
+		})
+	}
+}
+
+// Removal runs against every owner of the current diff, not just the owners
+// still waiting to approve, so an owner who already approved keeps their review
+// request instead of having it pulled out from under them.
+func TestProcessApprovalsAndReviewersRemovesOnlyStaleRequests(t *testing.T) {
+	mockGH := &mockGitHubClient{
+		currentApprovals: []*gh.CurrentApproval{
+			{GHLogin: codeowners.NewSlug("@user1")},
+		},
+		requestedReviewers:     codeowners.NewSlugs([]string{"@user1", "@org/team1", "@user3", "@org/stale"}),
+		selfRequestedReviewers: codeowners.NewSlugs([]string{"@user1", "@org/team1", "@user3", "@org/stale"}),
+	}
+
+	mockOwners := &mockCodeOwners{
+		requiredOwners: codeowners.ReviewerGroups{
+			&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
+			&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@org/team1"})},
+		},
+		optionalOwners: codeowners.ReviewerGroups{
+			&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user3"})},
+		},
+		fileRequiredMap: map[string]codeowners.ReviewerGroups{
+			"file1.go": {
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@user1"})},
+			},
+		},
+	}
+
+	app := &App{
+		config: &Config{
+			InfoBuffer:    io.Discard,
+			WarningBuffer: io.Discard,
+		},
+		client:     mockGH,
+		codeowners: mockOwners,
+		gitDiff:    mockGitDiff{changes: []string{"file1.go"}},
+		Conf: &owners.Config{
+			Enforcement:               &owners.Enforcement{Approval: false, FailCheck: true},
+			AdminBypass:               &owners.AdminBypass{Enabled: false, AllowedUsers: []string{}},
+			RemoveStaleReviewRequests: true,
+		},
+	}
+
+	if _, _, _, err := app.processApprovalsAndReviewers(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := []string{"@org/stale"}
+	if !slices.Equal(mockGH.RemoveReviewersInput, expected) {
+		t.Errorf("expected removed reviewers %v, got %v", expected, mockGH.RemoveReviewersInput)
 	}
 }
 

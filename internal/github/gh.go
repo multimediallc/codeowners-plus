@@ -41,8 +41,11 @@ type Client interface {
 	GetCurrentReviewerApprovals() ([]*CurrentApproval, error)
 	GetAlreadyReviewed() ([]codeowners.Slug, error)
 	GetCurrentlyRequested() ([]codeowners.Slug, error)
+	GetRequestedReviewers() ([]codeowners.Slug, error)
+	GetSelfRequestedReviewers() ([]codeowners.Slug, error)
 	DismissStaleReviews(staleApprovals []*CurrentApproval) error
 	RequestReviewers(reviewers []string) error
+	RemoveReviewers(reviewers []string) error
 	ApprovePR() error
 	InitComments() error
 	AddComment(comment string) error
@@ -65,6 +68,7 @@ type GHClient struct {
 	userReviewerMap ghUserReviewerMap
 	comments        []*github.IssueComment
 	reviews         []*github.PullRequestReview
+	tokenUser       string
 	warningBuffer   io.Writer
 	infoBuffer      io.Writer
 }
@@ -75,16 +79,12 @@ func NewClient(owner, repo, token string) (Client, error) {
 		return nil, err
 	}
 	return &GHClient{
-		context.Background(),
-		owner,
-		repo,
-		client,
-		nil,
-		nil,
-		nil,
-		nil,
-		io.Discard,
-		io.Discard,
+		ctx:           context.Background(),
+		owner:         owner,
+		repo:          repo,
+		client:        client,
+		warningBuffer: io.Discard,
+		infoBuffer:    io.Discard,
 	}, nil
 }
 
@@ -142,12 +142,18 @@ func (gh *GHClient) UserReviewers(user string) []codeowners.Slug {
 	return gh.userReviewerMap[strings.ToLower(strings.TrimPrefix(user, "@"))]
 }
 
+// GetTokenUser returns the login of the user the client token belongs to,
+// caching it so repeat callers do not each cost a GET /user.
 func (gh *GHClient) GetTokenUser() (string, error) {
+	if gh.tokenUser != "" {
+		return gh.tokenUser, nil
+	}
 	user, _, err := gh.client.Users.Get(gh.ctx, "")
 	if err != nil {
 		return "", err
 	}
-	return user.GetLogin(), nil
+	gh.tokenUser = user.GetLogin()
+	return gh.tokenUser, nil
 }
 
 func (gh *GHClient) InitReviews() error {
@@ -365,6 +371,105 @@ func currentlyRequested(pr *github.PullRequest, owner string, userReviewerMap gh
 	return slices.Collect(maps.Values(seen))
 }
 
+// GetRequestedReviewers returns every reviewer currently requested on the PR,
+// including ones which are not code owners.  Unlike GetCurrentlyRequested, the
+// results are not mapped through the user reviewer map, so reviewers who no
+// longer own any of the changed files are still reported.
+func (gh *GHClient) GetRequestedReviewers() ([]codeowners.Slug, error) {
+	if gh.pr == nil {
+		return nil, &NoPRError{}
+	}
+	return requestedReviewers(gh.pr, gh.owner), nil
+}
+
+// requestedReviewers returns the reviewers requested on the PR as owner slugs -
+// users as "@login" and teams as "@owner/team-slug".
+func requestedReviewers(pr *github.PullRequest, owner string) []codeowners.Slug {
+	users := f.Map(pr.RequestedReviewers, func(user *github.User) codeowners.Slug {
+		return codeowners.NewSlug(fmt.Sprintf("@%s", user.GetLogin()))
+	})
+	teams := f.Map(pr.RequestedTeams, func(team *github.Team) codeowners.Slug {
+		return codeowners.NewSlug(fmt.Sprintf("@%s/%s", owner, team.GetSlug()))
+	})
+	return slices.Concat(users, teams)
+}
+
+// GetSelfRequestedReviewers returns the reviewers currently requested on the PR
+// whose latest review request was made by the user the client token belongs to.
+// Reviewers added by anybody else - a human picking an extra reviewer, GitHub
+// CODEOWNERS - are left out, so callers can clean up their own review requests
+// without touching someone else's.
+func (gh *GHClient) GetSelfRequestedReviewers() ([]codeowners.Slug, error) {
+	if gh.pr == nil {
+		return nil, &NoPRError{}
+	}
+	tokenUser, err := gh.GetTokenUser()
+	if err != nil {
+		return nil, fmt.Errorf("GetTokenUser Error: %w", err)
+	}
+	if tokenUser == "" {
+		// Without a login there is no way to tell our own requests apart from
+		// everybody else's, and an empty login would match every actorless event
+		return nil, fmt.Errorf("GetTokenUser Error: token user has no login")
+	}
+	timeline, err := gh.listTimeline()
+	if err != nil {
+		return nil, err
+	}
+	return selfRequestedReviewers(gh.pr, gh.owner, timeline, tokenUser), nil
+}
+
+func (gh *GHClient) listTimeline() ([]*github.Timeline, error) {
+	allEvents := make([]*github.Timeline, 0)
+	listTimeline := func(page int) (*github.Response, error) {
+		listOptions := &github.ListOptions{PerPage: 100, Page: page}
+		events, res, err := gh.client.Issues.ListIssueTimeline(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), listOptions)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			_ = res.Body.Close()
+		}()
+		allEvents = append(allEvents, events...)
+		return res, err
+	}
+	if err := walkPaginatedApi(listTimeline); err != nil {
+		return nil, err
+	}
+	return allEvents, nil
+}
+
+// selfRequestedReviewers filters the currently requested reviewers down to those
+// whose most recent review request event was performed by tokenUser.
+func selfRequestedReviewers(pr *github.PullRequest, owner string, timeline []*github.Timeline, tokenUser string) []codeowners.Slug {
+	tokenUserSlug := codeowners.NewSlug(tokenUser)
+	// The timeline is in chronological order, so the last request event for a
+	// reviewer is the one which put them in the PR's requested reviewers.
+	requesters := make(map[string]string)
+	for _, event := range timeline {
+		var reviewer codeowners.Slug
+		switch {
+		case event.Reviewer != nil:
+			reviewer = codeowners.NewSlug(fmt.Sprintf("@%s", event.Reviewer.GetLogin()))
+		case event.RequestedTeam != nil:
+			reviewer = codeowners.NewSlug(fmt.Sprintf("@%s/%s", owner, event.RequestedTeam.GetSlug()))
+		default:
+			continue
+		}
+		switch event.GetEvent() {
+		case "review_requested":
+			requesters[reviewer.Normalized()] = event.GetActor().GetLogin()
+		case "review_request_removed":
+			delete(requesters, reviewer.Normalized())
+		}
+	}
+
+	return f.Filtered(requestedReviewers(pr, owner), func(reviewer codeowners.Slug) bool {
+		requester, found := requesters[reviewer.Normalized()]
+		return found && tokenUserSlug.EqualsString(requester)
+	})
+}
+
 func (gh *GHClient) DismissStaleReviews(staleApprovals []*CurrentApproval) error {
 	if gh.pr == nil {
 		return &NoPRError{}
@@ -390,8 +495,8 @@ func (gh *GHClient) RequestReviewers(reviewers []string) error {
 	if len(reviewers) == 0 {
 		return nil
 	}
-	indvidualReviewers, teamReviewers := splitReviewers(reviewers)
-	reviewersRequest := github.ReviewersRequest{Reviewers: indvidualReviewers, TeamReviewers: teamReviewers}
+	individualReviewers, teamReviewers := splitReviewers(reviewers)
+	reviewersRequest := github.ReviewersRequest{Reviewers: individualReviewers, TeamReviewers: teamReviewers}
 	_, res, err := gh.client.PullRequests.RequestReviewers(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), reviewersRequest)
 	if err != nil {
 		return err
@@ -402,8 +507,27 @@ func (gh *GHClient) RequestReviewers(reviewers []string) error {
 	return err
 }
 
+func (gh *GHClient) RemoveReviewers(reviewers []string) error {
+	if gh.pr == nil {
+		return &NoPRError{}
+	}
+	if len(reviewers) == 0 {
+		return nil
+	}
+	individualReviewers, teamReviewers := splitReviewers(reviewers)
+	reviewersRequest := github.ReviewersRequest{Reviewers: individualReviewers, TeamReviewers: teamReviewers}
+	res, err := gh.client.PullRequests.RemoveReviewers(gh.ctx, gh.owner, gh.repo, gh.pr.GetNumber(), reviewersRequest)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
+	return err
+}
+
 func splitReviewers(reviewers []string) ([]string, []string) {
-	indvidualReviewers := make([]string, 0, len(reviewers))
+	individualReviewers := make([]string, 0, len(reviewers))
 	teamReviewers := make([]string, 0, len(reviewers))
 	for _, reviewer := range reviewers {
 		reviewerString := reviewer[1:] // trim the @
@@ -411,10 +535,10 @@ func splitReviewers(reviewers []string) ([]string, []string) {
 			split := strings.SplitN(reviewerString, "/", 2)
 			teamReviewers = append(teamReviewers, split[1])
 		} else {
-			indvidualReviewers = append(indvidualReviewers, reviewerString)
+			individualReviewers = append(individualReviewers, reviewerString)
 		}
 	}
-	return indvidualReviewers, teamReviewers
+	return individualReviewers, teamReviewers
 }
 
 func (gh *GHClient) ApprovePR() error {

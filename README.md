@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-82.6%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-83.4%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -21,6 +21,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
   - [.codeowners File Spec](#codeowners-file-spec)
   - [Advanced Configuration](#advanced-configuration)
     - [Enforcement Options](#enforcement-options)
+  - [Review Request Removal](#review-request-removal)
   - [Quiet Mode](#quiet-mode)
 - [CLI Tool](#cli-tool)
 - [Contributing](#contributing)
@@ -254,6 +255,11 @@ self_approval_via_teams = false
 # Optional reviewers are still invited with a CC comment.
 disable_review_status_comments = false
 
+# `remove_stale_review_requests` (default false) removes the review requests Codeowners Plus made
+# for owners the pull request no longer involves.
+# Requires a token whose user can be resolved - see "Review Request Removal" below
+remove_stale_review_requests = false
+
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced
 [enforcement]
 # see "Enforcement Options" below for more details
@@ -360,12 +366,39 @@ Result with `require_both_branch_reviewers = true`:
 
 **Note:** The `require_both_branch_reviewers` setting is read from the base branch's `codeowners.toml` for security. PR authors cannot enable this feature for their own PRs.
 
+### Review Request Removal
+
+Codeowners Plus requests reviews from the owners of the changed files every time it runs.  When a
+push changes which files the pull request touches, some of those owners stop being required - for
+example when the author reverts the changes which pulled a team in.  By default those review
+requests stay on the pull request, so its requested reviewers can end up listing more teams than the
+review status comment does.
+
+Opt in to cleaning them up with `remove_stale_review_requests`:
+
+`codeowners.toml`:
+```toml
+# `remove_stale_review_requests` (default false) removes the review requests Codeowners Plus made
+# for owners the pull request no longer involves
+remove_stale_review_requests = true
+```
+
+Only review requests made by the token owner are removed.  Reviewers added by anybody else stay
+requested, even when they do not own any of the changed files, so manually added reviewers survive a
+push.  Owners which are still required, and owners which are optional reviewers of the changed
+files, are never removed.
+
+Telling the two apart requires resolving the token's user, so this needs a token which can read its
+own user - a PAT (the same requirement as [GitHub Teams Support](#github-teams-support)).  With a
+token whose user cannot be resolved, such as `GITHUB_TOKEN`, removal is skipped with a warning.
+Removal is also skipped in [Quiet Mode](#quiet-mode).
+
 ### Quiet Mode
 
 Using the `quiet` input on the action will change the behavior in a couple ways:
 
 * **No Comments:** The action will **not** post the review status comment (listing required/unapproved reviewers) or the optional reviewer "cc" comment to the Pull Request.
-* **No Review Requests:** The action will **not** automatically request reviews from required owners who have not yet approved via the GitHub API.
+* **No Review Requests:** The action will **not** automatically request reviews from required owners who have not yet approved via the GitHub API, and will **not** remove its own stale review requests even when `remove_stale_review_requests` is enabled.
 
 #### Use Cases
 
