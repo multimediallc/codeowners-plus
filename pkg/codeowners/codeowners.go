@@ -55,6 +55,30 @@ func New(root string, files []DiffFile, fileReader FileReader, warningWriter io.
 	return ownersMap, err
 }
 
+// NewFromFileOwners creates a CodeOwners from explicit file-to-reviewers maps; files absent from both maps are untracked, not unowned.
+func NewFromFileOwners(required map[string]ReviewerGroups, optional map[string]ReviewerGroups) CodeOwners {
+	fileToOwner := make(map[string]fileOwners)
+	for file, groups := range required {
+		fileToOwner[file] = fileOwners{
+			requiredReviewers: f.RemoveDuplicates(groups),
+			optionalReviewers: make(ReviewerGroups, 0),
+		}
+	}
+	for file, groups := range optional {
+		owners, ok := fileToOwner[file]
+		if !ok {
+			owners = *newFileOwners()
+		}
+		owners.optionalReviewers = f.RemoveDuplicates(groups)
+		fileToOwner[file] = owners
+	}
+	return &ownersMap{
+		fileToOwner:     fileToOwner,
+		nameReviewerMap: buildNameReviewerMap(fileToOwner),
+		unownedFiles:    []string{},
+	}
+}
+
 // A collection of owned files, with reverse lookups for owners and reviewers
 type ownersMap struct {
 	author          string

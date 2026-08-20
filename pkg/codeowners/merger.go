@@ -40,8 +40,14 @@ func MergeCodeOwners(base CodeOwners, head CodeOwners) CodeOwners {
 		}
 	}
 
-	// Merge unowned files
-	mergedUnowned := mergeUnownedFiles(base.UnownedFiles(), head.UnownedFiles(), allFiles)
+	// Only required owners confer ownership; optional-only files stay unowned.
+	filesWithRequiredOwners := make([]string, 0, len(mergedFileToOwner))
+	for file, owners := range mergedFileToOwner {
+		if len(owners.requiredReviewers) > 0 {
+			filesWithRequiredOwners = append(filesWithRequiredOwners, file)
+		}
+	}
+	mergedUnowned := mergeUnownedFiles(base.UnownedFiles(), head.UnownedFiles(), filesWithRequiredOwners)
 
 	// Build nameReviewerMap for approval tracking
 	nameReviewerMap := buildNameReviewerMap(mergedFileToOwner)
