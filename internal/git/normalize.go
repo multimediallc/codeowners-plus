@@ -49,6 +49,23 @@ func (n normalizer) isTrivial(fileName string, hunk *diff.Hunk) bool {
 	return n.normalize(fileName, added) == n.normalize(fileName, removed)
 }
 
+// approvalKey identifies a hunk by what it says once the enabled flags' noise is
+// stripped, so it matches an approval-time counterpart whose bytes differ.
+func (n normalizer) approvalKey(fileName string, hunk *diff.Hunk) (string, bool) {
+	// No key at all, so de-duplication is unchanged while every flag is off.
+	if len(n.steps) == 0 {
+		return "", false
+	}
+	added, removed, ok := hunkBlocks(hunk.Body)
+	if !ok {
+		return "", false
+	}
+	// The file name joins the key, unlike in the raw hash: a normalized body says
+	// less than a raw one, so identity should not reach across files as far.
+	return fileName + "\x00" + n.normalize(fileName, added) +
+		"\x00" + n.normalize(fileName, removed), true
+}
+
 func (n normalizer) normalize(fileName, block string) string {
 	for _, step := range n.steps {
 		block = step(fileName, block)

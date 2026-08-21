@@ -180,9 +180,14 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 	// For each file, filter out hunks that are in oldDiff
 	// if len(hunks) > 0, add to diffFiles
 	oldHunkHashes := make(map[[32]byte]bool)
+	oldApprovalKeys := make(map[string]bool)
 	for _, d := range context.olderDiff {
+		fileName := diffToFilename(d)
 		for _, h := range d.Hunks {
 			oldHunkHashes[hunkHash(h)] = true
+			if key, ok := context.normalizer.approvalKey(fileName, h); ok {
+				oldApprovalKeys[key] = true
+			}
 		}
 	}
 
@@ -196,15 +201,23 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 			Hunks:    make([]codeowners.HunkRange, 0, len(d.Hunks)),
 		}
 		for _, hunk := range d.Hunks {
+			if oldHunkHashes[hunkHash(hunk)] {
+				continue
+			}
+			// The raw hash decided first, so this only ever removes a hunk that
+			// would otherwise have been kept.
+			if key, ok := context.normalizer.approvalKey(fileName, hunk); ok && oldApprovalKeys[key] {
+				continue
+			}
 			// A hunk which normalizes away leaves nothing new to review.  The file
 			// name goes too: what normalizes away depends on the language.
-			if !oldHunkHashes[hunkHash(hunk)] && !context.normalizer.isTrivial(fileName, hunk) {
-				newHunkRange := codeowners.HunkRange{
-					Start: int(hunk.NewStartLine),
-					End:   int(hunk.NewStartLine + hunk.NewLines - 1),
-				}
-				newDiffFile.Hunks = append(newDiffFile.Hunks, newHunkRange)
+			if context.normalizer.isTrivial(fileName, hunk) {
+				continue
 			}
+			newDiffFile.Hunks = append(newDiffFile.Hunks, codeowners.HunkRange{
+				Start: int(hunk.NewStartLine),
+				End:   int(hunk.NewStartLine + hunk.NewLines - 1),
+			})
 		}
 		// Binary files have no hunks; staleness is intentionally not tracked
 		// for them (there is no hunk content to hash against the older diff).
