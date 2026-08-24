@@ -70,7 +70,7 @@ name: 'Code Owners'
 
 concurrency:
   group: codeowners-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 on:
   pull_request:
