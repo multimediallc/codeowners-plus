@@ -322,7 +322,7 @@ func TestIsSubstringInComments(t *testing.T) {
 }
 
 func TestNewGithubClient(t *testing.T) {
-	c, err := NewClient("owner", "repo", "token")
+	c, err := NewClient("owner", "repo", "token", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -344,6 +344,77 @@ func TestNewGithubClient(t *testing.T) {
 	}
 	if client.userReviewerMap != nil {
 		t.Error("Expected userReviewerMap to be nil")
+	}
+	if got := client.client.BaseURL(); got != "https://api.github.com/" {
+		t.Errorf("Expected base URL to be https://api.github.com/, got %s", got)
+	}
+}
+
+func TestNewGithubClientApiUrl(t *testing.T) {
+	tt := []struct {
+		name           string
+		apiUrl         string
+		expectedBase   string
+		expectedUpload string
+		expectError    bool
+	}{
+		{
+			name:           "empty uses public GitHub",
+			apiUrl:         "",
+			expectedBase:   "https://api.github.com/",
+			expectedUpload: "https://uploads.github.com/",
+		},
+		{
+			name:           "enterprise host",
+			apiUrl:         "https://ghe.example.com",
+			expectedBase:   "https://ghe.example.com/api/v3/",
+			expectedUpload: "https://ghe.example.com/api/uploads/",
+		},
+		{
+			name:           "enterprise host with api/v3",
+			apiUrl:         "https://ghe.example.com/api/v3",
+			expectedBase:   "https://ghe.example.com/api/v3/",
+			expectedUpload: "https://ghe.example.com/api/uploads/",
+		},
+		{
+			name:           "enterprise host with api/v3 and trailing slash",
+			apiUrl:         "https://ghe.example.com/api/v3/",
+			expectedBase:   "https://ghe.example.com/api/v3/",
+			expectedUpload: "https://ghe.example.com/api/uploads/",
+		},
+		{
+			name:           "enterprise cloud with data residency",
+			apiUrl:         "https://api.acme.ghe.com",
+			expectedBase:   "https://api.acme.ghe.com/",
+			expectedUpload: "https://api.acme.ghe.com/",
+		},
+		{
+			name:        "invalid URL",
+			apiUrl:      "://bad",
+			expectError: true,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := NewClient("owner", "repo", "token", tc.apiUrl)
+			if tc.expectError {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			gh := c.(*GHClient)
+			if got := gh.client.BaseURL(); got != tc.expectedBase {
+				t.Errorf("Expected base URL to be %s, got %s", tc.expectedBase, got)
+			}
+			if got := gh.client.UploadURL(); got != tc.expectedUpload {
+				t.Errorf("Expected upload URL to be %s, got %s", tc.expectedUpload, got)
+			}
+		})
 	}
 }
 
@@ -1464,7 +1535,7 @@ func TestContainsValidBypassApproval(t *testing.T) {
 }
 
 func TestContainsValidBypassApprovalNoPR(t *testing.T) {
-	c, err := NewClient("test-owner", "test-repo", "test-token")
+	c, err := NewClient("test-owner", "test-repo", "test-token", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -69,8 +69,15 @@ type GHClient struct {
 	infoBuffer      io.Writer
 }
 
-func NewClient(owner, repo, token string) (Client, error) {
-	client, err := github.NewClient(github.WithAuthToken(token))
+func NewClient(owner, repo, token, apiUrl string) (Client, error) {
+	opts := []github.ClientOptionsFunc{github.WithAuthToken(token)}
+	if apiUrl != "" {
+		// WithEnterpriseURLs appends api/uploads/ to the upload URL, so strip
+		// any api/v3 suffix to avoid ending up with api/v3/api/uploads/.
+		uploadUrl := strings.TrimSuffix(strings.TrimSuffix(apiUrl, "/"), "/api/v3")
+		opts = append(opts, github.WithEnterpriseURLs(apiUrl, uploadUrl))
+	}
+	client, err := github.NewClient(opts...)
 	if err != nil {
 		return nil, err
 	}

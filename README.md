@@ -17,6 +17,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 - [Getting Started](#getting-started)
   - [GitHub Configuration](#github-configuration)
   - [GitHub Teams Support](#github-teams-support)
+  - [GitHub Enterprise](#github-enterprise)
 - [Configuration](#configuration)
   - [.codeowners File Spec](#codeowners-file-spec)
   - [Advanced Configuration](#advanced-configuration)
@@ -111,6 +112,16 @@ It is recommended to also set up a rerun workflow on `pull_request_review` to re
 ### GitHub Teams Support
 
 If you plan to have organization teams as code owners, you will need to use a PAT that has organization [read access for Members and Administration](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens) as the token. If you do not have organization teams as owners, [GITHUB_TOKEN](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication#using-the-github_token-in-a-workflow) should be sufficient.
+
+### GitHub Enterprise
+
+To use a GitHub Enterprise instance instead of the public GitHub API, set the `github-api-url` input:
+
+```yaml
+          github-api-url: 'https://ghe.example.com'
+```
+
+The `/api/v3` suffix is optional. For GitHub Enterprise Cloud with data residency, use `https://api.<tenant>.ghe.com`. If the input is not set, the public GitHub API is used.
 
 ## Configuration
 

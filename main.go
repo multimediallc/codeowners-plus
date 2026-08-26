@@ -16,6 +16,7 @@ import (
 // Flags holds the command line flags
 type Flags struct {
 	Token   *string
+	ApiUrl  *string
 	RepoDir *string
 	PR      *int
 	Repo    *string
@@ -26,6 +27,7 @@ type Flags struct {
 var (
 	flags = &Flags{
 		Token:   flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
+		ApiUrl:  flag.String("api-url", getEnv("INPUT_GITHUB-API-URL", ""), "GitHub API base URL (for GitHub Enterprise, e.g. https://ghe.example.com/api/v3)"),
 		RepoDir: flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
 		PR:      flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
 		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
@@ -127,6 +129,7 @@ func main() {
 
 	cfg := app.Config{
 		Token:         *flags.Token,
+		ApiUrl:        *flags.ApiUrl,
 		RepoDir:       *flags.RepoDir,
 		PR:            *flags.PR,
 		Repo:          *flags.Repo,
