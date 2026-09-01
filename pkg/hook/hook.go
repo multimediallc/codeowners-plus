@@ -134,7 +134,10 @@ func Run(ctx context.Context, path string, req Request, stderr io.Writer) (Respo
 	if err := decoder.Decode(&res); err != nil {
 		return Response{}, fmt.Errorf("decoding hook response: %w", err)
 	}
-	if decoder.More() {
+	// More() reports false on a stray closing delimiter, so it cannot tell a clean
+	// end of stream from trailing junk. Only a second Decode returning EOF can.
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
 		return Response{}, fmt.Errorf("hook %s wrote more than one JSON value", path)
 	}
 	return res, nil

@@ -113,6 +113,9 @@ func TestRunFailsLoudly(t *testing.T) {
 		{"not json", "echo not json\n"},
 		{"unknown field", `echo '{"reviewed":[],"verdict":"yes"}'` + "\n"},
 		{"two values", `echo '{"reviewed":[]} {"reviewed":[]}'` + "\n"},
+		{"trailing brace", `echo '{"reviewed":[]}}'` + "\n"},
+		{"trailing bracket", `echo '{"reviewed":[]}]'` + "\n"},
+		{"trailing junk", `echo '{"reviewed":[]} nope'` + "\n"},
 		{"over the size limit", "head -c 9000000 /dev/zero | tr '\\0' 'x'\n"},
 	}
 
