@@ -388,6 +388,48 @@ func TestHunkHash(t *testing.T) {
 			hunk2Body:    []byte(``),
 			expectedSame: true,
 		},
+		{
+			name:         "two lines vs their concatenation",
+			hunkBody:     []byte("+total = x\n+y\n"),
+			hunk2Body:    []byte("+total = x+y\n"),
+			expectedSame: false,
+		},
+		{
+			name:         "added then removed vs one joined line",
+			hunkBody:     []byte("+foo\n-bar\n"),
+			hunk2Body:    []byte("+foo-bar\n"),
+			expectedSame: false,
+		},
+		{
+			name:         "a trailing newline is a change",
+			hunkBody:     []byte("+value\n\\ No newline at end of file\n"),
+			hunk2Body:    []byte("+value\n"),
+			expectedSame: false,
+		},
+		{
+			name:         "differ only past the old 64KB scanner limit",
+			hunkBody:     []byte("+keep()\n+" + strings.Repeat("x", 70*1024) + "A"),
+			hunk2Body:    []byte("+keep()\n+" + strings.Repeat("x", 70*1024) + "B"),
+			expectedSame: false,
+		},
+		{
+			name:         "identical over-long hunks",
+			hunkBody:     []byte("+keep()\n+" + strings.Repeat("x", 70*1024) + "A"),
+			hunk2Body:    []byte("+keep()\n+" + strings.Repeat("x", 70*1024) + "A"),
+			expectedSame: true,
+		},
+		{
+			name:         "an unterminated CR is content",
+			hunkBody:     []byte("+keep()\n+value\r"),
+			hunk2Body:    []byte("+keep()\n+value"),
+			expectedSame: false,
+		},
+		{
+			name:         "a CRLF file hashes like its LF twin",
+			hunkBody:     []byte("+keep()\r\n+value\r\n"),
+			hunk2Body:    []byte("+keep()\n+value\n"),
+			expectedSame: true,
+		},
 	}
 
 	for _, tc := range tt {
@@ -810,39 +852,3 @@ func TestDiffOfDiffs(t *testing.T) {
 
 // A hunk matching the approval-time diff is dropped as already reviewed, so a
 // collision past the old 64KB read limit retained an approval over unseen change.
-func TestHunkHashKeepsAnUnterminatedCarriageReturn(t *testing.T) {
-	withCR := &diff.Hunk{Body: []byte("+keep()\n+value\r")}
-	without := &diff.Hunk{Body: []byte("+keep()\n+value")}
-	if hunkHash(withCR) == hunkHash(without) {
-		t.Error("a CR that is content, not a line ending, must change the hash")
-	}
-
-	crlf := &diff.Hunk{Body: []byte("+keep()\r\n+value\r\n")}
-	lf := &diff.Hunk{Body: []byte("+keep()\n+value\n")}
-	if hunkHash(crlf) != hunkHash(lf) {
-		t.Error("a CRLF file must still hash like its LF twin")
-	}
-}
-
-func TestHunkHashReadsLinesPastScannerLimit(t *testing.T) {
-	long := strings.Repeat("x", 70*1024)
-	first := &diff.Hunk{Body: []byte("+keep()\n+" + long + "A")}
-	second := &diff.Hunk{Body: []byte("+keep()\n+" + long + "B")}
-
-	if hunkHash(first) == hunkHash(second) {
-		t.Error("hunks differing past 64KB must not hash alike")
-	}
-	same := &diff.Hunk{Body: []byte("+keep()\n+" + long + "A")}
-	if hunkHash(first) != hunkHash(same) {
-		t.Error("identical over-long hunks must still hash alike")
-	}
-	// Context lines stay excluded however long the hunk is.
-	withContext := &diff.Hunk{Body: []byte(" ctx\n+keep()\n+" + long + "A")}
-	if hunkHash(first) != hunkHash(withContext) {
-		t.Error("context lines must not enter the hash")
-	}
-	crlf := &diff.Hunk{Body: []byte("+keep()\r\n+" + long + "A")}
-	if hunkHash(first) != hunkHash(crlf) {
-		t.Error("a carriage return in the line ending must not change the hash")
-	}
-}

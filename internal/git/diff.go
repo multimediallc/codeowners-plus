@@ -228,36 +228,34 @@ func getGitDiff(data DiffContext, executor gitCommandExecutor) ([]*diff.FileDiff
 	return gitDiff, nil
 }
 
-func hunkHash(hunk *diff.Hunk) [32]byte {
-	// Generate a hash for a hunk based on its added and removed lines.
-	// Split by hand: bufio.Scanner refuses a token past 64KB and stops there, so
-	// hashing what it read lets two hunks differing only beyond that collide.
-	var lines []byte
-	data := hunk.Body
+const (
+	addedLine      = '+'
+	removedLine    = '-'
+	noNewlineAtEOF = '\\'
+)
 
-	if len(data) == 0 {
-		return sha256.Sum256(nil)
+func splitLine(data []byte) (line, rest []byte) {
+	i := bytes.IndexByte(data, '\n')
+	if i < 0 {
+		return data, nil
 	}
+	return bytes.TrimSuffix(data[:i], []byte("\r")), data[i+1:]
+}
 
-	for len(data) > 0 {
-		line := data
-		if i := bytes.IndexByte(data, '\n'); i >= 0 {
-			// Only a CR before a newline is a line ending; an unterminated line
-			// ending in CR carries it as content.
-			line, data = bytes.TrimSuffix(data[:i], []byte("\r")), data[i+1:]
-		} else {
-			data = nil
-		}
+func hunkHash(hunk *diff.Hunk) [32]byte {
+	sum := sha256.New()
+	var line []byte
+
+	for data := hunk.Body; len(data) > 0; {
+		line, data = splitLine(data)
 		if len(line) == 0 {
 			continue
 		}
 		switch line[0] {
-		case '+', '-':
-			// Include the line type and content
-			lines = append(lines, line...)
-		default:
-			// Skip context lines
+		case addedLine, removedLine, noNewlineAtEOF:
+			_, _ = sum.Write(line)
+			_, _ = sum.Write([]byte{'\n'})
 		}
 	}
-	return sha256.Sum256(lines)
+	return [32]byte(sum.Sum(nil))
 }
