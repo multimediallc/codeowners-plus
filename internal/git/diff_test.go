@@ -810,6 +810,20 @@ func TestDiffOfDiffs(t *testing.T) {
 
 // A hunk matching the approval-time diff is dropped as already reviewed, so a
 // collision past the old 64KB read limit retained an approval over unseen change.
+func TestHunkHashKeepsAnUnterminatedCarriageReturn(t *testing.T) {
+	withCR := &diff.Hunk{Body: []byte("+keep()\n+value\r")}
+	without := &diff.Hunk{Body: []byte("+keep()\n+value")}
+	if hunkHash(withCR) == hunkHash(without) {
+		t.Error("a CR that is content, not a line ending, must change the hash")
+	}
+
+	crlf := &diff.Hunk{Body: []byte("+keep()\r\n+value\r\n")}
+	lf := &diff.Hunk{Body: []byte("+keep()\n+value\n")}
+	if hunkHash(crlf) != hunkHash(lf) {
+		t.Error("a CRLF file must still hash like its LF twin")
+	}
+}
+
 func TestHunkHashReadsLinesPastScannerLimit(t *testing.T) {
 	long := strings.Repeat("x", 70*1024)
 	first := &diff.Hunk{Body: []byte("+keep()\n+" + long + "A")}

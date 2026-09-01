@@ -242,12 +242,12 @@ func hunkHash(hunk *diff.Hunk) [32]byte {
 	for len(data) > 0 {
 		line := data
 		if i := bytes.IndexByte(data, '\n'); i >= 0 {
-			line, data = data[:i], data[i+1:]
+			// Only a CR before a newline is a line ending; an unterminated line
+			// ending in CR carries it as content.
+			line, data = bytes.TrimSuffix(data[:i], []byte("\r")), data[i+1:]
 		} else {
 			data = nil
 		}
-		// Trailing carriage returns belong to the line ending, not the content.
-		line = bytes.TrimSuffix(line, []byte("\r"))
 		if len(line) == 0 {
 			continue
 		}
