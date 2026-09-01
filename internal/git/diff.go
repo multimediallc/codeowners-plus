@@ -1,7 +1,6 @@
 package git
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"fmt"
@@ -231,6 +230,8 @@ func getGitDiff(data DiffContext, executor gitCommandExecutor) ([]*diff.FileDiff
 
 func hunkHash(hunk *diff.Hunk) [32]byte {
 	// Generate a hash for a hunk based on its added and removed lines.
+	// Split by hand: bufio.Scanner refuses a token past 64KB and stops there, so
+	// hashing what it read lets two hunks differing only beyond that collide.
 	var lines []byte
 	data := hunk.Body
 
@@ -238,10 +239,15 @@ func hunkHash(hunk *diff.Hunk) [32]byte {
 		return sha256.Sum256(nil)
 	}
 
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-
-	for scanner.Scan() {
-		line := scanner.Text()
+	for len(data) > 0 {
+		line := data
+		if i := bytes.IndexByte(data, '\n'); i >= 0 {
+			line, data = data[:i], data[i+1:]
+		} else {
+			data = nil
+		}
+		// Trailing carriage returns belong to the line ending, not the content.
+		line = bytes.TrimSuffix(line, []byte("\r"))
 		if len(line) == 0 {
 			continue
 		}

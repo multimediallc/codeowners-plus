@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
@@ -129,7 +130,7 @@ Binary files a/assets/img/offline.png and b/assets/img/offline.png differ`,
 			expectedErr:   false,
 			expectedFiles: 2,
 			expectedHunks: map[string]int{
-				"file1.go":                1,
+				"file1.go":               1,
 				"assets/img/offline.png": 0,
 			},
 		},
@@ -804,5 +805,30 @@ func TestDiffOfDiffs(t *testing.T) {
 				t.Errorf("Expected end %d, got %d", h2.End, h.End)
 			}
 		}
+	}
+}
+
+// A hunk matching the approval-time diff is dropped as already reviewed, so a
+// collision past the old 64KB read limit retained an approval over unseen change.
+func TestHunkHashReadsLinesPastScannerLimit(t *testing.T) {
+	long := strings.Repeat("x", 70*1024)
+	first := &diff.Hunk{Body: []byte("+keep()\n+" + long + "A")}
+	second := &diff.Hunk{Body: []byte("+keep()\n+" + long + "B")}
+
+	if hunkHash(first) == hunkHash(second) {
+		t.Error("hunks differing past 64KB must not hash alike")
+	}
+	same := &diff.Hunk{Body: []byte("+keep()\n+" + long + "A")}
+	if hunkHash(first) != hunkHash(same) {
+		t.Error("identical over-long hunks must still hash alike")
+	}
+	// Context lines stay excluded however long the hunk is.
+	withContext := &diff.Hunk{Body: []byte(" ctx\n+keep()\n+" + long + "A")}
+	if hunkHash(first) != hunkHash(withContext) {
+		t.Error("context lines must not enter the hash")
+	}
+	crlf := &diff.Hunk{Body: []byte("+keep()\r\n+" + long + "A")}
+	if hunkHash(first) != hunkHash(crlf) {
+		t.Error("a carriage return in the line ending must not change the hash")
 	}
 }
