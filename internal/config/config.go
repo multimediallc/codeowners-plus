@@ -47,6 +47,8 @@ func newDefaultConfig() *Config {
 		SelfApprovalViaTeams:        false,
 		DisableSmartDismissal:       false,
 		RequireBothBranchReviewers:  false,
+		SuppressUnownedWarning:      false,
+		AllowSelfApproval:           false,
 		DisableReviewStatusComments: false,
 	}
 }

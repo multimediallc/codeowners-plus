@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -287,8 +288,35 @@ trailing = invalid
 		t.Fatal("expected a config alongside the error")
 	}
 
-	if diff := configDiff(config, newDefaultConfig()); diff != "" {
-		t.Errorf("expected pristine defaults after a failed parse, got %s", diff)
+	if !reflect.DeepEqual(config, newDefaultConfig()) {
+		t.Errorf("expected pristine defaults after a failed parse, got %s", configDiff(config, newDefaultConfig()))
+	}
+}
+
+func TestReadConfigNeverReturnsNilOnError(t *testing.T) {
+	testDir := t.TempDir()
+	unreadable := filepath.Join(testDir, "unreadable")
+	if err := os.Mkdir(unreadable, 0o000); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o755) })
+
+	malformed := t.TempDir()
+	if err := os.WriteFile(filepath.Join(malformed, "codeowners.toml"), []byte("trailing = invalid\n"), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	for _, dir := range []string{unreadable, malformed} {
+		config, err := ReadConfig(dir, nil)
+		if err == nil {
+			continue
+		}
+		if config == nil {
+			t.Fatalf("%s: callers warn and then dereference the config, so an error path must still return one", dir)
+		}
+		if !reflect.DeepEqual(config, newDefaultConfig()) {
+			t.Errorf("%s: expected pristine defaults, got %s", dir, configDiff(config, newDefaultConfig()))
+		}
 	}
 }
 
