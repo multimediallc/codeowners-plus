@@ -62,10 +62,8 @@ func (e *scriptedGitExecutor) execute(command string, args ...string) ([]byte, e
 		}
 		res, e.diffResults = e.diffResults[0], e.diffResults[1:]
 	}
-	if res.err != nil {
-		return nil, res.err
-	}
-	return []byte(res.output), nil
+	// CombinedOutput returns both, and the output is where git puts the reason.
+	return []byte(res.output), res.err
 }
 
 type timeoutScriptedExecutor struct {
@@ -408,6 +406,25 @@ index abc..def 100644
 				}
 			}
 		})
+	}
+}
+
+func TestFetchRefSurfacesGitOutput(t *testing.T) {
+	executor := &scriptedGitExecutor{
+		diffResults: []mockResult{{output: sampleGitDiff}, {err: errors.New("fatal: bad object deadbeef")}},
+		fetchResult: mockResult{output: "fatal: remote error: upload-pack not permitted", err: errors.New("exit status 128")},
+	}
+	diff, err := NewDiffWithExecutor(DiffContext{Base: "main", Head: "feature", Dir: "."}, executor, WithFetchOrphanedRefs())
+	if err != nil {
+		t.Fatalf("failed to create initial diff: %v", err)
+	}
+
+	_, err = diff.ChangesSince("orphaned-ref")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "upload-pack not permitted") {
+		t.Errorf("expected git's own reason to reach the caller, got %v", err)
 	}
 }
 

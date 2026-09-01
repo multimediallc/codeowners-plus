@@ -149,12 +149,18 @@ func (gd *GitDiff) refResolvesLocally(ref string) bool {
 // `git fetch` accepts --upload-pack, which names a command to run, so the ref goes after a `--`.
 func (gd *GitDiff) fetchRef(ref string) error {
 	args := []string{"fetch", "--no-tags", "origin", "--", ref}
+	run := gd.executor.execute
 	if executor, ok := gd.executor.(timeoutExecutor); ok {
-		_, err := executor.executeWithTimeout(fetchTimeout, "git", args...)
-		return err
+		run = func(command string, args ...string) ([]byte, error) {
+			return executor.executeWithTimeout(fetchTimeout, command, args...)
+		}
 	}
-	_, err := gd.executor.execute("git", args...)
-	return err
+	// git puts the reason on stderr and the exit status alone says nothing useful,
+	// which is why getGitDiff wraps its output too.
+	if output, err := run("git", args...); err != nil {
+		return fmt.Errorf("%s\n%s", err, output)
+	}
+	return nil
 }
 
 func (gd *GitDiff) Context() DiffContext {
