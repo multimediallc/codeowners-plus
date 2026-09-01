@@ -131,6 +131,50 @@ func TestRunFailsLoudly(t *testing.T) {
 	}
 }
 
+func TestRunRejectsARelativePath(t *testing.T) {
+	for _, path := range []string{"filter", "./tools/filter", "tools/filter"} {
+		if _, err := Run(context.Background(), path, sampleRequest(), io.Discard); err == nil {
+			t.Errorf("expected %q to be rejected", path)
+		}
+	}
+}
+
+func TestRunDoesNotHandTheHookTheActionInputs(t *testing.T) {
+	path := writeHook(t, `env >&2
+echo '{"reviewed":[]}'
+`)
+	t.Setenv("INPUT_GITHUB-TOKEN", "ghs_secretvalue")
+	t.Setenv("INPUT_PR", "1")
+	t.Setenv("KEPT_FOR_THE_HOOK", "yes")
+
+	var stderr strings.Builder
+	if _, err := Run(context.Background(), path, sampleRequest(), &stderr); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(stderr.String(), "ghs_secretvalue") {
+		t.Error("the hook must not receive the action's token")
+	}
+	if strings.Contains(stderr.String(), "INPUT_PR") {
+		t.Error("the hook must not receive the action's inputs")
+	}
+	if !strings.Contains(stderr.String(), "KEPT_FOR_THE_HOOK") {
+		t.Error("the rest of the environment should still reach the hook")
+	}
+}
+
+func TestRunBoundsHookStderr(t *testing.T) {
+	path := writeHook(t, `head -c 2000000 /dev/zero | tr '\0' 'e' >&2
+echo '{"reviewed":[]}'
+`)
+	var stderr strings.Builder
+	if _, err := Run(context.Background(), path, sampleRequest(), &stderr); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stderr.Len() > maxStderrBytes {
+		t.Errorf("expected stderr capped at %d bytes, got %d", maxStderrBytes, stderr.Len())
+	}
+}
+
 func TestRunMissingHookIsAnError(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "absent")
 	if _, err := Run(context.Background(), missing, sampleRequest(), io.Discard); err == nil {

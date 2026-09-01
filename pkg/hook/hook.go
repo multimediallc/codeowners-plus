@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -20,22 +23,45 @@ const maxResponseBytes = 8 << 20
 // block on a surviving grandchild for as long as it lived.
 const ioGrace = 2 * time.Second
 
-// limitedBuffer keeps at most limit bytes, reporting every write as complete so the hook does not die on a short write.
-type limitedBuffer struct {
-	buf      bytes.Buffer
+// maxStderrBytes bounds what a hook can add to the run log.
+const maxStderrBytes = 256 << 10
+
+// cappedWriter forwards at most limit bytes and drops the rest, remembering that
+// it had to. Every write is reported as complete so the hook never sees a short
+// write it cannot act on.
+type cappedWriter struct {
+	to       io.Writer
 	limit    int
+	written  int
 	overflow bool
 }
 
-func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if room := b.limit - b.buf.Len(); len(p) > room {
-		b.overflow = true
-		if room > 0 {
-			b.buf.Write(p[:room])
-		}
-		return len(p), nil
+func (c *cappedWriter) Write(p []byte) (int, error) {
+	room := c.limit - c.written
+	if len(p) > room {
+		c.overflow = true
+	} else {
+		room = len(p)
 	}
-	return b.buf.Write(p)
+	if room > 0 {
+		n, err := c.to.Write(p[:room])
+		c.written += n
+		if err != nil {
+			return len(p), nil
+		}
+	}
+	return len(p), nil
+}
+
+func withoutActionInputs(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "INPUT_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 type Hunk struct {
@@ -100,8 +126,19 @@ func (r Response) Indexes(req Request) (map[string][]int, error) {
 	return reviewed, nil
 }
 
+// Decoder.More reports false on a stray closing delimiter, so it cannot tell a
+// clean end of stream from trailing junk; only another Decode can.
+func atEndOfStream(d *json.Decoder) bool {
+	var trailing json.RawMessage
+	return d.Decode(&trailing) == io.EOF
+}
+
 // Run writes req to the hook's stdin and decodes a Response from its stdout; the path is executed directly, never through a shell.
 func Run(ctx context.Context, path string, req Request, stderr io.Writer) (Response, error) {
+	if !filepath.IsAbs(path) {
+		return Response{}, fmt.Errorf("hook path %q must be absolute", path)
+	}
+
 	req.Version = RequestVersion
 
 	input, err := json.Marshal(req)
@@ -109,11 +146,13 @@ func Run(ctx context.Context, path string, req Request, stderr io.Writer) (Respo
 		return Response{}, fmt.Errorf("encoding hook request: %w", err)
 	}
 
-	stdout := &limitedBuffer{limit: maxResponseBytes}
+	var body bytes.Buffer
+	stdout := &cappedWriter{to: &body, limit: maxResponseBytes}
 	cmd := exec.CommandContext(ctx, path)
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.Stdout = stdout
-	cmd.Stderr = stderr
+	cmd.Stderr = &cappedWriter{to: stderr, limit: maxStderrBytes}
+	cmd.Env = withoutActionInputs(os.Environ())
 	cmd.WaitDelay = ioGrace
 
 	if err := cmd.Run(); err != nil {
@@ -126,7 +165,7 @@ func Run(ctx context.Context, path string, req Request, stderr io.Writer) (Respo
 		return Response{}, fmt.Errorf("hook %s wrote more than the %d byte limit", path, maxResponseBytes)
 	}
 
-	decoder := json.NewDecoder(&stdout.buf)
+	decoder := json.NewDecoder(&body)
 	// An unknown field means the hook may believe it answered when it did not.
 	decoder.DisallowUnknownFields()
 
@@ -134,10 +173,7 @@ func Run(ctx context.Context, path string, req Request, stderr io.Writer) (Respo
 	if err := decoder.Decode(&res); err != nil {
 		return Response{}, fmt.Errorf("decoding hook response: %w", err)
 	}
-	// More() reports false on a stray closing delimiter, so it cannot tell a clean
-	// end of stream from trailing junk. Only a second Decode returning EOF can.
-	var trailing json.RawMessage
-	if err := decoder.Decode(&trailing); err != io.EOF {
+	if !atEndOfStream(decoder) {
 		return Response{}, fmt.Errorf("hook %s wrote more than one JSON value", path)
 	}
 	return res, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -175,7 +176,11 @@ func (a *App) Run() (*OutputData, error) {
 	// Get the diff of the PR
 	a.printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
 	var diffOpts []git.DiffOption
-	if a.config.HunkFilter != "" {
+	switch {
+	case a.config.HunkFilter == "":
+	case !filepath.IsAbs(a.config.HunkFilter):
+		a.printWarn("WARNING: hunk filter %q ignored: the path must be absolute\n", a.config.HunkFilter)
+	default:
 		a.printDebug("Using hunk filter %s\n", a.config.HunkFilter)
 		diffOpts = append(diffOpts, git.WithHunkFilter(a.hunkFilter(diffContext.Base, diffContext.Head)))
 	}

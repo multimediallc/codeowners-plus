@@ -214,11 +214,13 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 		file := survivingHunks{name: diffToFilename(d)}
 		for _, hunk := range d.Hunks {
 			if !oldHunkHashes[hunkHash(hunk)] {
-				file.ranges = append(file.ranges, codeowners.HunkRange{
-					Start: int(hunk.NewStartLine),
-					End:   int(hunk.NewStartLine + hunk.NewLines - 1),
+				file.hunks = append(file.hunks, survivingHunk{
+					rng: codeowners.HunkRange{
+						Start: int(hunk.NewStartLine),
+						End:   int(hunk.NewStartLine + hunk.NewLines - 1),
+					},
+					body: string(hunk.Body),
 				})
-				file.bodies = append(file.bodies, string(hunk.Body))
 			}
 		}
 		survivors = append(survivors, file)
@@ -232,32 +234,62 @@ func changesSince(context changesSinceContext) ([]codeowners.DiffFile, error) {
 	for _, file := range survivors {
 		// Binary files have no hunks; staleness is intentionally not tracked
 		// for them (there is no hunk content to hash against the older diff).
-		if len(file.ranges) == 0 {
+		if len(file.hunks) == 0 {
 			continue
 		}
 		diffFiles = append(diffFiles, codeowners.DiffFile{
 			FileName: file.name,
-			Hunks:    file.ranges,
+			Hunks:    file.ranges(),
 		})
 	}
 	return diffFiles, nil
 }
 
-// Each range keeps the text it came from, so a filter can be asked about it.
+type survivingHunk struct {
+	rng  codeowners.HunkRange
+	body string
+}
+
 type survivingHunks struct {
-	name   string
-	ranges []codeowners.HunkRange
-	bodies []string
+	name  string
+	hunks []survivingHunk
+}
+
+func (f survivingHunks) bodies() []string {
+	out := make([]string, 0, len(f.hunks))
+	for _, h := range f.hunks {
+		out = append(out, h.body)
+	}
+	return out
+}
+
+func (f survivingHunks) ranges() []codeowners.HunkRange {
+	out := make([]codeowners.HunkRange, 0, len(f.hunks))
+	for _, h := range f.hunks {
+		out = append(out, h.rng)
+	}
+	return out
+}
+
+// A path a filter cannot address is a path it must not be asked about: a
+// typechange gives one path two entries and the answer is keyed by name.
+func addressableNames(survivors []survivingHunks) map[string]bool {
+	count := make(map[string]int, len(survivors))
+	for _, file := range survivors {
+		count[file.name]++
+	}
+	names := make(map[string]bool, len(survivors))
+	for _, file := range survivors {
+		if len(file.hunks) > 0 && count[file.name] == 1 {
+			names[file.name] = true
+		}
+	}
+	return names
 }
 
 // applyHunkFilter drops the hunks the filter reports as already reviewed; any error, or any answer about something unasked, changes nothing.
 func applyHunkFilter(context changesSinceContext, survivors []survivingHunks) []survivingHunks {
-	survivorNames := make(map[string]bool, len(survivors))
-	for _, file := range survivors {
-		if len(file.bodies) > 0 {
-			survivorNames[file.name] = true
-		}
-	}
+	survivorNames := addressableNames(survivors)
 	if len(survivorNames) == 0 {
 		return survivors
 	}
@@ -276,12 +308,12 @@ func applyHunkFilter(context changesSinceContext, survivors []survivingHunks) []
 
 	files := make([]HunkText, 0, len(survivorNames))
 	for _, file := range survivors {
-		if len(file.bodies) == 0 {
+		if !survivorNames[file.name] {
 			continue
 		}
 		files = append(files, HunkText{
 			Name:          file.name,
-			HeadHunks:     file.bodies,
+			HeadHunks:     file.bodies(),
 			ApprovalHunks: approvalBodies[file.name],
 		})
 	}
@@ -294,14 +326,14 @@ func applyHunkFilter(context changesSinceContext, survivors []survivingHunks) []
 	filtered := make([]survivingHunks, 0, len(survivors))
 	for _, file := range survivors {
 		indexes, ok := reviewed[file.name]
-		if !ok || len(indexes) == 0 {
+		if !ok || len(indexes) == 0 || !survivorNames[file.name] {
 			filtered = append(filtered, file)
 			continue
 		}
 		drop := make(map[int]bool, len(indexes))
 		for _, index := range indexes {
-			if index < 0 || index >= len(file.ranges) {
-				// Answering about unsent hunks voids its answer for this file.
+			if index < 0 || index >= len(file.hunks) {
+				// An answer about an unsent hunk voids the answer for this file.
 				drop = nil
 				break
 			}
@@ -312,12 +344,10 @@ func applyHunkFilter(context changesSinceContext, survivors []survivingHunks) []
 			continue
 		}
 		kept := survivingHunks{name: file.name}
-		for i := range file.ranges {
-			if drop[i] {
-				continue
+		for i, hunk := range file.hunks {
+			if !drop[i] {
+				kept.hunks = append(kept.hunks, hunk)
 			}
-			kept.ranges = append(kept.ranges, file.ranges[i])
-			kept.bodies = append(kept.bodies, file.bodies[i])
 		}
 		filtered = append(filtered, kept)
 	}

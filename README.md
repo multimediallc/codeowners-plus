@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-83.4%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-83.5%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -425,8 +425,11 @@ Notes:
 * A filter can only narrow what an approval answers for. It cannot add hunks, name a file it was not sent, alter ownership, or grant an approval; ownership resolution and the staleness check run unchanged on whatever survives.
 * Every failure leaves the diff as Codeowners Plus computed it and logs a warning: the program is missing or not executable, it exits non-zero, it does not finish inside 60s, its output is not a single JSON object of the known shape, or it names a file or an index that was not sent.
 * Unlike a configuration option, a filter is code in the review path, and it acts in the direction of dismissing less. It cannot weaken ownership, but it can decide that a change nobody looked at did not need looking at.
-* The workflow naming the filter comes from the base branch, but a path inside `GITHUB_WORKSPACE` does not: the checkout is writable by the PR author, so a filter named there lets a contributor choose the code that judges their own changes. Install it in the runner image, fetch it by digest, or build it from a pinned ref.
-* The program is executed directly rather than through a shell, once per distinct approved commit, bounded at 60s and 8MB of output per call.
+* The path must be absolute, and it is executed directly rather than through a shell. A relative path would resolve inside `GITHUB_WORKSPACE` and a bare name would go through `PATH`, both of which put the choice of program within reach of the pull request.
+* Even so, `GITHUB_WORKSPACE` is writable by the PR author, so an absolute path pointing into the checkout is still the wrong thing to name. Install the program in the runner image, fetch it by digest, or build it from a pinned ref.
+* The action's own inputs are removed from the filter's environment, `INPUT_GITHUB-TOKEN` among them, so a filter never sees the token the action runs with. The rest of the environment is inherited.
+* Bounded per call: 60s, 8MB of stdout, 256KB of stderr into the run log. It runs once per distinct approved commit.
+* A path in the same repository as the workflow is still a program someone can change. Treat it the way you would treat any other program in the review path.
 
 ## CLI Tool
 

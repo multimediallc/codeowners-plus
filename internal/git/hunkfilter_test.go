@@ -55,6 +55,47 @@ func hunkCounts(t *testing.T, filter HunkFilter) map[string]int {
 	return counts
 }
 
+func TestHunkFilterSkipsDuplicateFilenames(t *testing.T) {
+	const dupDiff = `diff --git a/x b/x
+--- a/x
++++ /dev/null
+@@ -1,1 +0,0 @@
+-was a file
+diff --git a/x b/x
+--- /dev/null
++++ b/x
+@@ -0,0 +1,1 @@
++/etc/hostname
+`
+	var offered []HunkText
+	files, err := changesSince(changesSinceContext{
+		newerDiff: parseFilterDiff(t, dupDiff),
+		olderDiff: nil,
+		ref:       "approvalsha",
+		filter: func(_ string, f []HunkText) (map[string][]int, error) {
+			offered = f
+			return map[string][]int{"x": {0}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("changesSince: %v", err)
+	}
+	for _, f := range offered {
+		if f.Name == "x" {
+			t.Errorf("a duplicate-named path must not be offered to the filter, got %+v", f)
+		}
+	}
+	total := 0
+	for _, f := range files {
+		if f.FileName == "x" {
+			total += len(f.Hunks)
+		}
+	}
+	if total != 2 {
+		t.Errorf("expected both hunks for x to survive, got %d", total)
+	}
+}
+
 func TestChangesSinceWithoutFilterIsUnchanged(t *testing.T) {
 	counts := hunkCounts(t, nil)
 	if counts["service.go"] != 2 || counts["other.go"] != 1 {
@@ -121,7 +162,7 @@ func TestHunkFilterFailuresChangeNothing(t *testing.T) {
 		{
 			name: "negative index",
 			filter: func(string, []HunkText) (map[string][]int, error) {
-				return map[string][]int{"service.go": {-1}}, nil
+				return map[string][]int{"service.go": {0, -1}}, nil
 			},
 		},
 		{

@@ -24,7 +24,7 @@ inputs:
     required: false
     default: false
   hunk-filter:
-    description: 'Path to an executable which reports already-reviewed post-approval hunks; see "Hunk Filters" in the README'
+    description: 'Absolute path to an executable which reports already-reviewed post-approval hunks; see "Hunk Filters" in the README'
     required: false
     default: ''
 
