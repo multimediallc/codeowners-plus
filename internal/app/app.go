@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	gh "github.com/multimediallc/codeowners-plus/internal/github"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
+	"github.com/multimediallc/codeowners-plus/pkg/hook"
 )
 
 // OutputData holds the data that will be written to GITHUB_OUTPUT
@@ -57,9 +59,13 @@ type Config struct {
 	Repo          string
 	Verbose       bool
 	Quiet         bool
+	HunkFilter    string
 	InfoBuffer    io.Writer
 	WarningBuffer io.Writer
 }
+
+// hunkFilterTimeout bounds each call, so a hook that hangs cannot hold up the check.
+const hunkFilterTimeout = 60 * time.Second
 
 // App represents the application with its dependencies
 type App struct {
@@ -101,6 +107,43 @@ func (a *App) printWarn(format string, args ...interface{}) {
 	_, _ = fmt.Fprintf(a.config.WarningBuffer, format, args...)
 }
 
+// hunkFilter asks the hook which outstanding hunks are already reviewed; every failure is answered as "none".
+func (a *App) hunkFilter(base, head string) git.HunkFilter {
+	return func(ref string, files []git.HunkText) (map[string][]int, error) {
+		req := hook.Request{Base: base, Head: head, Ref: ref}
+		for _, file := range files {
+			req.Files = append(req.Files, hook.File{
+				Name:          file.Name,
+				HeadHunks:     toHookHunks(file.HeadHunks),
+				ApprovalHunks: toHookHunks(file.ApprovalHunks),
+			})
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), hunkFilterTimeout)
+		defer cancel()
+
+		res, err := hook.Run(ctx, a.config.HunkFilter, req, a.config.WarningBuffer)
+		if err != nil {
+			a.printWarn("WARNING: hunk filter not applied: %v\n", err)
+			return nil, nil
+		}
+		reviewed, err := res.Indexes(req)
+		if err != nil {
+			a.printWarn("WARNING: hunk filter not applied: %v\n", err)
+			return nil, nil
+		}
+		return reviewed, nil
+	}
+}
+
+func toHookHunks(bodies []string) []hook.Hunk {
+	hunks := make([]hook.Hunk, 0, len(bodies))
+	for _, body := range bodies {
+		hunks = append(hunks, hook.Hunk{Body: body})
+	}
+	return hunks
+}
+
 // Run executes the application logic
 func (a *App) Run() (*OutputData, error) {
 	// Initialize PR
@@ -131,7 +174,12 @@ func (a *App) Run() (*OutputData, error) {
 
 	// Get the diff of the PR
 	a.printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
-	gitDiff, err := git.NewDiff(diffContext)
+	var diffOpts []git.DiffOption
+	if a.config.HunkFilter != "" {
+		a.printDebug("Using hunk filter %s\n", a.config.HunkFilter)
+		diffOpts = append(diffOpts, git.WithHunkFilter(a.hunkFilter(diffContext.Base, diffContext.Head)))
+	}
+	gitDiff, err := git.NewDiff(diffContext, diffOpts...)
 	if err != nil {
 		return &OutputData{}, fmt.Errorf("NewGitDiff Error: %v", err)
 	}

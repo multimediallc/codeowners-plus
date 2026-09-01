@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-82.6%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-83.3%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -22,6 +22,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
   - [Advanced Configuration](#advanced-configuration)
     - [Enforcement Options](#enforcement-options)
   - [Quiet Mode](#quiet-mode)
+  - [Hunk Filters](#hunk-filters)
 - [CLI Tool](#cli-tool)
 - [Contributing](#contributing)
 - [Future Features](#future-features)
@@ -48,6 +49,7 @@ These are features missing from GitHub code owners that are supported by Codeown
   * GitHub CODEOWNERS supports only `OR` ownership rules, in contrast
 * Directory-level code ownership files to assign fine-grained code ownership
 * Supports optional reviewers (cc users/teams for non-blocking reviews)
+* Hunk filters: external tooling can decide which post-approval changes do not need re-review (see [Hunk Filters](#hunk-filters))
 * Advanced global configuration (see [Advanced Configuration](#advanced-configuration))
 
 ## Getting Started
@@ -371,6 +373,60 @@ Using the `quiet` input on the action will change the behavior in a couple ways:
 
 * **Draft Pull Requests:** This is a common use case. You might want the Codeowners Plus logic to run and report a status (e.g., pending or failed) on draft PRs, but without notifying reviewers prematurely by adding comments or requesting reviews until the PR is marked "Ready for review".
 * **Custom Notification Workflows:** You might prefer to handle notifications or review requests through a different mechanism and only use Codeowners Plus for the status check enforcement.
+
+### Hunk Filters
+
+When an approval is checked, the diff is taken twice from the same merge base, once to the head and once to the approved commit, and the hunks appearing in both are subtracted. What is left is what the reviewer has not seen. That comparison is textual, so a hunk which changed for a reason a particular codebase does not care about still counts as unreviewed. Hunk filters let external tooling make that judgement and feed the answer back to Codeowners Plus.
+
+Pass an executable to the action with the `hunk-filter` input:
+
+```yaml
+      - name: 'Codeowners Plus'
+        uses: multimediallc/codeowners-plus@v1
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          pr: '${{ github.event.pull_request.number }}'
+          hunk-filter: '/opt/review-tools/already-seen'
+```
+
+For each approved commit being checked, the filter receives one JSON object on stdin:
+
+```json
+{
+  "version": 1,
+  "base": "<merge base sha>",
+  "head": "<head sha>",
+  "ref": "<the approved commit>",
+  "files": [
+    {
+      "name": "service/handler.go",
+      "head_hunks": [{ "body": "@@ -1,3 +1,3 @@\n-old\n+new\n" }],
+      "approval_hunks": [{ "body": "@@ -9,0 +10,1 @@\n+approved\n" }]
+    }
+  ]
+}
+```
+
+* `head_hunks`: the hunks still outstanding against this approval
+* `approval_hunks`: the hunks the approved commit itself introduced, for comparison
+* `ref`: the approved commit the head is being compared against
+* `version`: the request format, currently `1`
+
+It writes one JSON object on stdout, naming the `head_hunks` the reviewer has effectively already reviewed by index into the same file:
+
+```json
+{ "reviewed": [{ "name": "service/handler.go", "indexes": [0] }] }
+```
+
+Both sides of the diff are sent because they answer different questions: a hunk rewritten since approval looks like new code on its own, and only looks like reviewed code next to the text the reviewer saw.
+
+Notes:
+
+* A filter can only narrow what an approval answers for. It cannot add hunks, name a file it was not sent, alter ownership, or grant an approval; ownership resolution and the staleness check run unchanged on whatever survives.
+* Every failure leaves the diff as Codeowners Plus computed it and logs a warning: the program is missing or not executable, it exits non-zero, it does not finish inside 60s, its output is not a single JSON object of the known shape, or it names a file or an index that was not sent.
+* Unlike a configuration option, a filter is code in the review path, and it acts in the direction of dismissing less. It cannot weaken ownership, but it can decide that a change nobody looked at did not need looking at.
+* The workflow naming the filter comes from the base branch, but a path inside `GITHUB_WORKSPACE` does not: the checkout is writable by the PR author, so a filter named there lets a contributor choose the code that judges their own changes. Install it in the runner image, fetch it by digest, or build it from a pinned ref.
+* The program is executed directly rather than through a shell, once per distinct approved commit, bounded at 60s and 8MB of output per call.
 
 ## CLI Tool
 

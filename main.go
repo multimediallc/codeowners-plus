@@ -15,12 +15,13 @@ import (
 
 // Flags holds the command line flags
 type Flags struct {
-	Token   *string
-	RepoDir *string
-	PR      *int
-	Repo    *string
-	Verbose *bool
-	Quiet   *bool
+	Token      *string
+	RepoDir    *string
+	PR         *int
+	Repo       *string
+	Verbose    *bool
+	Quiet      *bool
+	HunkFilter *string
 }
 
 var (
@@ -31,6 +32,8 @@ var (
 		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
 		Verbose: flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
 		Quiet:   flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Disable PR comments and review requests"),
+		HunkFilter: flag.String("hunk-filter", getEnv("INPUT_HUNK-FILTER", ""),
+			"Path to an executable which reports already-reviewed hunks (see README)"),
 	}
 	WarningBuffer = bytes.NewBuffer([]byte{})
 	InfoBuffer    = bytes.NewBuffer([]byte{})
@@ -132,6 +135,7 @@ func main() {
 		Repo:          *flags.Repo,
 		Verbose:       *flags.Verbose,
 		Quiet:         *flags.Quiet,
+		HunkFilter:    *flags.HunkFilter,
 		InfoBuffer:    InfoBuffer,
 		WarningBuffer: WarningBuffer,
 	}
