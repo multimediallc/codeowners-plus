@@ -18,6 +18,9 @@ import (
 
 const fetchTimeout = 60 * time.Second
 
+// git spawns a transport helper which inherits the pipe and outlives the kill.
+const transportHelperGrace = 2 * time.Second
+
 // gitCommandExecutor defines the interface for executing git commands
 type gitCommandExecutor interface {
 	execute(command string, args ...string) ([]byte, error)
@@ -47,6 +50,7 @@ func (e *realGitExecutor) executeWithTimeout(timeout time.Duration, command stri
 	defer cancel()
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = e.dir
+	cmd.WaitDelay = transportHelperGrace
 	output, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return output, fmt.Errorf("%s timed out after %s", command, timeout)
@@ -117,7 +121,7 @@ func (gd *GitDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 		IgnoreDirs: gd.context.IgnoreDirs,
 	}
 	olderDiff, err := getGitDiff(olderDiffContext, gd.executor)
-	if err != nil && gd.fetchOrphanedRefs && !gd.refResolvesLocally(ref) {
+	if err != nil && gd.fetchOrphanedRefs && looksLikeObjectName(ref) && !gd.refResolvesLocally(ref) {
 		if fetchErr := gd.fetchRef(ref); fetchErr != nil {
 			err = fmt.Errorf("%w (fetching orphaned ref failed: %v)", err, fetchErr)
 		} else if retryDiff, retryErr := getGitDiff(olderDiffContext, gd.executor); retryErr != nil {
@@ -138,6 +142,18 @@ func (gd *GitDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 		return nil, fmt.Errorf("failed to compute changes since: %w", err)
 	}
 	return diffFiles, nil
+}
+
+func looksLikeObjectName(ref string) bool {
+	if len(ref) < 7 || len(ref) > 64 {
+		return false
+	}
+	for i := 0; i < len(ref); i++ {
+		if c := ref[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // A diff can fail for reasons unrelated to the ref, and fetching then cannot help.

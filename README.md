@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-85.2%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-85.3%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -257,8 +257,9 @@ disable_review_status_comments = false
 # `fetch_orphaned_approval` (default false) recovers an approval whose commit no
 # longer resolves locally, which is what a rebase or a force-push leaves behind.
 # Without it that approval is dismissed with no ownership check at all, because the
-# diff it would be judged on cannot be computed. Off by default: it is the only
-# setting here that adds a network call, bounded at 60s per unresolvable commit.
+# diff it would be judged on cannot be computed. Off by default because it reaches
+# the network: one fetch per unresolvable commit, bounded at 60s plus a short grace
+# for the transport helper to exit.
 fetch_orphaned_approval = false
 
 # `enforcement` allows you to specify how the Codeowners Plus check should be enforced

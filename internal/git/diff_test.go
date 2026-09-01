@@ -419,7 +419,7 @@ func TestFetchRefSurfacesGitOutput(t *testing.T) {
 		t.Fatalf("failed to create initial diff: %v", err)
 	}
 
-	_, err = diff.ChangesSince("orphaned-ref")
+	_, err = diff.ChangesSince("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -437,13 +437,14 @@ index abc..def 100644
 +       fmt.Println("Old change")`
 
 	diffFailure := errors.New("fatal: bad object deadbeef")
-	retryFailure := errors.New("fatal: ambiguous argument 'orphaned-ref'")
+	retryFailure := errors.New("fatal: ambiguous argument 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'")
 	fetchFailure := errors.New("fatal: could not read from remote")
 
 	tt := []struct {
 		name               string
 		fetchOrphanedRefs  bool
 		refResolves        bool
+		ref                string
 		olderDiffResults   []mockResult
 		fetchResult        mockResult
 		expectedErr        error // the error the caller must see as the cause
@@ -490,6 +491,22 @@ index abc..def 100644
 			expectedFetchCalls: 0,
 		},
 		{
+			name:               "ref is not an object name, so nothing is fetched",
+			fetchOrphanedRefs:  true,
+			ref:                "refs/heads/main:refs/heads/injected",
+			olderDiffResults:   []mockResult{{err: diffFailure}},
+			expectedErr:        diffFailure,
+			expectedFetchCalls: 0,
+		},
+		{
+			name:               "empty ref is never fetched",
+			fetchOrphanedRefs:  true,
+			ref:                "",
+			olderDiffResults:   []mockResult{{err: diffFailure}},
+			expectedErr:        diffFailure,
+			expectedFetchCalls: 0,
+		},
+		{
 			name:               "ref resolves locally, so the diff failed for another reason",
 			fetchOrphanedRefs:  true,
 			refResolves:        true,
@@ -517,14 +534,18 @@ index abc..def 100644
 				t.Fatalf("failed to create initial diff: %v", err)
 			}
 
-			changes, err := diff.ChangesSince("orphaned-ref")
+			ref := tc.ref
+			if ref == "" && tc.name != "empty ref is never fetched" {
+				ref = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+			}
+			changes, err := diff.ChangesSince(ref)
 
 			fetches := executor.fetchCalls()
 			if len(fetches) != tc.expectedFetchCalls {
 				t.Errorf("expected %d fetch calls, got %d", tc.expectedFetchCalls, len(fetches))
 			}
 			for _, fetch := range fetches {
-				want := []string{"git", "fetch", "--no-tags", "origin", "--", "orphaned-ref"}
+				want := []string{"git", "fetch", "--no-tags", "origin", "--", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
 				if !slices.Equal(fetch, want) {
 					t.Errorf("expected fetch command %v, got %v", want, fetch)
 				}
@@ -577,7 +598,7 @@ index abc..def 100644
 	if err != nil {
 		t.Fatalf("failed to create initial diff: %v", err)
 	}
-	if _, err := diff.ChangesSince("orphaned-ref"); err != nil {
+	if _, err := diff.ChangesSince("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
