@@ -345,48 +345,54 @@ func TestNewGithubClient(t *testing.T) {
 	if client.userReviewerMap != nil {
 		t.Error("Expected userReviewerMap to be nil")
 	}
-	if got := client.client.BaseURL(); got != "https://api.github.com/" {
-		t.Errorf("Expected base URL to be https://api.github.com/, got %s", got)
-	}
 }
 
 func TestNewGithubClientApiUrl(t *testing.T) {
 	tt := []struct {
-		name           string
-		apiUrl         string
-		expectedBase   string
-		expectedUpload string
-		expectError    bool
+		name        string
+		apiUrl      string
+		expected    string
+		expectError bool
 	}{
 		{
-			name:           "empty uses public GitHub",
-			apiUrl:         "",
-			expectedBase:   "https://api.github.com/",
-			expectedUpload: "https://uploads.github.com/",
+			name:     "empty uses public GitHub",
+			apiUrl:   "",
+			expected: "https://api.github.com/",
 		},
 		{
-			name:           "enterprise host",
-			apiUrl:         "https://ghe.example.com",
-			expectedBase:   "https://ghe.example.com/api/v3/",
-			expectedUpload: "https://ghe.example.com/api/uploads/",
+			name:     "enterprise server",
+			apiUrl:   "https://ghe.example.com/api/v3",
+			expected: "https://ghe.example.com/api/v3/",
 		},
 		{
-			name:           "enterprise host with api/v3",
-			apiUrl:         "https://ghe.example.com/api/v3",
-			expectedBase:   "https://ghe.example.com/api/v3/",
-			expectedUpload: "https://ghe.example.com/api/uploads/",
+			name:     "enterprise server with trailing slash",
+			apiUrl:   "https://ghe.example.com/api/v3/",
+			expected: "https://ghe.example.com/api/v3/",
 		},
 		{
-			name:           "enterprise host with api/v3 and trailing slash",
-			apiUrl:         "https://ghe.example.com/api/v3/",
-			expectedBase:   "https://ghe.example.com/api/v3/",
-			expectedUpload: "https://ghe.example.com/api/uploads/",
+			name:     "enterprise server with doubled trailing slash",
+			apiUrl:   "https://ghe.example.com/api/v3//",
+			expected: "https://ghe.example.com/api/v3/",
 		},
 		{
-			name:           "enterprise cloud with data residency",
-			apiUrl:         "https://api.acme.ghe.com",
-			expectedBase:   "https://api.acme.ghe.com/",
-			expectedUpload: "https://api.acme.ghe.com/",
+			name:     "enterprise server on an api. hostname",
+			apiUrl:   "https://api.corp.example.com/api/v3",
+			expected: "https://api.corp.example.com/api/v3/",
+		},
+		{
+			name:     "enterprise cloud with data residency",
+			apiUrl:   "https://api.acme.ghe.com",
+			expected: "https://api.acme.ghe.com/",
+		},
+		{
+			name:     "surrounding whitespace is trimmed",
+			apiUrl:   "  https://ghe.example.com/api/v3  ",
+			expected: "https://ghe.example.com/api/v3/",
+		},
+		{
+			name:        "missing scheme",
+			apiUrl:      "ghe.example.com/api/v3",
+			expectError: true,
 		},
 		{
 			name:        "invalid URL",
@@ -408,11 +414,8 @@ func TestNewGithubClientApiUrl(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			gh := c.(*GHClient)
-			if got := gh.client.BaseURL(); got != tc.expectedBase {
-				t.Errorf("Expected base URL to be %s, got %s", tc.expectedBase, got)
-			}
-			if got := gh.client.UploadURL(); got != tc.expectedUpload {
-				t.Errorf("Expected upload URL to be %s, got %s", tc.expectedUpload, got)
+			if got := gh.client.BaseURL(); got != tc.expected {
+				t.Errorf("Expected base URL to be %s, got %s", tc.expected, got)
 			}
 		})
 	}

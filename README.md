@@ -115,13 +115,16 @@ If you plan to have organization teams as code owners, you will need to use a PA
 
 ### GitHub Enterprise
 
-To use a GitHub Enterprise instance instead of the public GitHub API, set the `github-api-url` input:
+Codeowners Plus talks to the API of the instance running the workflow, so it works on GitHub Enterprise without any extra configuration. To point it at a different API, set the `github-api-url` input:
 
 ```yaml
-          github-api-url: 'https://ghe.example.com'
+          github-api-url: 'https://ghe.example.com/api/v3'
 ```
 
-The `/api/v3` suffix is optional. For GitHub Enterprise Cloud with data residency, use `https://api.<tenant>.ghe.com`. If the input is not set, the public GitHub API is used.
+The value should be the instance's exact API URL — the same value as the `github.api_url` context (`GITHUB_API_URL`). For GitHub Enterprise Server this includes the `/api/v3` suffix; for GitHub Enterprise Cloud with data residency use `https://api.<tenant>.ghe.com`. If the input is not set, it defaults to the API URL of the instance running the workflow.
+
+> [!Note]
+> When the action is referenced by a release tag, it downloads its prebuilt binary from public `github.com` (see [scripts/install-action.sh](scripts/install-action.sh)). On an egress-restricted Enterprise instance, either allow that egress or reference the action by branch or SHA, which builds it from source instead.
 
 ## Configuration
 

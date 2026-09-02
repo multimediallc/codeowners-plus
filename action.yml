@@ -16,9 +16,9 @@ inputs:
     required: true
     default: '${{ github.repository }}'
   github-api-url:
-    description: 'GitHub API base URL. Set for GitHub Enterprise, e.g. https://ghe.example.com/api/v3. Defaults to the public GitHub API.'
+    description: 'GitHub API base URL. Defaults to the API URL of the instance running the workflow. If overriding, use the exact value of the `github.api_url` context (GitHub Enterprise Server includes the /api/v3 suffix; GHE Cloud with data residency does not).'
     required: false
-    default: ''
+    default: '${{ github.api_url }}'
   verbose:
     description: 'Print debug info'
     required: false

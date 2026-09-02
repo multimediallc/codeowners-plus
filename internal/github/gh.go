@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -71,11 +72,18 @@ type GHClient struct {
 
 func NewClient(owner, repo, token, apiUrl string) (Client, error) {
 	opts := []github.ClientOptionsFunc{github.WithAuthToken(token)}
-	if apiUrl != "" {
-		// WithEnterpriseURLs appends api/uploads/ to the upload URL, so strip
-		// any api/v3 suffix to avoid ending up with api/v3/api/uploads/.
-		uploadUrl := strings.TrimSuffix(strings.TrimSuffix(apiUrl, "/"), "/api/v3")
-		opts = append(opts, github.WithEnterpriseURLs(apiUrl, uploadUrl))
+	if apiUrl = strings.TrimSpace(apiUrl); apiUrl != "" {
+		// apiUrl is expected to be the instance's exact API base URL, so use it
+		// verbatim rather than letting go-github guess the layout from the host.
+		baseUrl := strings.TrimRight(apiUrl, "/") + "/"
+		parsed, err := url.Parse(baseUrl)
+		if err != nil {
+			return nil, fmt.Errorf("invalid api url %q: %w", apiUrl, err)
+		}
+		if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			return nil, fmt.Errorf("api url %q must be an absolute http(s) URL", apiUrl)
+		}
+		opts = append(opts, github.WithURLs(&baseUrl, nil))
 	}
 	client, err := github.NewClient(opts...)
 	if err != nil {
