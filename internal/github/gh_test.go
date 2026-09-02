@@ -322,7 +322,7 @@ func TestIsSubstringInComments(t *testing.T) {
 }
 
 func TestNewGithubClient(t *testing.T) {
-	c, err := NewClient("owner", "repo", "token")
+	c, err := NewClient("owner", "repo", "token", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -344,6 +344,95 @@ func TestNewGithubClient(t *testing.T) {
 	}
 	if client.userReviewerMap != nil {
 		t.Error("Expected userReviewerMap to be nil")
+	}
+}
+
+func TestNewGithubClientApiUrl(t *testing.T) {
+	tt := []struct {
+		name        string
+		apiUrl      string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:     "empty uses public GitHub",
+			apiUrl:   "",
+			expected: "https://api.github.com/",
+		},
+		{
+			name:     "enterprise server",
+			apiUrl:   "https://ghe.example.com/api/v3",
+			expected: "https://ghe.example.com/api/v3/",
+		},
+		{
+			name:     "enterprise server with trailing slash",
+			apiUrl:   "https://ghe.example.com/api/v3/",
+			expected: "https://ghe.example.com/api/v3/",
+		},
+		{
+			name:     "enterprise server with doubled trailing slash",
+			apiUrl:   "https://ghe.example.com/api/v3//",
+			expected: "https://ghe.example.com/api/v3/",
+		},
+		{
+			name:     "enterprise server on an api. hostname",
+			apiUrl:   "https://api.corp.example.com/api/v3",
+			expected: "https://api.corp.example.com/api/v3/",
+		},
+		{
+			name:     "enterprise cloud with data residency",
+			apiUrl:   "https://api.acme.ghe.com",
+			expected: "https://api.acme.ghe.com/",
+		},
+		{
+			name:     "surrounding whitespace is trimmed",
+			apiUrl:   "  https://ghe.example.com/api/v3  ",
+			expected: "https://ghe.example.com/api/v3/",
+		},
+		{
+			name:        "missing scheme",
+			apiUrl:      "ghe.example.com/api/v3",
+			expectError: true,
+		},
+		{
+			name:        "http is rejected",
+			apiUrl:      "http://ghe.example.com/api/v3",
+			expectError: true,
+		},
+		{
+			name:        "query string is rejected",
+			apiUrl:      "https://ghe.example.com/api/v3?tenant=acme",
+			expectError: true,
+		},
+		{
+			name:        "credentials are rejected",
+			apiUrl:      "https://user:pass@ghe.example.com/api/v3",
+			expectError: true,
+		},
+		{
+			name:        "invalid URL",
+			apiUrl:      "://bad",
+			expectError: true,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := NewClient("owner", "repo", "token", tc.apiUrl)
+			if tc.expectError {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			gh := c.(*GHClient)
+			if got := gh.client.BaseURL(); got != tc.expected {
+				t.Errorf("Expected base URL to be %s, got %s", tc.expected, got)
+			}
+		})
 	}
 }
 
@@ -1464,7 +1553,7 @@ func TestContainsValidBypassApproval(t *testing.T) {
 }
 
 func TestContainsValidBypassApprovalNoPR(t *testing.T) {
-	c, err := NewClient("test-owner", "test-repo", "test-token")
+	c, err := NewClient("test-owner", "test-repo", "test-token", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
