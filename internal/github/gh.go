@@ -75,14 +75,22 @@ func NewClient(owner, repo, token, apiUrl string) (Client, error) {
 	if apiUrl = strings.TrimSpace(apiUrl); apiUrl != "" {
 		// apiUrl is expected to be the instance's exact API base URL, so use it
 		// verbatim rather than letting go-github guess the layout from the host.
-		baseUrl := strings.TrimRight(apiUrl, "/") + "/"
-		parsed, err := url.Parse(baseUrl)
+		parsed, err := url.Parse(apiUrl)
 		if err != nil {
 			return nil, fmt.Errorf("invalid api url %q: %w", apiUrl, err)
 		}
-		if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-			return nil, fmt.Errorf("api url %q must be an absolute http(s) URL", apiUrl)
+		// https only: the URL carries the auth token on every request.
+		if parsed.Scheme != "https" || parsed.Host == "" {
+			return nil, fmt.Errorf("api url %q must be an absolute https URL", apiUrl)
 		}
+		if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return nil, fmt.Errorf("api url %q must not include credentials, a query, or a fragment", apiUrl)
+		}
+		parsed.Path = strings.TrimRight(parsed.Path, "/") + "/"
+		baseUrl := parsed.String()
+		// The upload URL is left at its default: nothing here calls upload
+		// endpoints, and the enterprise upload host can't be derived from the
+		// API URL reliably (data-residency uses uploads.<tenant>.ghe.com).
 		opts = append(opts, github.WithURLs(&baseUrl, nil))
 	}
 	client, err := github.NewClient(opts...)

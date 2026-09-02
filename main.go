@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/multimediallc/codeowners-plus/internal/app"
@@ -26,8 +27,12 @@ type Flags struct {
 
 var (
 	flags = &Flags{
-		Token:   flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
-		ApiUrl:  flag.String("api-url", getEnv("INPUT_GITHUB-API-URL", ""), "GitHub API base URL (for GitHub Enterprise, e.g. https://ghe.example.com/api/v3)"),
+		Token: flag.String("token", getEnv("INPUT_GITHUB-TOKEN", ""), "GitHub authentication token"),
+		// Fall back to GITHUB_API_URL (always set by the runner) when the input is
+		// empty — e.g. github-api-url passed an unset expression, or the binary run
+		// outside the composite action. Without it, a GHE run would silently hit the
+		// public GitHub API.
+		ApiUrl:  flag.String("api-url", firstNonEmpty(getEnv("INPUT_GITHUB-API-URL", ""), getEnv("GITHUB_API_URL", "")), "GitHub API base URL (for GitHub Enterprise, e.g. https://ghe.example.com/api/v3)"),
 		RepoDir: flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
 		PR:      flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
 		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
@@ -69,6 +74,17 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// firstNonEmpty is used to chain env var fallbacks where an empty value means
+// "not set" (the composite action exports INPUT_* vars even when blank).
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func ignoreError[V any, E error](res V, _ E) V {

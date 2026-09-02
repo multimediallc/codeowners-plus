@@ -395,6 +395,21 @@ func TestNewGithubClientApiUrl(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name:        "http is rejected",
+			apiUrl:      "http://ghe.example.com/api/v3",
+			expectError: true,
+		},
+		{
+			name:        "query string is rejected",
+			apiUrl:      "https://ghe.example.com/api/v3?tenant=acme",
+			expectError: true,
+		},
+		{
+			name:        "credentials are rejected",
+			apiUrl:      "https://user:pass@ghe.example.com/api/v3",
+			expectError: true,
+		},
+		{
 			name:        "invalid URL",
 			apiUrl:      "://bad",
 			expectError: true,

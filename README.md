@@ -124,7 +124,7 @@ Codeowners Plus talks to the API of the instance running the workflow, so it wor
 The value should be the instance's exact API URL — the same value as the `github.api_url` context (`GITHUB_API_URL`). For GitHub Enterprise Server this includes the `/api/v3` suffix; for GitHub Enterprise Cloud with data residency use `https://api.<tenant>.ghe.com`. If the input is not set, it defaults to the API URL of the instance running the workflow.
 
 > [!Note]
-> When the action is referenced by a release tag, it downloads its prebuilt binary from public `github.com` (see [scripts/install-action.sh](scripts/install-action.sh)). On an egress-restricted Enterprise instance, either allow that egress or reference the action by branch or SHA, which builds it from source instead.
+> When the action is referenced by a release tag (or the SHA of a release commit), it downloads its prebuilt binary from this repository on public `github.com` (see [scripts/install-action.sh](scripts/install-action.sh)) — this is also true if you mirror the action onto your own instance, so mirrored copies should not use release refs. Referencing a branch or a non-release commit builds the binary from source instead, which requires egress to the Go toolchain and module proxy (`actions/setup-go` downloads, `proxy.golang.org`, `sum.golang.org`). On an egress-restricted Enterprise instance, allow whichever set of origins fits your setup.
 
 ## Configuration
 
