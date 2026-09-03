@@ -15,10 +15,12 @@ func init() {
 	// Initialize test flags with default values
 	flags = &Flags{
 		Token:   new(string),
+		ApiUrl:  new(string),
 		RepoDir: new(string),
 		PR:      new(int),
 		Repo:    new(string),
 		Verbose: new(bool),
+		Quiet:   new(bool),
 	}
 	*flags.Token = "test-token"
 	*flags.RepoDir = "/test/dir"
