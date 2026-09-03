@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/sourcegraph/go-diff/diff"
@@ -29,6 +33,57 @@ func (e *mockGitExecutor) execute(command string, args ...string) ([]byte, error
 		return nil, e.err
 	}
 	return []byte(e.output), nil
+}
+
+type mockResult struct {
+	output string
+	err    error
+}
+
+type scriptedGitExecutor struct {
+	diffResults []mockResult
+	fetchResult mockResult
+	refResolves bool
+	calls       [][]string
+}
+
+func (e *scriptedGitExecutor) execute(command string, args ...string) ([]byte, error) {
+	e.calls = append(e.calls, append([]string{command}, args...))
+	res := e.fetchResult
+	if len(args) > 0 && args[0] == "cat-file" {
+		if e.refResolves {
+			return nil, nil
+		}
+		return nil, errors.New("not a valid object name")
+	}
+	if len(args) > 0 && args[0] == "diff" {
+		if len(e.diffResults) == 0 {
+			return nil, errors.New("unexpected git diff call")
+		}
+		res, e.diffResults = e.diffResults[0], e.diffResults[1:]
+	}
+	// CombinedOutput returns both, and the output is where git puts the reason.
+	return []byte(res.output), res.err
+}
+
+type timeoutScriptedExecutor struct {
+	scriptedGitExecutor
+	timeouts []time.Duration
+}
+
+func (e *timeoutScriptedExecutor) executeWithTimeout(timeout time.Duration, command string, args ...string) ([]byte, error) {
+	e.timeouts = append(e.timeouts, timeout)
+	return e.execute(command, args...)
+}
+
+func (e *scriptedGitExecutor) fetchCalls() [][]string {
+	fetches := make([][]string, 0, len(e.calls))
+	for _, call := range e.calls {
+		if len(call) > 1 && call[1] == "fetch" {
+			fetches = append(fetches, call)
+		}
+	}
+	return fetches
 }
 
 func readFile(path string) ([]byte, error) {
@@ -129,7 +184,7 @@ Binary files a/assets/img/offline.png and b/assets/img/offline.png differ`,
 			expectedErr:   false,
 			expectedFiles: 2,
 			expectedHunks: map[string]int{
-				"file1.go":                1,
+				"file1.go":               1,
 				"assets/img/offline.png": 0,
 			},
 		},
@@ -351,6 +406,226 @@ index abc..def 100644
 				}
 			}
 		})
+	}
+}
+
+func TestFetchRefSurfacesGitOutput(t *testing.T) {
+	executor := &scriptedGitExecutor{
+		diffResults: []mockResult{{output: sampleGitDiff}, {err: errors.New("fatal: bad object deadbeef")}},
+		fetchResult: mockResult{output: "fatal: remote error: upload-pack not permitted", err: errors.New("exit status 128")},
+	}
+	diff, err := NewDiffWithExecutor(DiffContext{Base: "main", Head: "feature", Dir: "."}, executor, WithFetchOrphanedRefs())
+	if err != nil {
+		t.Fatalf("failed to create initial diff: %v", err)
+	}
+
+	_, err = diff.ChangesSince("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "upload-pack not permitted") {
+		t.Errorf("expected git's own reason to reach the caller, got %v", err)
+	}
+}
+
+func TestChangesSinceFetchOrphanedRef(t *testing.T) {
+	const olderDiff = `diff --git a/file1.go b/file1.go
+index abc..def 100644
+--- a/file1.go
++++ b/file1.go
+@@ -5,0 +6 @@ func Example() {
++       fmt.Println("Old change")`
+
+	diffFailure := errors.New("fatal: bad object deadbeef")
+	retryFailure := errors.New("fatal: ambiguous argument 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'")
+	fetchFailure := errors.New("fatal: could not read from remote")
+
+	tt := []struct {
+		name               string
+		fetchOrphanedRefs  bool
+		refResolves        bool
+		ref                string
+		olderDiffResults   []mockResult
+		fetchResult        mockResult
+		expectedErr        error // the error the caller must see as the cause
+		alsoInErr          error // secondary error which must stay visible
+		expectedFetchCalls int
+		expectedFiles      int
+	}{
+		{
+			name:               "older diff succeeds, no fetch attempted",
+			fetchOrphanedRefs:  true,
+			olderDiffResults:   []mockResult{{output: olderDiff}},
+			expectedFetchCalls: 0,
+			expectedFiles:      2,
+		},
+		{
+			name:               "fetch recovers the orphaned ref",
+			fetchOrphanedRefs:  true,
+			olderDiffResults:   []mockResult{{err: diffFailure}, {output: olderDiff}},
+			expectedFetchCalls: 1,
+			expectedFiles:      2,
+		},
+		{
+			name:               "fetch fails",
+			fetchOrphanedRefs:  true,
+			olderDiffResults:   []mockResult{{err: diffFailure}},
+			fetchResult:        mockResult{err: fetchFailure},
+			expectedErr:        diffFailure,
+			alsoInErr:          fetchFailure,
+			expectedFetchCalls: 1,
+		},
+		{
+			name:               "retry after fetch still fails",
+			fetchOrphanedRefs:  true,
+			olderDiffResults:   []mockResult{{err: diffFailure}, {err: retryFailure}},
+			expectedErr:        diffFailure,
+			alsoInErr:          retryFailure,
+			expectedFetchCalls: 1,
+		},
+		{
+			name:               "disabled, no fetch attempted",
+			fetchOrphanedRefs:  false,
+			olderDiffResults:   []mockResult{{err: diffFailure}},
+			expectedErr:        diffFailure,
+			expectedFetchCalls: 0,
+		},
+		{
+			name:               "ref is not an object name, so nothing is fetched",
+			fetchOrphanedRefs:  true,
+			ref:                "refs/heads/main:refs/heads/injected",
+			olderDiffResults:   []mockResult{{err: diffFailure}},
+			expectedErr:        diffFailure,
+			expectedFetchCalls: 0,
+		},
+		{
+			name:               "empty ref is never fetched",
+			fetchOrphanedRefs:  true,
+			ref:                "",
+			olderDiffResults:   []mockResult{{err: diffFailure}},
+			expectedErr:        diffFailure,
+			expectedFetchCalls: 0,
+		},
+		{
+			name:               "ref resolves locally, so the diff failed for another reason",
+			fetchOrphanedRefs:  true,
+			refResolves:        true,
+			olderDiffResults:   []mockResult{{err: diffFailure}},
+			expectedErr:        diffFailure,
+			expectedFetchCalls: 0,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			executor := &scriptedGitExecutor{
+				diffResults: append([]mockResult{{output: sampleGitDiff}}, tc.olderDiffResults...),
+				fetchResult: tc.fetchResult,
+				refResolves: tc.refResolves,
+			}
+
+			var opts []DiffOption
+			if tc.fetchOrphanedRefs {
+				opts = append(opts, WithFetchOrphanedRefs())
+			}
+			context := DiffContext{Base: "main", Head: "feature", Dir: "."}
+			diff, err := NewDiffWithExecutor(context, executor, opts...)
+			if err != nil {
+				t.Fatalf("failed to create initial diff: %v", err)
+			}
+
+			ref := tc.ref
+			if ref == "" && tc.name != "empty ref is never fetched" {
+				ref = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+			}
+			changes, err := diff.ChangesSince(ref)
+
+			fetches := executor.fetchCalls()
+			if len(fetches) != tc.expectedFetchCalls {
+				t.Errorf("expected %d fetch calls, got %d", tc.expectedFetchCalls, len(fetches))
+			}
+			for _, fetch := range fetches {
+				want := []string{"git", "fetch", "--no-tags", "origin", "--", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
+				if !slices.Equal(fetch, want) {
+					t.Errorf("expected fetch command %v, got %v", want, fetch)
+				}
+			}
+
+			if tc.expectedErr != nil {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				wantPrefix := "failed to get older diff: diff Error: " + tc.expectedErr.Error()
+				if !strings.HasPrefix(err.Error(), wantPrefix) {
+					t.Errorf("expected error to start with %q, got %v", wantPrefix, err)
+				}
+				if tc.alsoInErr != nil && !strings.Contains(err.Error(), tc.alsoInErr.Error()) {
+					t.Errorf("expected %q to stay visible, got %v", tc.alsoInErr, err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(changes) != tc.expectedFiles {
+				t.Errorf("expected %d files, got %d", tc.expectedFiles, len(changes))
+			}
+		})
+	}
+}
+
+func TestChangesSinceFetchIsBounded(t *testing.T) {
+	const olderDiff = `diff --git a/file1.go b/file1.go
+index abc..def 100644
+--- a/file1.go
++++ b/file1.go
+@@ -5,0 +6 @@ func Example() {
++       fmt.Println("Old change")`
+
+	executor := &timeoutScriptedExecutor{
+		scriptedGitExecutor: scriptedGitExecutor{
+			diffResults: []mockResult{
+				{output: sampleGitDiff},
+				{err: errors.New("fatal: bad object deadbeef")},
+				{output: olderDiff},
+			},
+		},
+	}
+
+	context := DiffContext{Base: "main", Head: "feature", Dir: "."}
+	diff, err := NewDiffWithExecutor(context, executor, WithFetchOrphanedRefs())
+	if err != nil {
+		t.Fatalf("failed to create initial diff: %v", err)
+	}
+	if _, err := diff.ChangesSince("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(executor.timeouts) != 1 {
+		t.Fatalf("expected 1 bounded command, got %d", len(executor.timeouts))
+	}
+	if executor.timeouts[0] != fetchTimeout {
+		t.Errorf("expected the fetch to be bounded by %s, got %s", fetchTimeout, executor.timeouts[0])
+	}
+}
+
+func TestExecuteWithTimeout(t *testing.T) {
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skip("sleep not available")
+	}
+	executor := newRealGitExecutor(".")
+
+	if _, err := executor.executeWithTimeout(time.Minute, "sleep", "0"); err != nil {
+		t.Errorf("unexpected error for a command within the timeout: %v", err)
+	}
+
+	_, err := executor.executeWithTimeout(10*time.Millisecond, "sleep", "30")
+	if err == nil {
+		t.Fatal("expected an error when the command outlives the timeout")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("expected a timeout error, got %v", err)
 	}
 }
 

@@ -132,7 +132,11 @@ func (a *App) Run() (*OutputData, error) {
 
 	// Get the diff of the PR
 	a.printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
-	gitDiff, err := git.NewDiff(diffContext)
+	var diffOpts []git.DiffOption
+	if conf.FetchOrphanedApproval {
+		diffOpts = append(diffOpts, git.WithFetchOrphanedRefs())
+	}
+	gitDiff, err := git.NewDiff(diffContext, diffOpts...)
 	if err != nil {
 		return &OutputData{}, fmt.Errorf("NewGitDiff Error: %v", err)
 	}

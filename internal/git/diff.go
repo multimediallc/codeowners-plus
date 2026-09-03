@@ -3,19 +3,31 @@ package git
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os/exec"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/sourcegraph/go-diff/diff"
 )
 
+const fetchTimeout = 60 * time.Second
+
+// git spawns a transport helper which inherits the pipe and outlives the kill.
+const transportHelperGrace = 2 * time.Second
+
 // gitCommandExecutor defines the interface for executing git commands
 type gitCommandExecutor interface {
 	execute(command string, args ...string) ([]byte, error)
+}
+
+type timeoutExecutor interface {
+	executeWithTimeout(timeout time.Duration, command string, args ...string) ([]byte, error)
 }
 
 // realGitExecutor implements GitCommandExecutor using os/exec
@@ -33,6 +45,19 @@ func (e *realGitExecutor) execute(command string, args ...string) ([]byte, error
 	return cmd.CombinedOutput()
 }
 
+func (e *realGitExecutor) executeWithTimeout(timeout time.Duration, command string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Dir = e.dir
+	cmd.WaitDelay = transportHelperGrace
+	output, err := cmd.CombinedOutput()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return output, fmt.Errorf("%s timed out after %s", command, timeout)
+	}
+	return output, err
+}
+
 type Diff interface {
 	AllChanges() []codeowners.DiffFile
 	ChangesSince(ref string) ([]codeowners.DiffFile, error)
@@ -40,18 +65,29 @@ type Diff interface {
 }
 
 type GitDiff struct {
-	context  DiffContext
-	diff     []*diff.FileDiff
-	files    []codeowners.DiffFile
-	executor gitCommandExecutor
+	context           DiffContext
+	diff              []*diff.FileDiff
+	files             []codeowners.DiffFile
+	executor          gitCommandExecutor
+	fetchOrphanedRefs bool
 }
 
-func NewDiff(context DiffContext) (Diff, error) {
+// DiffOption configures optional GitDiff behavior.
+type DiffOption func(*GitDiff)
+
+// WithFetchOrphanedRefs makes ChangesSince fetch a ref git cannot resolve locally and retry once.
+func WithFetchOrphanedRefs() DiffOption {
+	return func(gd *GitDiff) {
+		gd.fetchOrphanedRefs = true
+	}
+}
+
+func NewDiff(context DiffContext, opts ...DiffOption) (Diff, error) {
 	executor := newRealGitExecutor(context.Dir)
-	return NewDiffWithExecutor(context, executor)
+	return NewDiffWithExecutor(context, executor, opts...)
 }
 
-func NewDiffWithExecutor(context DiffContext, executor gitCommandExecutor) (Diff, error) {
+func NewDiffWithExecutor(context DiffContext, executor gitCommandExecutor, opts ...DiffOption) (Diff, error) {
 	gitDiff, err := getGitDiff(context, executor)
 	if err != nil {
 		return nil, err
@@ -61,12 +97,16 @@ func NewDiffWithExecutor(context DiffContext, executor gitCommandExecutor) (Diff
 		return nil, err
 	}
 
-	return &GitDiff{
+	gd := &GitDiff{
 		context:  context,
 		diff:     gitDiff,
 		files:    diffFiles,
 		executor: executor,
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(gd)
+	}
+	return gd, nil
 }
 
 func (gd *GitDiff) AllChanges() []codeowners.DiffFile {
@@ -81,6 +121,15 @@ func (gd *GitDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 		IgnoreDirs: gd.context.IgnoreDirs,
 	}
 	olderDiff, err := getGitDiff(olderDiffContext, gd.executor)
+	if err != nil && gd.fetchOrphanedRefs && looksLikeObjectName(ref) && !gd.refResolvesLocally(ref) {
+		if fetchErr := gd.fetchRef(ref); fetchErr != nil {
+			err = fmt.Errorf("%w (fetching orphaned ref failed: %v)", err, fetchErr)
+		} else if retryDiff, retryErr := getGitDiff(olderDiffContext, gd.executor); retryErr != nil {
+			err = fmt.Errorf("%w (retry after fetching orphaned ref failed: %v)", err, retryErr)
+		} else {
+			olderDiff, err = retryDiff, nil
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get older diff: %w", err)
 	}
@@ -93,6 +142,41 @@ func (gd *GitDiff) ChangesSince(ref string) ([]codeowners.DiffFile, error) {
 		return nil, fmt.Errorf("failed to compute changes since: %w", err)
 	}
 	return diffFiles, nil
+}
+
+func looksLikeObjectName(ref string) bool {
+	if len(ref) < 7 || len(ref) > 64 {
+		return false
+	}
+	for i := 0; i < len(ref); i++ {
+		if c := ref[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// A diff can fail for reasons unrelated to the ref, and fetching then cannot help.
+func (gd *GitDiff) refResolvesLocally(ref string) bool {
+	_, err := gd.executor.execute("git", "cat-file", "-e", ref+"^{commit}")
+	return err == nil
+}
+
+// `git fetch` accepts --upload-pack, which names a command to run, so the ref goes after a `--`.
+func (gd *GitDiff) fetchRef(ref string) error {
+	args := []string{"fetch", "--no-tags", "origin", "--", ref}
+	run := gd.executor.execute
+	if executor, ok := gd.executor.(timeoutExecutor); ok {
+		run = func(command string, args ...string) ([]byte, error) {
+			return executor.executeWithTimeout(fetchTimeout, command, args...)
+		}
+	}
+	// git puts the reason on stderr and the exit status alone says nothing useful,
+	// which is why getGitDiff wraps its output too.
+	if output, err := run("git", args...); err != nil {
+		return fmt.Errorf("%s\n%s", err, output)
+	}
+	return nil
 }
 
 func (gd *GitDiff) Context() DiffContext {

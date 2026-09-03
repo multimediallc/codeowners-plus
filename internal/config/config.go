@@ -22,6 +22,7 @@ type Config struct {
 	AllowSelfApproval           bool         `toml:"allow_self_approval"`
 	SelfApprovalViaTeams        bool         `toml:"self_approval_via_teams"`
 	DisableReviewStatusComments bool         `toml:"disable_review_status_comments"`
+	FetchOrphanedApproval       bool         `toml:"fetch_orphaned_approval"`
 }
 
 type Enforcement struct {
