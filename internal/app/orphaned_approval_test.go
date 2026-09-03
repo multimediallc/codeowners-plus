@@ -77,7 +77,7 @@ func runApp(t *testing.T, repoDir, baseSHA, headSHA, approvalSHA string) (*Outpu
 	warnings := &bytes.Buffer{}
 	info := &bytes.Buffer{}
 
-	realClient, err := gh.NewClient("test-owner", "test-repo", "test-token")
+	realClient, err := gh.NewClient("test-owner", "test-repo", "test-token", "")
 	if err != nil {
 		t.Fatalf("failed to build the real client: %v", err)
 	}

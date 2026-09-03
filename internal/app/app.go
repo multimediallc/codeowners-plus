@@ -52,6 +52,7 @@ func (od *OutputData) UpdateOutputData(success bool, message string, stillRequir
 // Config holds the application configuration
 type Config struct {
 	Token         string
+	ApiUrl        string
 	RepoDir       string
 	PR            int
 	Repo          string
@@ -79,7 +80,7 @@ func New(cfg Config) (*App, error) {
 	owner := repoSplit[0]
 	repo := repoSplit[1]
 
-	client, err := gh.NewClient(owner, repo, cfg.Token)
+	client, err := gh.NewClient(owner, repo, cfg.Token, cfg.ApiUrl)
 	if err != nil {
 		return nil, err
 	}
