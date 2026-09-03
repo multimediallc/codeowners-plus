@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-82.7%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-82.8%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -17,6 +17,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 - [Getting Started](#getting-started)
   - [GitHub Configuration](#github-configuration)
   - [GitHub Teams Support](#github-teams-support)
+  - [GitHub Enterprise](#github-enterprise)
 - [Configuration](#configuration)
   - [.codeowners File Spec](#codeowners-file-spec)
   - [Advanced Configuration](#advanced-configuration)
@@ -91,7 +92,7 @@ jobs:
           fetch-depth: 0
 
       - name: 'Codeowners Plus'
-        uses: multimediallc/codeowners-plus@v1.9.1
+        uses: multimediallc/codeowners-plus@v1.11.0
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
@@ -111,6 +112,19 @@ It is recommended to also set up a rerun workflow on `pull_request_review` to re
 ### GitHub Teams Support
 
 If you plan to have organization teams as code owners, you will need to use a PAT that has organization [read access for Members and Administration](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens) as the token. If you do not have organization teams as owners, [GITHUB_TOKEN](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication#using-the-github_token-in-a-workflow) should be sufficient.
+
+### GitHub Enterprise
+
+Codeowners Plus talks to the API of the instance running the workflow, so it works on GitHub Enterprise without any extra configuration. To point it at a different API, set the `github-api-url` input:
+
+```yaml
+          github-api-url: 'https://ghe.example.com/api/v3'
+```
+
+The value should be the instance's exact API URL — the same value as the `github.api_url` context (`GITHUB_API_URL`). For GitHub Enterprise Server this includes the `/api/v3` suffix; for GitHub Enterprise Cloud with data residency use `https://api.<tenant>.ghe.com`. If the input is not set, it defaults to the API URL of the instance running the workflow.
+
+> [!Note]
+> When the action is referenced by a release tag (or the SHA of a release commit), it downloads its prebuilt binary from this repository on public `github.com` (see [scripts/install-action.sh](scripts/install-action.sh)) — this is also true if you mirror the action onto your own instance, so mirrored copies should not use release refs. Referencing a branch or a non-release commit builds the binary from source instead, which requires egress to the Go toolchain and module proxy (`actions/setup-go` downloads, `proxy.golang.org`, `sum.golang.org`). On an egress-restricted Enterprise instance, allow whichever set of origins fits your setup.
 
 ## Configuration
 
