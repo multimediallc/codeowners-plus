@@ -1,8 +1,11 @@
 package owners
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -248,6 +251,128 @@ func TestReadConfigFileError(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when reading from directory with no permissions")
 	}
+}
+
+func TestReadConfigInvalidTomlReturnsDefaults(t *testing.T) {
+	testDir := t.TempDir()
+	content := `
+max_reviews = 9
+min_reviews = 9
+unskippable_reviewers = ["@someone"]
+ignore = ["vendor"]
+high_priority_labels = ["urgent"]
+detailed_reviewers = true
+disable_smart_dismissal = true
+require_both_branch_reviewers = true
+suppress_unowned_warning = true
+allow_self_approval = true
+self_approval_via_teams = true
+disable_review_status_comments = true
+[enforcement]
+approval = true
+fail_check = false
+[admin_bypass]
+enabled = true
+allowed_users = ["someone"]
+trailing = invalid
+`
+	if err := os.WriteFile(filepath.Join(testDir, "codeowners.toml"), []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	config, err := ReadConfig(testDir, nil)
+	if err == nil {
+		t.Fatal("expected a parse error")
+	}
+	if config == nil {
+		t.Fatal("expected a config alongside the error")
+	}
+
+	if !reflect.DeepEqual(config, newDefaultConfig()) {
+		t.Errorf("expected pristine defaults after a failed parse, got %s", configDiff(config, newDefaultConfig()))
+	}
+}
+
+func TestReadConfigNeverReturnsNilOnError(t *testing.T) {
+	testDir := t.TempDir()
+	unreadable := filepath.Join(testDir, "unreadable")
+	if err := os.Mkdir(unreadable, 0o000); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o755) })
+
+	malformed := t.TempDir()
+	if err := os.WriteFile(filepath.Join(malformed, "codeowners.toml"), []byte("trailing = invalid\n"), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	for _, dir := range []string{unreadable, malformed} {
+		config, err := ReadConfig(dir, nil)
+		if err == nil {
+			continue
+		}
+		if config == nil {
+			t.Fatalf("%s: callers warn and then dereference the config, so an error path must still return one", dir)
+		}
+		if !reflect.DeepEqual(config, newDefaultConfig()) {
+			t.Errorf("%s: expected pristine defaults, got %s", dir, configDiff(config, newDefaultConfig()))
+		}
+	}
+}
+
+func configDiff(got, want *Config) string {
+	problems := make([]string, 0, 8)
+	add := func(format string, args ...any) {
+		problems = append(problems, fmt.Sprintf(format, args...))
+	}
+	if got.MaxReviews != nil {
+		add("MaxReviews=%d (want nil)", *got.MaxReviews)
+	}
+	if got.MinReviews != nil {
+		add("MinReviews=%d (want nil)", *got.MinReviews)
+	}
+	if !sliceEqual(got.UnskippableReviewers, want.UnskippableReviewers) {
+		add("UnskippableReviewers=%v", got.UnskippableReviewers)
+	}
+	if !sliceEqual(got.Ignore, want.Ignore) {
+		add("Ignore=%v", got.Ignore)
+	}
+	if !sliceEqual(got.HighPriorityLabels, want.HighPriorityLabels) {
+		add("HighPriorityLabels=%v", got.HighPriorityLabels)
+	}
+	if got.Enforcement == nil {
+		add("Enforcement=nil")
+	} else if *got.Enforcement != *want.Enforcement {
+		add("Enforcement=%+v (want %+v)", *got.Enforcement, *want.Enforcement)
+	}
+	if got.AdminBypass == nil {
+		add("AdminBypass=nil")
+	} else {
+		if got.AdminBypass.Enabled != want.AdminBypass.Enabled {
+			add("AdminBypass.Enabled=%v", got.AdminBypass.Enabled)
+		}
+		if !sliceEqual(got.AdminBypass.AllowedUsers, want.AdminBypass.AllowedUsers) {
+			add("AdminBypass.AllowedUsers=%v", got.AdminBypass.AllowedUsers)
+		}
+	}
+	for _, f := range []struct {
+		name string
+		got  bool
+		want bool
+	}{
+		{"DetailedReviewers", got.DetailedReviewers, want.DetailedReviewers},
+		{"DisableSmartDismissal", got.DisableSmartDismissal, want.DisableSmartDismissal},
+		{"RequireBothBranchReviewers", got.RequireBothBranchReviewers, want.RequireBothBranchReviewers},
+		{"SuppressUnownedWarning", got.SuppressUnownedWarning, want.SuppressUnownedWarning},
+		{"AllowSelfApproval", got.AllowSelfApproval, want.AllowSelfApproval},
+		{"SelfApprovalViaTeams", got.SelfApprovalViaTeams, want.SelfApprovalViaTeams},
+		{"DisableReviewStatusComments", got.DisableReviewStatusComments, want.DisableReviewStatusComments},
+	} {
+		if f.got != f.want {
+			add("%s=%v (want %v)", f.name, f.got, f.want)
+		}
+	}
+	return strings.Join(problems, "; ")
 }
 
 // Helper functions

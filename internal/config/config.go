@@ -39,12 +39,8 @@ type AdminBypass struct {
 	AllowedUsers []string `toml:"allowed_users"`
 }
 
-func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) {
-	if !strings.HasSuffix(path, "/") {
-		path += "/"
-	}
-
-	defaultConfig := &Config{
+func newDefaultConfig() *Config {
+	return &Config{
 		MaxReviews:                  nil,
 		MinReviews:                  nil,
 		UnskippableReviewers:        []string{},
@@ -56,8 +52,16 @@ func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) 
 		SelfApprovalViaTeams:        false,
 		DisableSmartDismissal:       false,
 		RequireBothBranchReviewers:  false,
+		SuppressUnownedWarning:      false,
+		AllowSelfApproval:           false,
 		DisableReviewStatusComments: false,
 		Hooks:                       &Hooks{},
+	}
+}
+
+func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) {
+	if !strings.HasSuffix(path, "/") {
+		path += "/"
 	}
 
 	// Use filesystem reader if none provided
@@ -68,22 +72,15 @@ func ReadConfig(path string, fileReader codeowners.FileReader) (*Config, error) 
 	fileName := path + "codeowners.toml"
 
 	if !fileReader.PathExists(fileName) {
-		return defaultConfig, nil
+		return newDefaultConfig(), nil
 	}
 	file, err := fileReader.ReadFile(fileName)
 	if err != nil {
-		return defaultConfig, err
+		return newDefaultConfig(), err
 	}
-	config := defaultConfig
-	err = toml.Unmarshal(file, &config)
-	if err != nil {
-		return defaultConfig, err
-	}
-	if config.Enforcement == nil {
-		config.Enforcement = defaultConfig.Enforcement
-	}
-	if config.AdminBypass == nil {
-		config.AdminBypass = defaultConfig.AdminBypass
+	config := newDefaultConfig()
+	if err := toml.Unmarshal(file, config); err != nil {
+		return newDefaultConfig(), err
 	}
 	if config.Hooks == nil {
 		config.Hooks = &Hooks{}
