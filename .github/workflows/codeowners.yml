@@ -2,7 +2,8 @@ name: 'Code Owners'
 
 concurrency:
   group: codeowners-${{ github.ref }}
-  cancel-in-progress: true
+  # queue duplicate runs - cancelled runs read as a failed check (#195)
+  cancel-in-progress: false
 
 on:
   pull_request:

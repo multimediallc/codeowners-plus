@@ -73,7 +73,8 @@ name: 'Code Owners'
 
 concurrency:
   group: codeowners-${{ github.ref }}
-  cancel-in-progress: true
+  # queue duplicate runs - cancelled runs read as a failed check (#195)
+  cancel-in-progress: false
 
 on:
   pull_request:
@@ -106,7 +107,7 @@ jobs:
 
 The `Codeowners Plus` GitHub Action should be set up as a [required status check](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging) in a GitHub Workflow.
 
-It is recommended to also set up a rerun workflow on `pull_request_review` to rerun the check (see [.github/workflows/rerun_codeowners.yml](.github/workflows/rerun_codeowners.yml) for an example).
+It is recommended to also set up a rerun workflow on `pull_request_review` to rerun the check (see [.github/workflows/rerun_codeowners.yml](.github/workflows/rerun_codeowners.yml) for an example). Note that the rerun workflow's `check-names` must exactly match the job `name` in your codeowners workflow (`Run Codeowners Plus` above) — if they differ, reviews will silently stop triggering reruns.
 
 **For advanced features to work, such as only re-requesting review when owned files are changed, you must disable this rule in branch protections:**
 `Dismiss stale pull request approvals when new commits are pushed`
