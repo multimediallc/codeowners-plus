@@ -61,7 +61,7 @@ type Config struct {
 	Repo          string
 	Verbose       bool
 	Quiet         bool
-	HunkFilter    string
+	Workspace     string
 	InfoBuffer    io.Writer
 	WarningBuffer io.Writer
 }
@@ -110,7 +110,7 @@ func (a *App) printWarn(format string, args ...interface{}) {
 }
 
 // hunkFilter asks the hook which outstanding hunks are already reviewed; every failure is answered as "none".
-func (a *App) hunkFilter(base, head string) git.HunkFilter {
+func (a *App) hunkFilter(path, base, head string) git.HunkFilter {
 	return func(ref string, files []git.HunkText) (map[string][]int, error) {
 		req := hook.Request{Base: base, Head: head, Ref: ref}
 		for _, file := range files {
@@ -124,7 +124,7 @@ func (a *App) hunkFilter(base, head string) git.HunkFilter {
 		ctx, cancel := context.WithTimeout(context.Background(), hunkFilterTimeout)
 		defer cancel()
 
-		res, err := hook.Run(ctx, a.config.HunkFilter, req, a.config.WarningBuffer)
+		res, err := hook.Run(ctx, path, req, a.config.WarningBuffer)
 		if err != nil {
 			a.printWarn("WARNING: hunk filter not applied: %v\n", err)
 			return nil, nil
@@ -136,6 +136,33 @@ func (a *App) hunkFilter(base, head string) git.HunkFilter {
 		}
 		return reviewed, nil
 	}
+}
+
+// A path that does not exist is cleaned, not refused, so a missing hook still reaches the run-time warning.
+func resolveHookPath(path, workspace string) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("%q is not an absolute path", path)
+	}
+	resolved := resolveSymlinks(path)
+	if workspace == "" {
+		return resolved, nil
+	}
+	root := resolveSymlinks(workspace)
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return resolved, nil
+	}
+	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%q is inside the checkout at %s, which the pull request can write", path, workspace)
+	}
+	return resolved, nil
+}
+
+func resolveSymlinks(path string) string {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return real
+	}
+	return filepath.Clean(path)
 }
 
 func toHookHunks(bodies []string) []hook.Hunk {
@@ -177,13 +204,13 @@ func (a *App) Run() (*OutputData, error) {
 	// Get the diff of the PR
 	a.printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
 	var diffOpts []git.DiffOption
-	switch {
-	case a.config.HunkFilter == "":
-	case !filepath.IsAbs(a.config.HunkFilter):
-		a.printWarn("WARNING: hunk filter %q ignored: the path must be absolute\n", a.config.HunkFilter)
-	default:
-		a.printDebug("Using hunk filter %s\n", a.config.HunkFilter)
-		diffOpts = append(diffOpts, git.WithHunkFilter(a.hunkFilter(diffContext.Base, diffContext.Head)))
+	if conf.Hooks != nil && conf.Hooks.HunkFilter != "" {
+		hunkFilterPath, err := resolveHookPath(conf.Hooks.HunkFilter, a.config.Workspace)
+		if err != nil {
+			return &OutputData{}, fmt.Errorf("hooks.hunk_filter: %v", err)
+		}
+		a.printDebug("Using hunk filter %s\n", hunkFilterPath)
+		diffOpts = append(diffOpts, git.WithHunkFilter(a.hunkFilter(hunkFilterPath, diffContext.Base, diffContext.Head)))
 	}
 	gitDiff, err := git.NewDiff(diffContext, diffOpts...)
 	if err != nil {

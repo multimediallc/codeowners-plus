@@ -27,10 +27,6 @@ inputs:
     description: 'Disable PR comments and review requests'
     required: false
     default: false
-  hunk-filter:
-    description: 'Absolute path to an executable which reports already-reviewed post-approval hunks; see "Hunk Filters" in the README'
-    required: false
-    default: ''
 
 outputs:
   data:
@@ -122,6 +118,5 @@ runs:
         INPUT_GITHUB-API-URL: ${{ inputs.github-api-url }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
         INPUT_QUIET: ${{ inputs.quiet }}
-        INPUT_HUNK-FILTER: ${{ inputs.hunk-filter }}
         BIN: ${{ steps.resolve.outputs.bin }}
       run: '"${BIN}"'

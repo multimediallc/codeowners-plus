@@ -36,9 +36,9 @@ func TestAppHunkFilterAppliesAValidAnswer(t *testing.T) {
 echo '{"reviewed":[{"name":"service.go","indexes":[1]}]}'
 `)
 	warnings := &bytes.Buffer{}
-	a := &App{config: &Config{HunkFilter: path, WarningBuffer: warnings, InfoBuffer: &bytes.Buffer{}}}
+	a := &App{config: &Config{WarningBuffer: warnings, InfoBuffer: &bytes.Buffer{}}}
 
-	reviewed, err := a.hunkFilter("basesha", "headsha")("approvalsha", filterFiles())
+	reviewed, err := a.hunkFilter(path, "basesha", "headsha")("approvalsha", filterFiles())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,12 +69,11 @@ func TestAppHunkFilterAnswersNoneOnFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			warnings := &bytes.Buffer{}
 			a := &App{config: &Config{
-				HunkFilter:    writeFilterHook(t, tc.body),
 				WarningBuffer: warnings,
 				InfoBuffer:    &bytes.Buffer{},
 			}}
 
-			reviewed, err := a.hunkFilter("basesha", "headsha")("approvalsha", filterFiles())
+			reviewed, err := a.hunkFilter(writeFilterHook(t, tc.body), "basesha", "headsha")("approvalsha", filterFiles())
 			if err != nil {
 				t.Errorf("expected the failure to be swallowed, got %v", err)
 			}
@@ -91,12 +90,11 @@ func TestAppHunkFilterAnswersNoneOnFailure(t *testing.T) {
 func TestAppHunkFilterMissingHookAnswersNone(t *testing.T) {
 	warnings := &bytes.Buffer{}
 	a := &App{config: &Config{
-		HunkFilter:    filepath.Join(t.TempDir(), "absent"),
 		WarningBuffer: warnings,
 		InfoBuffer:    &bytes.Buffer{},
 	}}
 
-	reviewed, err := a.hunkFilter("basesha", "headsha")("approvalsha", filterFiles())
+	reviewed, err := a.hunkFilter(filepath.Join(t.TempDir(), "absent"), "basesha", "headsha")("approvalsha", filterFiles())
 	if err != nil {
 		t.Errorf("expected the failure to be swallowed, got %v", err)
 	}
@@ -105,5 +103,78 @@ func TestAppHunkFilterMissingHookAnswersNone(t *testing.T) {
 	}
 	if !strings.Contains(warnings.String(), "hunk filter not applied") {
 		t.Errorf("expected a warning, got %q", warnings.String())
+	}
+}
+
+func TestResolveHookPathRejects(t *testing.T) {
+	workspace := t.TempDir()
+	outside := t.TempDir()
+
+	tt := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"a relative path", "tools/filter", "not an absolute path"},
+		{"a bare name off PATH", "filter", "not an absolute path"},
+		{"a path in the checkout", filepath.Join(workspace, "tools", "filter"), "inside the checkout"},
+		{"the checkout itself", workspace, "inside the checkout"},
+		{"a traversal back into the checkout", filepath.Join(outside, "..", filepath.Base(workspace), "f"), "inside the checkout"},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := resolveHookPath(tc.path, workspace); err == nil {
+				t.Fatalf("expected %q to be refused", tc.path)
+			} else if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("expected %q in error, got %q", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestResolveHookPathAllowsASiblingWithASharedPrefix(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "work")
+	sibling := filepath.Join(root, "work-tools", "filter")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := resolveHookPath(sibling, workspace); err != nil {
+		t.Errorf("expected %q to be allowed, got %v", sibling, err)
+	}
+}
+
+// A symlink planted in the checkout cannot carry a hook out of it on paper.
+func TestResolveHookPathFollowsASymlinkIntoTheCheckout(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "work")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(workspace, "filter")
+	if err := os.WriteFile(target, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "innocent")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if _, err := resolveHookPath(link, workspace); err == nil {
+		t.Error("expected a symlink into the checkout to be refused")
+	}
+}
+
+// Local runs have no GITHUB_WORKSPACE, so an absolute path stands on its own.
+func TestResolveHookPathWithoutAWorkspace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "filter")
+	got, err := resolveHookPath(path, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != filepath.Clean(path) {
+		t.Errorf("expected %q, got %q", path, got)
 	}
 }

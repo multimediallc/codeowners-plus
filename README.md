@@ -277,6 +277,10 @@ disable_review_status_comments = false
 # `admin_bypass` allows repository administrators to bypass codeowner requirements
 [admin_bypass]
 # see "Admin Bypass" below for more details
+
+# `hooks` names external programs the check may call
+[hooks]
+# see "Hunk Filters" below for more details
 ```
 
 When a PR has any of the `high_priority_labels`, the comment will look like this:
@@ -392,16 +396,14 @@ Using the `quiet` input on the action will change the behavior in a couple ways:
 
 When an approval is checked, the diff is taken twice from the same merge base, once to the head and once to the approved commit, and the hunks appearing in both are subtracted. What is left is what the reviewer has not seen. That comparison is textual, so a hunk which changed for a reason a particular codebase does not care about still counts as unreviewed. Hunk filters let external tooling make that judgement and feed the answer back to Codeowners Plus.
 
-Pass an executable to the action with the `hunk-filter` input:
+Name an executable in the `[hooks]` table of `codeowners.toml`:
 
-```yaml
-      - name: 'Codeowners Plus'
-        uses: multimediallc/codeowners-plus@v1
-        with:
-          github-token: '${{ secrets.GITHUB_TOKEN }}'
-          pr: '${{ github.event.pull_request.number }}'
-          hunk-filter: '/opt/review-tools/already-seen'
+```toml
+[hooks]
+hunk_filter = "/opt/review-tools/already-seen"
 ```
+
+Codeowners Plus reads `codeowners.toml` from the base ref, so a pull request cannot point the check at a program of its own.
 
 For each approved commit being checked, the filter receives one JSON object on stdin:
 
@@ -440,7 +442,8 @@ Notes:
 * Every failure leaves the diff as Codeowners Plus computed it and logs a warning: the program is missing or not executable, it exits non-zero, it does not finish inside 60s, its output is not a single JSON object of the known shape, or it names a file or an index that was not sent.
 * Unlike a configuration option, a filter is code in the review path, and it acts in the direction of dismissing less. It cannot weaken ownership, but it can decide that a change nobody looked at did not need looking at.
 * The path must be absolute, and it is executed directly rather than through a shell. A relative path would resolve inside `GITHUB_WORKSPACE` and a bare name would go through `PATH`, both of which put the choice of program within reach of the pull request.
-* Even so, `GITHUB_WORKSPACE` is writable by the PR author, so an absolute path pointing into the checkout is still the wrong thing to name. Install the program in the runner image, fetch it by digest, or build it from a pinned ref.
+* A path under `GITHUB_WORKSPACE` is refused for the same reason: the checkout is writable by the PR author. Symlinks are followed before the check, so a link out of the checkout does not get around it. Install the program in the runner image, fetch it by digest, or build it from a pinned ref.
+* Both of those refusals fail the run outright, unlike the failures above, which leave the diff alone and log a warning. A path that will not be run is a misconfiguration to fix, not a line in a log.
 * The action's own inputs are removed from the filter's environment, `INPUT_GITHUB-TOKEN` among them, so a filter never sees the token the action runs with. The rest of the environment is inherited.
 * Bounded per call: 60s, 8MB of stdout, 256KB of stderr into the run log. It runs once per distinct approved commit.
 * A path in the same repository as the workflow is still a program someone can change. Treat it the way you would treat any other program in the review path.

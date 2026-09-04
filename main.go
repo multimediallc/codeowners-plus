@@ -16,14 +16,14 @@ import (
 
 // Flags holds the command line flags
 type Flags struct {
-	Token      *string
-	ApiUrl     *string
-	RepoDir    *string
-	PR         *int
-	Repo       *string
-	Verbose    *bool
-	Quiet      *bool
-	HunkFilter *string
+	Token     *string
+	ApiUrl    *string
+	RepoDir   *string
+	PR        *int
+	Repo      *string
+	Verbose   *bool
+	Quiet     *bool
+	Workspace *string
 }
 
 var (
@@ -39,8 +39,8 @@ var (
 		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
 		Verbose: flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
 		Quiet:   flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Disable PR comments and review requests"),
-		HunkFilter: flag.String("hunk-filter", getEnv("INPUT_HUNK-FILTER", ""),
-			"Path to an executable which reports already-reviewed hunks (see README)"),
+		// -dir cannot stand in for this: it falls back to "/", which would put every absolute path inside the checkout.
+		Workspace: flag.String("workspace", getEnv("GITHUB_WORKSPACE", ""), "Path to the checkout, which hook paths may not live under"),
 	}
 	WarningBuffer = bytes.NewBuffer([]byte{})
 	InfoBuffer    = bytes.NewBuffer([]byte{})
@@ -154,7 +154,7 @@ func main() {
 		Repo:          *flags.Repo,
 		Verbose:       *flags.Verbose,
 		Quiet:         *flags.Quiet,
-		HunkFilter:    *flags.HunkFilter,
+		Workspace:     *flags.Workspace,
 		InfoBuffer:    InfoBuffer,
 		WarningBuffer: WarningBuffer,
 	}
