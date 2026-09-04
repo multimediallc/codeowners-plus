@@ -770,7 +770,7 @@ func TestDiffOfDiffs(t *testing.T) {
 		t.Errorf("Error parsing diff changes: %v", err)
 	}
 
-	diffOutput, err := changesSince(changesSinceContext{newDiff, oldDiff})
+	diffOutput, err := changesSince(changesSinceContext{newerDiff: newDiff, olderDiff: oldDiff})
 	if err != nil {
 		t.Errorf("Error getting diff of diffs: %v", err)
 	}

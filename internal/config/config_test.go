@@ -266,3 +266,35 @@ func sliceEqual(a, b []string) bool {
 	}
 	return true
 }
+
+func TestReadConfigHooks(t *testing.T) {
+	tt := []struct {
+		name     string
+		content  string
+		expected string
+	}{
+		{"no hooks table", "min_reviews = 1\n", ""},
+		{"empty hooks table", "[hooks]\n", ""},
+		{"a hunk filter", "[hooks]\nhunk_filter = \"/opt/review-tools/already-seen\"\n", "/opt/review-tools/already-seen"},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "codeowners.toml"), []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			conf, err := ReadConfig(dir, nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if conf.Hooks == nil {
+				t.Fatal("expected Hooks to be non-nil so callers need no guard")
+			}
+			if conf.Hooks.HunkFilter != tc.expected {
+				t.Errorf("expected hunk_filter %q, got %q", tc.expected, conf.Hooks.HunkFilter)
+			}
+		})
+	}
+}
