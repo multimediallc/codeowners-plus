@@ -850,5 +850,5 @@ func TestDiffOfDiffs(t *testing.T) {
 	}
 }
 
-// A hunk matching the approval-time diff is dropped as already reviewed, so a
-// collision past the old 64KB read limit retained an approval over unseen change.
+// A hunk matching the approval-time diff is dropped as already reviewed, so two
+// different hunks that hash alike retain an approval over code nobody saw.
