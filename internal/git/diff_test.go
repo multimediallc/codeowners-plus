@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
@@ -385,6 +386,48 @@ func TestHunkHash(t *testing.T) {
 			name:         "empty hunk",
 			hunkBody:     []byte(``),
 			hunk2Body:    []byte(``),
+			expectedSame: true,
+		},
+		{
+			name:         "two lines vs their concatenation",
+			hunkBody:     []byte("+total = x\n+y\n"),
+			hunk2Body:    []byte("+total = x+y\n"),
+			expectedSame: false,
+		},
+		{
+			name:         "added then removed vs one joined line",
+			hunkBody:     []byte("+foo\n-bar\n"),
+			hunk2Body:    []byte("+foo-bar\n"),
+			expectedSame: false,
+		},
+		{
+			name:         "a trailing newline is a change",
+			hunkBody:     []byte("+value\n\\ No newline at end of file\n"),
+			hunk2Body:    []byte("+value\n"),
+			expectedSame: false,
+		},
+		{
+			name:         "differ only past the old 64KB scanner limit",
+			hunkBody:     []byte("+keep()\n+" + strings.Repeat("x", 70*1024) + "A"),
+			hunk2Body:    []byte("+keep()\n+" + strings.Repeat("x", 70*1024) + "B"),
+			expectedSame: false,
+		},
+		{
+			name:         "identical over-long hunks",
+			hunkBody:     []byte("+keep()\n+" + strings.Repeat("x", 70*1024) + "A"),
+			hunk2Body:    []byte("+keep()\n+" + strings.Repeat("x", 70*1024) + "A"),
+			expectedSame: true,
+		},
+		{
+			name:         "an unterminated CR is content",
+			hunkBody:     []byte("+keep()\n+value\r"),
+			hunk2Body:    []byte("+keep()\n+value"),
+			expectedSame: false,
+		},
+		{
+			name:         "a CRLF file hashes like its LF twin",
+			hunkBody:     []byte("+keep()\r\n+value\r\n"),
+			hunk2Body:    []byte("+keep()\n+value\n"),
 			expectedSame: true,
 		},
 	}
@@ -806,3 +849,6 @@ func TestDiffOfDiffs(t *testing.T) {
 		}
 	}
 }
+
+// A hunk matching the approval-time diff is dropped as already reviewed, so two
+// different hunks that hash alike retain an approval over code nobody saw.
