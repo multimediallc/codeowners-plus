@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v89 v89.0.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/sourcegraph/go-diff v0.8.0
-	github.com/urfave/cli/v3 v3.10.1
+	github.com/urfave/cli/v3 v3.11.0
 )
 
 require (
