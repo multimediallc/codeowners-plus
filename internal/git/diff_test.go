@@ -62,7 +62,6 @@ func (e *scriptedGitExecutor) execute(command string, args ...string) ([]byte, e
 		}
 		res, e.diffResults = e.diffResults[0], e.diffResults[1:]
 	}
-	// CombinedOutput returns both, and the output is where git puts the reason.
 	return []byte(res.output), res.err
 }
 

@@ -175,7 +175,7 @@ func looksLikeObjectName(ref string) bool {
 	return true
 }
 
-// A diff can fail for reasons unrelated to the ref, and fetching then cannot help.
+// Only an unresolvable ref is worth a fetch; any other diff failure is not.
 func (gd *GitDiff) refResolvesLocally(ref string) bool {
 	_, err := gd.executor.execute("git", "cat-file", "-e", ref+"^{commit}")
 	return err == nil
@@ -190,8 +190,7 @@ func (gd *GitDiff) fetchRef(ref string) error {
 			return executor.executeWithTimeout(fetchTimeout, command, args...)
 		}
 	}
-	// git puts the reason on stderr and the exit status alone says nothing useful,
-	// which is why getGitDiff wraps its output too.
+	// git puts the reason on stderr; the exit status alone says nothing useful.
 	if output, err := run("git", args...); err != nil {
 		return fmt.Errorf("%s\n%s", err, output)
 	}
