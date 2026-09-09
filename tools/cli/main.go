@@ -210,6 +210,69 @@ func main() {
 					return generateOwnershipMap(repo, mapBy)
 				},
 			},
+			{
+				Name:        "junit",
+				Aliases:     []string{"j"},
+				Usage:       "Annotate JUnit XML reports with code owners",
+				UsageText:   "codeowners-cli junit [options] <report1.xml> [report2.xml]...\n   or: cat reports.txt | codeowners-cli junit [options]",
+				Description: "Annotate JUnit XML reports with code owners. Each <testcase> is traced back to the file that defines it and the owners of that file are written onto the element as an attribute, so that whatever consumes the report can group test results by ownership. Frameworks identify the file behind a test differently, so --type names the one that produced the report: it selects the right strategy and skips the wrong one.",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "root",
+						Aliases:     []string{"r", "repo"},
+						Value:       "./",
+						Usage:       "Path to local Git repo",
+						Destination: &repo,
+					},
+					&cli.StringFlag{
+						Name:     "type",
+						Aliases:  []string{"t"},
+						Required: true,
+						Usage:    "Framework that produced the report. Allowed values are: pytest and jest",
+					},
+					&cli.StringFlag{
+						Name:    "prefix",
+						Aliases: []string{"p"},
+						Value:   "",
+						Usage:   "Path prefix to prepend to test file paths, for reports that name files relative to a subdirectory",
+					},
+					&cli.StringFlag{
+						Name:    "attribute",
+						Aliases: []string{"a"},
+						Value:   "codeowners",
+						Usage:   "Attribute to write the owners to (a matching `Count` attribute is written alongside it)",
+					},
+					&cli.BoolFlag{
+						Name:    "in-place",
+						Aliases: []string{"i"},
+						Value:   false,
+						Usage:   "Rewrite the reports in place instead of writing to stdout",
+					},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					targets, err := getTargets(cmd)
+					if err != nil {
+						return err
+					}
+
+					if len(targets) == 0 {
+						return fmt.Errorf("no target reports provided (either as arguments or from stdin)")
+					}
+
+					reportType, err := validateReportType(cmd.String("type"))
+					if err != nil {
+						return err
+					}
+
+					return annotateJUnit(targets, junitOpts{
+						root:       repo,
+						prefix:     cmd.String("prefix"),
+						attribute:  cmd.String("attribute"),
+						reportType: reportType,
+						inPlace:    cmd.Bool("in-place"),
+					})
+				},
+			},
 		},
 	}
 
