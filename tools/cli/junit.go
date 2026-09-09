@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
@@ -137,8 +138,8 @@ func (r *fileResolver) candidates(path string) []string {
 //
 // The dotted form is what pytest emits, where a classname is either the module
 // itself ("abuse.tests.test_abuse") or the module plus the test class
-// ("abuse.tests.test_abuse.TestAbuse"), so trailing segments are trimmed until
-// a real file is found.
+// ("abuse.tests.test_abuse.TestAbuse"), so trailing class segments are trimmed
+// until a real file is found.
 func (r *fileResolver) resolve(file, classname string) string {
 	for _, candidate := range r.candidates(file) {
 		if r.exists(candidate) {
@@ -150,7 +151,7 @@ func (r *fileResolver) resolve(file, classname string) string {
 		return ""
 	}
 	parts := strings.Split(classname, ".")
-	for len(parts) > 0 {
+	for {
 		for _, candidate := range r.candidates(strings.Join(parts, "/")) {
 			for _, ext := range r.exts {
 				if r.exists(candidate + ext) {
@@ -158,9 +159,26 @@ func (r *fileResolver) resolve(file, classname string) string {
 				}
 			}
 		}
+		// Only class segments may be trimmed. Trimming a module segment would
+		// walk up into the enclosing package, where an unrelated file of the
+		// same name would have its owners stamped onto this test.
+		if len(parts) < 2 || !isClassSegment(parts[len(parts)-1]) {
+			return ""
+		}
 		parts = parts[:len(parts)-1]
 	}
-	return ""
+}
+
+// isClassSegment reports whether a dotted-path segment looks like a test class
+// rather than a module. Modules are lower case by convention (PEP 8) and
+// pytest only collects classes matching its `python_classes` prefix, which is
+// capitalised by default.
+func isClassSegment(segment string) bool {
+	if segment == "" {
+		return false
+	}
+	first := rune(segment[0])
+	return unicode.IsUpper(first)
 }
 
 func attrValue(attrs []xml.Attr, name string) string {
@@ -207,40 +225,44 @@ func collectTestFiles(raw []byte, r *fileResolver) ([]string, error) {
 // rewrite streams the report back out, adding ownership attributes to each
 // <testcase>. Tokens are copied through untouched, so formatting, comments and
 // failure output survive the round trip.
-func rewrite(raw []byte, files []string, owners map[string][]string, o junitOpts) ([]byte, error) {
+func rewrite(raw []byte, files []string, owners map[string][]string, o junitOpts) ([]byte, int, error) {
 	out := &bytes.Buffer{}
 	decoder := xml.NewDecoder(bytes.NewReader(raw))
 	encoder := xml.NewEncoder(out)
-	i := 0
+	i, annotated := 0, 0
 	for {
 		token, err := decoder.Token()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if start, ok := token.(xml.StartElement); ok && start.Name.Local == "testcase" {
 			if file := files[i]; file != "" {
-				if o.reportType.writesFile() {
+				// The write is only ever additive: a path the framework set
+				// itself is left alone, since its consumers may rely on the
+				// root it is relative to.
+				if o.reportType.writesFile() && attrValue(start.Attr, "file") == "" {
 					start.Attr = setAttrValue(start.Attr, "file", file)
 				}
 				if fileOwners := owners[file]; len(fileOwners) > 0 {
 					start.Attr = setAttrValue(start.Attr, o.attribute, strings.Join(fileOwners, ownerSeparator))
 					start.Attr = setAttrValue(start.Attr, o.attribute+"Count", strconv.Itoa(len(fileOwners)))
+					annotated++
 				}
 			}
 			i++
 			token = start
 		}
 		if err := encoder.EncodeToken(token); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 	if err := encoder.Close(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return out.Bytes(), nil
+	return out.Bytes(), annotated, nil
 }
 
 // annotateJUnit writes the owners of each test's source file onto its
@@ -253,9 +275,21 @@ func annotateJUnit(paths []string, o junitOpts) error {
 	if gitStat, err := os.Stat(filepath.Join(o.root, ".git")); err != nil || !gitStat.IsDir() {
 		return fmt.Errorf("root is not a Git repository: %s", o.root)
 	}
-	if o.attribute == "" {
-		return fmt.Errorf("attribute name cannot be empty")
+	if !isXMLName(o.attribute) {
+		return fmt.Errorf("attribute is not a valid XML name: %q", o.attribute)
 	}
+
+	if !o.inPlace && len(paths) > 1 {
+		return fmt.Errorf("writing to stdout supports a single report; use --in-place for %d reports", len(paths))
+	}
+
+	// A report may name its files absolutely, and those can only be made
+	// repo-relative against an absolute root.
+	root, err := filepath.Abs(o.root)
+	if err != nil {
+		return fmt.Errorf("error resolving root %s: %w", o.root, err)
+	}
+	o.root = root
 
 	type report struct {
 		path  string
@@ -273,6 +307,10 @@ func annotateJUnit(paths []string, o junitOpts) error {
 		if err != nil {
 			return fmt.Errorf("error reading %s: %w", path, err)
 		}
+		// The encoder rejects an XML declaration that is not the first token,
+		// so a byte order mark or leading whitespace has to go before the
+		// report can be streamed back out.
+		raw = bytes.TrimLeft(bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf")), " \t\r\n")
 		files, err := collectTestFiles(raw, resolver)
 		if err != nil {
 			return fmt.Errorf("error parsing %s: %w", path, err)
@@ -303,24 +341,52 @@ func annotateJUnit(paths []string, o junitOpts) error {
 	}
 	fileToOwners := mapFilesToOwners(ownersMap)
 
+	annotated := 0
 	for _, r := range reports {
-		annotated, err := rewrite(r.raw, r.files, fileToOwners, o)
+		out, count, err := rewrite(r.raw, r.files, fileToOwners, o)
 		if err != nil {
 			return fmt.Errorf("error rewriting %s: %w", r.path, err)
 		}
+		annotated += count
 		if !o.inPlace {
-			fmt.Println(string(annotated))
+			fmt.Println(string(out))
 			continue
 		}
 		mode := os.FileMode(0o644)
 		if stat, err := os.Stat(r.path); err == nil {
 			mode = stat.Mode().Perm()
 		}
-		if err := os.WriteFile(r.path, annotated, mode); err != nil {
+		if err := os.WriteFile(r.path, out, mode); err != nil {
 			return fmt.Errorf("error writing %s: %w", r.path, err)
 		}
 	}
 
-	_, _ = fmt.Fprintf(os.Stderr, "codeowners: annotated %d of %d testcases (%d unresolved)\n", total-unresolved, total, unresolved)
+	resolvedCount := total - unresolved
+	_, _ = fmt.Fprintf(os.Stderr, "codeowners: annotated %d of %d testcases (%d resolved, %d unresolved)\n",
+		annotated, total, resolvedCount, unresolved)
+	// Resolving nothing at all is a misconfiguration rather than a repository
+	// without owners: the wrong --type or --prefix produces exactly this, and
+	// would otherwise rewrite every report unchanged and report success.
+	if total > 0 && resolvedCount == 0 {
+		return fmt.Errorf("no testcase could be traced back to a file in the repository; check --type and --prefix")
+	}
 	return nil
+}
+
+// isXMLName reports whether a string is usable as an XML attribute name. An
+// invalid one would produce a report no parser can read, and with --in-place
+// the original is already gone by the time anything notices.
+func isXMLName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, r := range name {
+		switch {
+		case r == '_' || unicode.IsLetter(r):
+		case i > 0 && (r == '-' || r == '.' || unicode.IsDigit(r)):
+		default:
+			return false
+		}
+	}
+	return true
 }

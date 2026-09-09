@@ -55,7 +55,11 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.resolve.outputs.bin }}
-        key: codeowners-cli-build-${{ github.action_ref || github.sha }}-${{ runner.os }}-${{ runner.arch }}
+        # The ref alone is not enough: it is constant for a floating pin such
+        # as @main or @v1, so the cache would hit forever and upstream fixes
+        # would never be rebuilt. Hashing the sources keys the cache to what is
+        # actually being compiled.
+        key: codeowners-cli-build-${{ hashFiles(format('{0}/tools/cli/**', steps.resolve.outputs.action-path), format('{0}/pkg/**', steps.resolve.outputs.action-path), format('{0}/go.sum', steps.resolve.outputs.action-path)) }}-${{ runner.os }}-${{ runner.arch }}
 
     - name: 'Set up Go'
       if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
@@ -115,10 +119,15 @@ runs:
         # `path` accepts several values; commas and whitespace are equivalent
         # separators so that a YAML list, a multiline block or a
         # comma-separated string all work.
+        # Split on whitespace only: globbing is disabled so that a path
+        # containing a wildcard is passed through as written rather than
+        # silently expanding, or vanishing when it matches nothing.
+        set -f
         reports=()
         for report in ${INPUT_PATH//,/ }; do
           reports+=("${report}")
         done
+        set +f
         if [ "${#reports[@]}" -eq 0 ]; then
           echo "Error: no reports given in 'path'." >&2
           exit 1

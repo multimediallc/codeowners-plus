@@ -351,6 +351,157 @@ func TestAnnotateJUnitMultipleReportsShareOneLookup(t *testing.T) {
 	}
 }
 
+func TestIsXMLName(t *testing.T) {
+	tt := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{name: "simple", input: "codeowners", expected: true},
+		{name: "underscore start", input: "_owners", expected: true},
+		{name: "digits and dashes after first", input: "owners-2.a", expected: true},
+		{name: "empty", input: "", expected: false},
+		{name: "contains a space", input: "code owners", expected: false},
+		{name: "starts with a digit", input: "2owners", expected: false},
+		{name: "contains a quote", input: `own"ers`, expected: false},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isXMLName(tc.input); got != tc.expected {
+				t.Errorf("isXMLName(%q) = %v, want %v", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestAnnotateJUnitResolvesAbsoluteFileAttribute(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	// A relative root must still resolve an absolute path in the report.
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="App" name="absolute" file="`+filepath.Join(testRepo, "frontend", "app.js")+`"/>
+</testsuite></testsuites>`)
+
+	opts := defaultOpts(testRepo, TypeJest)
+	opts.root = testRepo + "/."
+	if err := annotateJUnit([]string{report}, opts); err != nil {
+		t.Fatalf("annotateJUnit() error = %v", err)
+	}
+
+	if got := testcaseAttrs(t, report)["absolute"]["codeowners"]; got != "@frontend-team" {
+		t.Errorf("codeowners = %q, want %q", got, "@frontend-team")
+	}
+}
+
+func TestAnnotateJUnitDoesNotOverwriteExistingFileAttribute(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	if err := os.WriteFile(filepath.Join(testRepo, "internal", "util.py"), []byte("# python"), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="internal.util" name="keeps" file="internal/util.py"/>
+<testcase classname="internal.util" name="gains"/>
+</testsuite></testsuites>`)
+
+	if err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypePytest)); err != nil {
+		t.Fatalf("annotateJUnit() error = %v", err)
+	}
+
+	cases := testcaseAttrs(t, report)
+	if got := cases["keeps"]["file"]; got != "internal/util.py" {
+		t.Errorf("existing file attribute = %q, want it untouched", got)
+	}
+	if got := cases["gains"]["file"]; got != "internal/util.py" {
+		t.Errorf("missing file attribute = %q, want it written", got)
+	}
+}
+
+func TestAnnotateJUnitDoesNotTrimPastTheModule(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	// internal/util.py does not exist, so the only candidates left after
+	// trimming are the unrelated internal/ package and a top-level internal.py.
+	if err := os.WriteFile(filepath.Join(testRepo, "internal.py"), []byte("# unrelated"), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="internal.util" name="module_is_missing"/>
+</testsuite></testsuites>`)
+
+	err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypePytest))
+	if err == nil {
+		t.Fatal("annotateJUnit() should fail when nothing resolves")
+	}
+	if _, ok := testcaseAttrs(t, report)["module_is_missing"]["codeowners"]; ok {
+		t.Error("a missing module must not be attributed to an unrelated file")
+	}
+}
+
+func TestAnnotateJUnitStripsByteOrderMark(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	report := writeReport(t, "\xef\xbb\xbf"+`<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="App" name="bom" file="frontend/app.js"/>
+</testsuite></testsuites>`)
+
+	if err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypeJest)); err != nil {
+		t.Fatalf("annotateJUnit() error = %v", err)
+	}
+	if got := testcaseAttrs(t, report)["bom"]["codeowners"]; got != "@frontend-team" {
+		t.Errorf("codeowners = %q, want %q", got, "@frontend-team")
+	}
+}
+
+func TestAnnotateJUnitCountsOnlyWhatItWrote(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	// unowned/file.txt resolves but has no owner, so nothing is written for it.
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="App" name="owned" file="frontend/app.js"/>
+<testcase classname="Unowned" name="unowned" file="unowned/file.txt"/>
+</testsuite></testsuites>`)
+
+	raw, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("Failed to read report: %v", err)
+	}
+	resolved := []string{"frontend/app.js", "unowned/file.txt"}
+	owners := map[string][]string{"frontend/app.js": {"@frontend-team"}}
+	_, annotated, err := rewrite(raw, resolved, owners, defaultOpts(testRepo, TypeJest))
+	if err != nil {
+		t.Fatalf("rewrite() error = %v", err)
+	}
+	if annotated != 1 {
+		t.Errorf("rewrite() annotated = %d, want 1 (the unowned file carries no attribute)", annotated)
+	}
+}
+
+func TestAnnotateJUnitRejectsMultipleReportsToStdout(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	first := writeReport(t, `<testsuites/>`)
+	second := writeReport(t, `<testsuites/>`)
+
+	opts := defaultOpts(testRepo, TypeJest)
+	opts.inPlace = false
+	if err := annotateJUnit([]string{first, second}, opts); err == nil {
+		t.Error("annotateJUnit() should refuse several reports without --in-place")
+	}
+}
+
 func TestAnnotateJUnitErrors(t *testing.T) {
 	testRepo, cleanup := setupTestRepo(t)
 	defer cleanup()
@@ -391,6 +542,14 @@ func TestAnnotateJUnitErrors(t *testing.T) {
 			paths: []string{writeReport(t, "<testsuites/>")},
 			opts: func(o junitOpts) junitOpts {
 				o.attribute = ""
+				return o
+			},
+		},
+		{
+			name:  "attribute is not a valid xml name",
+			paths: []string{writeReport(t, "<testsuites/>")},
+			opts: func(o junitOpts) junitOpts {
+				o.attribute = "code owners"
 				return o
 			},
 		},
