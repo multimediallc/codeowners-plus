@@ -1,9 +1,5 @@
 name: 'Codeowners Plus JUnit Owners'
 description: 'Annotate JUnit XML test reports with the code owners of each test file'
-author: 'Hans Baker'
-branding:
-  icon: 'tag'
-  color: 'blue'
 inputs:
   path:
     description: 'JUnit XML report(s) to annotate. Separate multiple reports with whitespace or newlines.'
