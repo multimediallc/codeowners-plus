@@ -19,10 +19,6 @@ inputs:
     description: 'Path prefix to prepend to test file paths, for reports that name files relative to a subdirectory (for example a workspace root)'
     required: false
     default: ''
-  attribute:
-    description: 'Attribute to write the owners to. A matching `Count` attribute is written alongside it.'
-    required: false
-    default: 'codeowners'
 
 runs:
   using: 'composite'
@@ -127,11 +123,10 @@ runs:
         INPUT_TYPE: ${{ inputs.type }}
         INPUT_ROOT: ${{ inputs.root }}
         INPUT_PREFIX: ${{ inputs.prefix }}
-        INPUT_ATTRIBUTE: ${{ inputs.attribute }}
       run: |
         set -euo pipefail
 
-        args=(junit --in-place --root "${INPUT_ROOT}" --type "${INPUT_TYPE}" --attribute "${INPUT_ATTRIBUTE}")
+        args=(junit --in-place --root "${INPUT_ROOT}" --type "${INPUT_TYPE}")
         if [ -n "${INPUT_PREFIX}" ]; then
           args+=(--prefix "${INPUT_PREFIX}")
         fi

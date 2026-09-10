@@ -49,7 +49,6 @@ func testcaseAttrs(t *testing.T, path string) map[string]map[string]string {
 func defaultOpts(root string, reportType ReportType) junitOpts {
 	return junitOpts{
 		root:       root,
-		attribute:  "codeowners",
 		reportType: reportType,
 		inPlace:    true,
 	}
@@ -302,33 +301,6 @@ func TestAnnotateJUnitPreservesReportContent(t *testing.T) {
 	}
 }
 
-func TestAnnotateJUnitCustomAttribute(t *testing.T) {
-	testRepo, cleanup := setupTestRepo(t)
-	defer cleanup()
-
-	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
-<testsuites><testsuite name="suite">
-<testcase classname="Util" name="helps" file="internal/util.go"/>
-</testsuite></testsuites>`)
-
-	opts := defaultOpts(testRepo, TypeJest)
-	opts.attribute = "owners"
-	if err := annotateJUnit([]string{report}, opts); err != nil {
-		t.Fatalf("annotateJUnit() error = %v", err)
-	}
-
-	cases := testcaseAttrs(t, report)
-	if got := cases["helps"]["owners"]; got != "@backend-team,@security-team" {
-		t.Errorf("owners = %q, want %q", got, "@backend-team,@security-team")
-	}
-	if got := cases["helps"]["ownersCount"]; got != "2" {
-		t.Errorf("ownersCount = %q, want %q", got, "2")
-	}
-	if _, ok := cases["helps"]["codeowners"]; ok {
-		t.Error("default attribute should not be written when overridden")
-	}
-}
-
 func TestAnnotateJUnitMultipleReportsShareOneLookup(t *testing.T) {
 	testRepo, cleanup := setupTestRepo(t)
 	defer cleanup()
@@ -347,30 +319,6 @@ func TestAnnotateJUnitMultipleReportsShareOneLookup(t *testing.T) {
 	}
 	if got := testcaseAttrs(t, second)["two"]["codeowners"]; got != "@backend-team,@security-team" {
 		t.Errorf("second report codeowners = %q, want %q", got, "@backend-team,@security-team")
-	}
-}
-
-func TestIsXMLName(t *testing.T) {
-	tt := []struct {
-		name     string
-		input    string
-		expected bool
-	}{
-		{name: "simple", input: "codeowners", expected: true},
-		{name: "underscore start", input: "_owners", expected: true},
-		{name: "digits and dashes after first", input: "owners-2.a", expected: true},
-		{name: "empty", input: "", expected: false},
-		{name: "contains a space", input: "code owners", expected: false},
-		{name: "starts with a digit", input: "2owners", expected: false},
-		{name: "contains a quote", input: `own"ers`, expected: false},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := isXMLName(tc.input); got != tc.expected {
-				t.Errorf("isXMLName(%q) = %v, want %v", tc.input, got, tc.expected)
-			}
-		})
 	}
 }
 
@@ -697,22 +645,6 @@ func TestAnnotateJUnitErrors(t *testing.T) {
 			name:  "report is not valid xml",
 			paths: []string{writeReport(t, "<testsuites><testcase>")},
 			opts:  func(o junitOpts) junitOpts { return o },
-		},
-		{
-			name:  "empty attribute name",
-			paths: []string{writeReport(t, "<testsuites/>")},
-			opts: func(o junitOpts) junitOpts {
-				o.attribute = ""
-				return o
-			},
-		},
-		{
-			name:  "attribute is not a valid xml name",
-			paths: []string{writeReport(t, "<testsuites/>")},
-			opts: func(o junitOpts) junitOpts {
-				o.attribute = "code owners"
-				return o
-			},
 		},
 	}
 

@@ -67,18 +67,18 @@ func (t ReportType) usesClassname() bool {
 
 const ownerSeparator = ","
 
-const countSuffix = "Count"
+const (
+	ownersAttr      = "codeowners"
+	ownersCountAttr = ownersAttr + "Count"
+)
 
 type junitOpts struct {
 	root       string
 	prefix     string
-	attribute  string
 	reportType ReportType
 	inPlace    bool
 }
 
-// fileResolver maps a <testcase> element back to the repo-relative path of the
-// file that defines it, memoizing the filesystem lookups it does along the way.
 type fileResolver struct {
 	root       string
 	prefix     string
@@ -245,8 +245,8 @@ func rewrite(raw []byte, files []string, owners map[string][]string, o junitOpts
 			// Clearing them first keeps re-annotation idempotent: a test whose
 			// file has since become unowned, or can no longer be resolved at
 			// all, must not be left attributed to its former owners.
-			start.Attr = removeAttrValue(start.Attr, o.attribute)
-			start.Attr = removeAttrValue(start.Attr, o.attribute+countSuffix)
+			start.Attr = removeAttrValue(start.Attr, ownersAttr)
+			start.Attr = removeAttrValue(start.Attr, ownersCountAttr)
 
 			if file := files[i]; file != "" {
 				// The write is only ever additive: a path the framework set
@@ -256,8 +256,8 @@ func rewrite(raw []byte, files []string, owners map[string][]string, o junitOpts
 					start.Attr = setAttrValue(start.Attr, "file", file)
 				}
 				if fileOwners := owners[file]; len(fileOwners) > 0 {
-					start.Attr = setAttrValue(start.Attr, o.attribute, strings.Join(fileOwners, ownerSeparator))
-					start.Attr = setAttrValue(start.Attr, o.attribute+countSuffix, strconv.Itoa(len(fileOwners)))
+					start.Attr = setAttrValue(start.Attr, ownersAttr, strings.Join(fileOwners, ownerSeparator))
+					start.Attr = setAttrValue(start.Attr, ownersCountAttr, strconv.Itoa(len(fileOwners)))
 					annotated++
 				}
 			}
@@ -281,10 +281,6 @@ func annotateJUnit(paths []string, o junitOpts) error {
 	if gitStat, err := os.Stat(filepath.Join(o.root, ".git")); err != nil || !gitStat.IsDir() {
 		return fmt.Errorf("root is not a Git repository: %s", o.root)
 	}
-	if !isXMLName(o.attribute) {
-		return fmt.Errorf("attribute is not a valid XML name: %q", o.attribute)
-	}
-
 	if !o.inPlace && len(paths) > 1 {
 		return fmt.Errorf("writing to stdout supports a single report; use --in-place for %d reports", len(paths))
 	}
@@ -374,19 +370,4 @@ func annotateJUnit(paths []string, o junitOpts) error {
 	_, _ = fmt.Fprintf(os.Stderr, "codeowners: annotated %d of %d testcases (%d resolved, %d unresolved)\n",
 		annotated, total, total-unresolved, unresolved)
 	return nil
-}
-
-func isXMLName(name string) bool {
-	if name == "" {
-		return false
-	}
-	for i, r := range name {
-		switch {
-		case r == '_' || unicode.IsLetter(r):
-		case i > 0 && (r == '-' || r == '.' || unicode.IsDigit(r)):
-		default:
-			return false
-		}
-	}
-	return true
 }

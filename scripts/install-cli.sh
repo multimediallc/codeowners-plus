@@ -10,7 +10,6 @@
 #   scripts/install-cli.sh                             # latest release -> ./codeowners-cli
 #   VERSION=v1.11.0 scripts/install-cli.sh             # a specific release
 #   BIN=/usr/local/bin/codeowners-cli scripts/install-cli.sh
-#   curl -fsSL https://raw.githubusercontent.com/multimediallc/codeowners-plus/main/scripts/install-cli.sh | bash
 #
 # Overrides: REPO, VERSION (or TAG), OS, ARCH, BIN. The junit-owners action
 # passes REPO/TAG/BIN; OS and ARCH are detected here so the script is

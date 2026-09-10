@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-84.0%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-83.9%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -525,7 +525,6 @@ Useful options:
 | `--in-place`, `-i` | Rewrite the report in place instead of writing to stdout |
 | `--type`, `-t` | **Required.** Framework that produced the report: `pytest` or `jest` |
 | `--prefix`, `-p` | Path prefix for reports that name files relative to a subdirectory |
-| `--attribute`, `-a` | Attribute to write the owners to (default `codeowners`) |
 
 Testcases that cannot be resolved, and files with no owner, are left untouched.
 
@@ -549,7 +548,6 @@ that uploads the report:
 | `type` | *required* | Framework that produced the report: `pytest` or `jest` |
 | `root` | `.` | Path to the Git repository the reports belong to |
 | `prefix` | `''` | Path prefix for reports that name files relative to a subdirectory |
-| `attribute` | `codeowners` | Attribute to write the owners to |
 
 
 ## Contributing

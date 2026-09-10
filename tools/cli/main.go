@@ -236,12 +236,6 @@ func main() {
 						Value:   "",
 						Usage:   "Path prefix to prepend to test file paths, for reports that name files relative to a subdirectory",
 					},
-					&cli.StringFlag{
-						Name:    "attribute",
-						Aliases: []string{"a"},
-						Value:   "codeowners",
-						Usage:   "Attribute to write the owners to (a matching `Count` attribute is written alongside it)",
-					},
 					&cli.BoolFlag{
 						Name:    "in-place",
 						Aliases: []string{"i"},
@@ -267,7 +261,6 @@ func main() {
 					return annotateJUnit(targets, junitOpts{
 						root:       repo,
 						prefix:     cmd.String("prefix"),
-						attribute:  cmd.String("attribute"),
 						reportType: reportType,
 						inPlace:    cmd.Bool("in-place"),
 					})
