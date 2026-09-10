@@ -546,6 +546,108 @@ func TestAnnotateJUnitLeavesReportIntactWhenNothingResolves(t *testing.T) {
 	}
 }
 
+func TestIsUnqualified(t *testing.T) {
+	tt := []struct {
+		name     string
+		attr     xml.Attr
+		expected bool
+	}{
+		{
+			name:     "plain attribute",
+			attr:     xml.Attr{Name: xml.Name{Local: "codeowners"}},
+			expected: true,
+		},
+		{
+			name:     "prefixed attribute",
+			attr:     xml.Attr{Name: xml.Name{Space: "vendor", Local: "codeowners"}},
+			expected: false,
+		},
+		{
+			name:     "namespaced attribute",
+			attr:     xml.Attr{Name: xml.Name{Space: "http://example.com/v", Local: "codeowners"}},
+			expected: false,
+		},
+		{
+			name:     "different name",
+			attr:     xml.Attr{Name: xml.Name{Local: "classname"}},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isUnqualified(tc.attr, "codeowners"); got != tc.expected {
+				t.Errorf("isUnqualified(%v, %q) = %v, want %v", tc.attr.Name, "codeowners", got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestAnnotateJUnitPreservesNamespacedAttributes(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	// Someone else's vendor:codeowners must survive untouched, both where this
+	// tool writes its own attribute and where it clears a stale one.
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="App" name="owned" file="frontend/app.js" vendor:codeowners="@them" vendor:codeownersCount="7"/>
+<testcase classname="Unowned" name="unowned" file="unowned/file.txt" vendor:codeowners="@them" codeowners="@stale"/>
+</testsuite></testsuites>`)
+
+	if err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypeJest)); err != nil {
+		t.Fatalf("annotateJUnit() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("Failed to read report: %v", err)
+	}
+
+	// The encoder rewrites namespace prefixes, so assert on the decoded
+	// attribute rather than on the serialised form.
+	type attrs struct{ plain, namespaced string }
+	found := make(map[string]attrs)
+	decoder := xml.NewDecoder(strings.NewReader(string(raw)))
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		start, ok := token.(xml.StartElement)
+		if !ok || start.Name.Local != "testcase" {
+			continue
+		}
+		var name string
+		var got attrs
+		for _, a := range start.Attr {
+			switch {
+			case isUnqualified(a, "name"):
+				name = a.Value
+			case isUnqualified(a, "codeowners"):
+				got.plain = a.Value
+			case a.Name.Space != "" && a.Name.Local == "codeowners":
+				got.namespaced = a.Value
+			}
+		}
+		found[name] = got
+	}
+
+	if got := found["owned"].namespaced; got != "@them" {
+		t.Errorf("owned: vendor:codeowners = %q, want %q", got, "@them")
+	}
+	if got := found["owned"].plain; got != "@frontend-team" {
+		t.Errorf("owned: codeowners = %q, want %q", got, "@frontend-team")
+	}
+	// The unowned testcase loses its own stale attribute but keeps the vendor one.
+	if got := found["unowned"].namespaced; got != "@them" {
+		t.Errorf("unowned: vendor:codeowners = %q, want it preserved", got)
+	}
+	if got := found["unowned"].plain; got != "" {
+		t.Errorf("unowned: codeowners = %q, want it cleared", got)
+	}
+}
+
 func TestAnnotateJUnitClearsStaleAttributes(t *testing.T) {
 	testRepo, cleanup := setupTestRepo(t)
 	defer cleanup()

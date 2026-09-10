@@ -174,9 +174,13 @@ func isClassSegment(segment string) bool {
 	return unicode.IsUpper(first)
 }
 
+func isUnqualified(a xml.Attr, name string) bool {
+	return a.Name.Space == "" && a.Name.Local == name
+}
+
 func attrValue(attrs []xml.Attr, name string) string {
 	for _, a := range attrs {
-		if a.Name.Local == name {
+		if isUnqualified(a, name) {
 			return a.Value
 		}
 	}
@@ -185,7 +189,7 @@ func attrValue(attrs []xml.Attr, name string) string {
 
 func removeAttrValue(attrs []xml.Attr, name string) []xml.Attr {
 	for i, a := range attrs {
-		if a.Name.Local == name {
+		if isUnqualified(a, name) {
 			return append(attrs[:i], attrs[i+1:]...)
 		}
 	}
@@ -194,7 +198,7 @@ func removeAttrValue(attrs []xml.Attr, name string) []xml.Attr {
 
 func setAttrValue(attrs []xml.Attr, name, value string) []xml.Attr {
 	for i, a := range attrs {
-		if a.Name.Local == name {
+		if isUnqualified(a, name) {
 			attrs[i].Value = value
 			return attrs
 		}
