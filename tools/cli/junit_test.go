@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// writeReport puts a JUnit report in a temp dir and returns its path.
 func writeReport(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "report.xml")
@@ -436,12 +435,22 @@ func TestAnnotateJUnitDoesNotTrimPastTheModule(t *testing.T) {
 <testcase classname="internal.util" name="module_is_missing"/>
 </testsuite></testsuites>`)
 
-	err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypePytest))
-	if err == nil {
+	before, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("Failed to read report: %v", err)
+	}
+	if err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypePytest)); err == nil {
 		t.Fatal("annotateJUnit() should fail when nothing resolves")
 	}
 	if _, ok := testcaseAttrs(t, report)["module_is_missing"]["codeowners"]; ok {
 		t.Error("a missing module must not be attributed to an unrelated file")
+	}
+	after, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("Failed to read report: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Error("a report must be left untouched when nothing resolves")
 	}
 }
 
@@ -499,6 +508,158 @@ func TestAnnotateJUnitRejectsMultipleReportsToStdout(t *testing.T) {
 	opts.inPlace = false
 	if err := annotateJUnit([]string{first, second}, opts); err == nil {
 		t.Error("annotateJUnit() should refuse several reports without --in-place")
+	}
+}
+
+func TestIsClassSegment(t *testing.T) {
+	tt := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{name: "test class", input: "TestFoo", expected: true},
+		{name: "module", input: "test_foo", expected: false},
+		{name: "empty", input: "", expected: false},
+		// The leading byte of a multi-byte character is itself a code point
+		// that unicode.IsUpper reports as upper case for much of Latin-1, so
+		// these must be decoded rather than indexed.
+		{name: "lower case accented module", input: "\u00f3micron", expected: false},
+		{name: "lower case umlaut module", input: "\u00fcber", expected: false},
+		{name: "lower case cyrillic module", input: "\u0442\u0435\u0441\u0442", expected: false},
+		{name: "upper case accented class", input: "\u00d3micron", expected: true},
+		{name: "upper case cyrillic class", input: "\u0422\u0435\u0441\u0442", expected: true},
+		{name: "caseless script", input: "\u65e5\u672c\u8a9e", expected: false},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isClassSegment(tc.input); got != tc.expected {
+				t.Errorf("isClassSegment(%q) = %v, want %v", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestAnnotateJUnitDoesNotTrimAccentedModule(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	// "\u00f3micron" is a package, not a class, so a missing module beneath it must
+	// not fall through and take the owners of \u00f3micron.py.
+	if err := os.MkdirAll(filepath.Join(testRepo, "\u00f3micron"), 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(testRepo, "\u00f3micron.py"), []byte("# unrelated"), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="\u00f3micron.missing_module" name="t"/>
+</testsuite></testsuites>`)
+
+	if err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypePytest)); err == nil {
+		t.Fatal("annotateJUnit() should fail when nothing resolves")
+	}
+	if _, ok := testcaseAttrs(t, report)["t"]["codeowners"]; ok {
+		t.Error("an accented package segment must not be trimmed as if it were a class")
+	}
+}
+
+func TestAnnotateJUnitLeavesReportIntactWhenNothingResolves(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="App" name="annotated" file="app.js" codeowners="@frontend-team" codeownersCount="1"/>
+</testsuite></testsuites>`)
+	before, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("Failed to read report: %v", err)
+	}
+
+	// The wrong prefix resolves nothing. The run must abort before writing,
+	// leaving the annotation an earlier correct run produced.
+	opts := defaultOpts(testRepo, TypeJest)
+	opts.prefix = "wrong"
+	if err := annotateJUnit([]string{report}, opts); err == nil {
+		t.Fatal("annotateJUnit() should fail when a bad prefix resolves nothing")
+	}
+
+	after, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("Failed to read report: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("a failed run must not rewrite the report\nbefore: %s\nafter:  %s", before, after)
+	}
+	if got := testcaseAttrs(t, report)["annotated"]["codeowners"]; got != "@frontend-team" {
+		t.Errorf("existing annotation was lost: codeowners = %q", got)
+	}
+}
+
+func TestAnnotateJUnitClearsStaleAttributes(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	// Every testcase arrives already annotated by an earlier run. Only the
+	// first still has an owner; the second resolves to a file that no longer
+	// has one, and the third no longer resolves at all.
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="App" name="still_owned" file="frontend/app.js" codeowners="@stale-team" codeownersCount="9"/>
+<testcase classname="Unowned" name="now_unowned" file="unowned/file.txt" codeowners="@stale-team" codeownersCount="9"/>
+<testcase classname="Gone" name="now_unresolved" file="deleted/file.ts" codeowners="@stale-team" codeownersCount="9"/>
+</testsuite></testsuites>`)
+
+	if err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypeJest)); err != nil {
+		t.Fatalf("annotateJUnit() error = %v", err)
+	}
+
+	cases := testcaseAttrs(t, report)
+	if got := cases["still_owned"]["codeowners"]; got != "@frontend-team" {
+		t.Errorf("still_owned codeowners = %q, want %q", got, "@frontend-team")
+	}
+	if got := cases["still_owned"]["codeownersCount"]; got != "1" {
+		t.Errorf("still_owned codeownersCount = %q, want %q", got, "1")
+	}
+	for _, name := range []string{"now_unowned", "now_unresolved"} {
+		if got, ok := cases[name]["codeowners"]; ok {
+			t.Errorf("%s kept a stale codeowners attribute: %q", name, got)
+		}
+		if got, ok := cases[name]["codeownersCount"]; ok {
+			t.Errorf("%s kept a stale codeownersCount attribute: %q", name, got)
+		}
+	}
+}
+
+func TestAnnotateJUnitIsIdempotent(t *testing.T) {
+	testRepo, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	report := writeReport(t, `<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="suite">
+<testcase classname="Util" name="helps" file="internal/util.go"/>
+</testsuite></testsuites>`)
+
+	if err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypeJest)); err != nil {
+		t.Fatalf("first annotateJUnit() error = %v", err)
+	}
+	first, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("Failed to read report: %v", err)
+	}
+
+	if err := annotateJUnit([]string{report}, defaultOpts(testRepo, TypeJest)); err != nil {
+		t.Fatalf("second annotateJUnit() error = %v", err)
+	}
+	second, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("Failed to read report: %v", err)
+	}
+
+	if string(first) != string(second) {
+		t.Errorf("re-annotating changed the report\nfirst:  %s\nsecond: %s", first, second)
 	}
 }
 

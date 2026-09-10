@@ -42,10 +42,33 @@ runs:
         # GITHUB_ACTION_PATH is this action's directory; the module root, which
         # holds go.mod and scripts/, is two levels up.
         ACTION_PATH=$(cd "${GITHUB_ACTION_PATH}/../.." && pwd)
+
+        # The build cache has to be keyed on what is actually compiled. The ref
+        # alone is constant for a floating pin such as @main or @v1, so the
+        # cache would hit forever and upstream fixes would never be rebuilt.
+        # hashFiles() cannot do this: it only matches inside GITHUB_WORKSPACE,
+        # and a remote `uses:` puts the action under _actions/, outside it,
+        # where it returns an empty string and every revision shares one key.
+        # sha256sum is GNU coreutils (Linux); macOS runners only ship shasum.
+        if command -v sha256sum >/dev/null 2>&1; then
+          sum() { sha256sum "$@"; }
+        else
+          sum() { shasum -a 256 "$@"; }
+        fi
+        # Paths are relative to ACTION_PATH so the digest does not change with
+        # the checkout location, and go.mod/go.sum are included because they
+        # determine the toolchain and dependencies the binary is built from.
+        SRC_HASH=$(
+          cd "${ACTION_PATH}" &&
+          { find tools/cli pkg -type f -name '*.go'; echo go.mod; echo go.sum; } |
+            LC_ALL=C sort | xargs sum | sum | cut -d' ' -f1
+        )
+
         {
           echo "release-version=${RELEASE_VERSION}"
           echo "bin=${RUNNER_TEMP:-/tmp}/codeowners-plus-cli/codeowners-cli"
           echo "action-path=${ACTION_PATH}"
+          echo "src-hash=${SRC_HASH}"
         } >>"$GITHUB_OUTPUT"
 
     # RELEASE_VERSION not set -> not a release: build from source (cached).
@@ -55,11 +78,7 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.resolve.outputs.bin }}
-        # The ref alone is not enough: it is constant for a floating pin such
-        # as @main or @v1, so the cache would hit forever and upstream fixes
-        # would never be rebuilt. Hashing the sources keys the cache to what is
-        # actually being compiled.
-        key: codeowners-cli-build-${{ hashFiles(format('{0}/tools/cli/**', steps.resolve.outputs.action-path), format('{0}/pkg/**', steps.resolve.outputs.action-path), format('{0}/go.sum', steps.resolve.outputs.action-path)) }}-${{ runner.os }}-${{ runner.arch }}
+        key: codeowners-cli-build-${{ steps.resolve.outputs.src-hash }}-${{ runner.os }}-${{ runner.arch }}
 
     - name: 'Set up Go'
       if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'

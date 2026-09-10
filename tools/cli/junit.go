@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	f "github.com/multimediallc/codeowners-plus/pkg/functional"
@@ -64,9 +65,9 @@ func (t ReportType) usesClassname() bool {
 	return t != TypeJest
 }
 
-// ownerSeparator joins the owners of a file owned by more than one. A comma is
-// unambiguous because a GitHub user or team name cannot contain one.
 const ownerSeparator = ","
+
+const countSuffix = "Count"
 
 type junitOpts struct {
 	root       string
@@ -134,12 +135,7 @@ func (r *fileResolver) candidates(path string) []string {
 // resolve locates the source file for a testcase, using its `file` attribute
 // when the framework provides one (jest-junit's addFileAttribute, among
 // others) and otherwise, where the report type allows it, reading `classname`
-// as a dotted module path.
-//
-// The dotted form is what pytest emits, where a classname is either the module
-// itself ("abuse.tests.test_abuse") or the module plus the test class
-// ("abuse.tests.test_abuse.TestAbuse"), so trailing class segments are trimmed
-// until a real file is found.
+// as a dotted module path. Trailing class segments in classname are trimmed ("abuse.tests.test_abuse.TestAbuse")
 func (r *fileResolver) resolve(file, classname string) string {
 	for _, candidate := range r.candidates(file) {
 		if r.exists(candidate) {
@@ -174,10 +170,7 @@ func (r *fileResolver) resolve(file, classname string) string {
 // pytest only collects classes matching its `python_classes` prefix, which is
 // capitalised by default.
 func isClassSegment(segment string) bool {
-	if segment == "" {
-		return false
-	}
-	first := rune(segment[0])
+	first, _ := utf8.DecodeRuneInString(segment)
 	return unicode.IsUpper(first)
 }
 
@@ -188,6 +181,15 @@ func attrValue(attrs []xml.Attr, name string) string {
 		}
 	}
 	return ""
+}
+
+func removeAttrValue(attrs []xml.Attr, name string) []xml.Attr {
+	for i, a := range attrs {
+		if a.Name.Local == name {
+			return append(attrs[:i], attrs[i+1:]...)
+		}
+	}
+	return attrs
 }
 
 func setAttrValue(attrs []xml.Attr, name, value string) []xml.Attr {
@@ -239,6 +241,13 @@ func rewrite(raw []byte, files []string, owners map[string][]string, o junitOpts
 			return nil, 0, err
 		}
 		if start, ok := token.(xml.StartElement); ok && start.Name.Local == "testcase" {
+			// A report may already carry attributes from an earlier run.
+			// Clearing them first keeps re-annotation idempotent: a test whose
+			// file has since become unowned, or can no longer be resolved at
+			// all, must not be left attributed to its former owners.
+			start.Attr = removeAttrValue(start.Attr, o.attribute)
+			start.Attr = removeAttrValue(start.Attr, o.attribute+countSuffix)
+
 			if file := files[i]; file != "" {
 				// The write is only ever additive: a path the framework set
 				// itself is left alone, since its consumers may rely on the
@@ -248,7 +257,7 @@ func rewrite(raw []byte, files []string, owners map[string][]string, o junitOpts
 				}
 				if fileOwners := owners[file]; len(fileOwners) > 0 {
 					start.Attr = setAttrValue(start.Attr, o.attribute, strings.Join(fileOwners, ownerSeparator))
-					start.Attr = setAttrValue(start.Attr, o.attribute+"Count", strconv.Itoa(len(fileOwners)))
+					start.Attr = setAttrValue(start.Attr, o.attribute+countSuffix, strconv.Itoa(len(fileOwners)))
 					annotated++
 				}
 			}
@@ -265,9 +274,6 @@ func rewrite(raw []byte, files []string, owners map[string][]string, o junitOpts
 	return out.Bytes(), annotated, nil
 }
 
-// annotateJUnit writes the owners of each test's source file onto its
-// <testcase> element, so that whatever consumes the report downstream can
-// group results by ownership.
 func annotateJUnit(paths []string, o junitOpts) error {
 	if repoStat, err := os.Lstat(o.root); err != nil || !repoStat.IsDir() {
 		return fmt.Errorf("root is not a directory: %s", o.root)
@@ -326,6 +332,10 @@ func annotateJUnit(paths []string, o junitOpts) error {
 		reports = append(reports, &report{path: path, raw: raw, files: files})
 	}
 
+	if total > 0 && len(resolved) == 0 {
+		return fmt.Errorf("no testcase could be traced back to a file in the repository (%d testcases, all unresolved); check --type and --prefix", total)
+	}
+
 	testFiles := make([]string, 0, len(resolved))
 	for file := range resolved {
 		testFiles = append(testFiles, file)
@@ -361,21 +371,11 @@ func annotateJUnit(paths []string, o junitOpts) error {
 		}
 	}
 
-	resolvedCount := total - unresolved
 	_, _ = fmt.Fprintf(os.Stderr, "codeowners: annotated %d of %d testcases (%d resolved, %d unresolved)\n",
-		annotated, total, resolvedCount, unresolved)
-	// Resolving nothing at all is a misconfiguration rather than a repository
-	// without owners: the wrong --type or --prefix produces exactly this, and
-	// would otherwise rewrite every report unchanged and report success.
-	if total > 0 && resolvedCount == 0 {
-		return fmt.Errorf("no testcase could be traced back to a file in the repository; check --type and --prefix")
-	}
+		annotated, total, total-unresolved, unresolved)
 	return nil
 }
 
-// isXMLName reports whether a string is usable as an XML attribute name. An
-// invalid one would produce a report no parser can read, and with --in-place
-// the original is already gone by the time anything notices.
 func isXMLName(name string) bool {
 	if name == "" {
 		return false
