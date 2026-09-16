@@ -1302,3 +1302,70 @@ func TestCommentDetailedReviewers(t *testing.T) {
 		})
 	}
 }
+
+func TestEnableQuietForDraft(t *testing.T) {
+	testCases := []struct {
+		name          string
+		quietDrafts   bool
+		draft         bool
+		quietInput    bool
+		expectedQuiet bool
+	}{
+		{
+			name:          "draft PR with quiet-drafts on goes quiet",
+			quietDrafts:   true,
+			draft:         true,
+			expectedQuiet: true,
+		},
+		{
+			name:          "draft PR with quiet-drafts off still comments",
+			quietDrafts:   false,
+			draft:         true,
+			expectedQuiet: false,
+		},
+		{
+			name:          "ready PR with quiet-drafts on comments",
+			quietDrafts:   true,
+			draft:         false,
+			expectedQuiet: false,
+		},
+		{
+			name:          "quiet input wins over quiet-drafts on a ready PR",
+			quietDrafts:   false,
+			draft:         false,
+			quietInput:    true,
+			expectedQuiet: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			app, mockClient := setupAppForTest(t, testCase.quietInput)
+			app.config.QuietDrafts = testCase.quietDrafts
+			mockClient.pr = &github.PullRequest{Draft: github.Ptr(testCase.draft)}
+			mockClient.ResetGHClientTracking()
+
+			app.enableQuietForDraft()
+
+			if app.config.Quiet != testCase.expectedQuiet {
+				t.Errorf("expected Quiet %t, got %t", testCase.expectedQuiet, app.config.Quiet)
+			}
+
+			requiredOwners := app.codeowners.AllRequired()
+			if err := app.addReviewStatusComment(requiredOwners, false, 0, 0); err != nil {
+				t.Errorf("unexpected error during addReviewStatusComment: %v", err)
+			}
+			if err := app.requestReviews(); err != nil {
+				t.Errorf("unexpected error during requestReviews: %v", err)
+			}
+
+			expectedNotifications := !testCase.expectedQuiet
+			if mockClient.AddCommentCalled != expectedNotifications {
+				t.Errorf("expected AddCommentCalled to be %t, got %t", expectedNotifications, mockClient.AddCommentCalled)
+			}
+			if mockClient.RequestReviewersCalled != expectedNotifications {
+				t.Errorf("expected RequestReviewersCalled to be %t, got %t", expectedNotifications, mockClient.RequestReviewersCalled)
+			}
+		})
+	}
+}

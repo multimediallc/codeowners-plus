@@ -61,6 +61,7 @@ type Config struct {
 	Repo          string
 	Verbose       bool
 	Quiet         bool
+	QuietDrafts   bool
 	Workspace     string
 	InfoBuffer    io.Writer
 	WarningBuffer io.Writer
@@ -173,6 +174,15 @@ func toHookHunks(bodies []string) []hook.Hunk {
 	return hunks
 }
 
+// The webhook payload a caller could compute this from is frozen for the life of
+// the run, so a rerun of a PR since marked ready for review would stay quiet forever.
+func (a *App) enableQuietForDraft() {
+	if a.config.QuietDrafts && a.client.PR().GetDraft() {
+		a.printDebug("Draft PR - enabling quiet mode\n")
+		a.config.Quiet = true
+	}
+}
+
 // Run executes the application logic
 func (a *App) Run() (*OutputData, error) {
 	// Initialize PR
@@ -180,6 +190,7 @@ func (a *App) Run() (*OutputData, error) {
 		return &OutputData{}, fmt.Errorf("InitPR Error: %v", err)
 	}
 	a.printDebug("PR: %d\n", a.client.PR().GetNumber())
+	a.enableQuietForDraft()
 
 	// Create file reader for base ref to prevent PR authors from modifying config or .codeowners
 	// This ensures the security policy comes from the protected branch, not the PR branch
