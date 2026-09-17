@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-83.6%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-83.7%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -99,7 +99,7 @@ jobs:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
           verbose: true
-          quiet: ${{ github.event.pull_request.draft }}
+          quiet-drafts: true
 ```
 
 ### GitHub Configuration
@@ -382,15 +382,26 @@ Result with `require_both_branch_reviewers = true`:
 
 ### Quiet Mode
 
-Using the `quiet` input on the action will change the behavior in a couple ways:
+Quiet mode changes the behavior in a couple ways:
 
 * **No Comments:** The action will **not** post the review status comment (listing required/unapproved reviewers) or the optional reviewer "cc" comment to the Pull Request.
 * **No Review Requests:** The action will **not** automatically request reviews from required owners who have not yet approved via the GitHub API.
 
-#### Use Cases
+The codeowners logic still runs and still reports a status either way. Two inputs turn it on.
 
-* **Draft Pull Requests:** This is a common use case. You might want the Codeowners Plus logic to run and report a status (e.g., pending or failed) on draft PRs, but without notifying reviewers prematurely by adding comments or requesting reviews until the PR is marked "Ready for review".
-* **Custom Notification Workflows:** You might prefer to handle notifications or review requests through a different mechanism and only use Codeowners Plus for the status check enforcement.
+#### `quiet-drafts` - quiet while the PR is a draft
+
+Set `quiet-drafts: true` to run on draft PRs and report a status without notifying reviewers prematurely, until the PR is marked "Ready for review". This is the common case.
+
+Draft state is read from the GitHub API on every run, so the check un-sticks itself as soon as the PR is ready. That matters because a job rerun replays the original webhook payload: with the older `quiet: ${{ github.event.pull_request.draft }}` pattern, a PR that was a draft when the run was first created stays silent through every rerun, even after it is marked ready.
+
+> **Migrating:** replace `quiet: ${{ github.event.pull_request.draft }}` with `quiet-drafts: true`. The old expression still works as it always has, but it cannot see a draft state that changed after the event fired.
+
+#### `quiet` - always quiet
+
+Set `quiet: true` to disable comments and review requests unconditionally, draft or not. Use this for a **custom notification workflow**, where you handle notifications or review requests through a different mechanism and only use Codeowners Plus for the status check enforcement.
+
+`quiet: true` takes priority over `quiet-drafts`. Both default to `false`, so by default the action comments on every PR, including drafts.
 
 ### Hunk Filters
 
