@@ -421,7 +421,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
 		// Check if we need to re-request from a satisfied team when min_reviews is not met
 		// Handles the case when there min_reviews is higher than the number of teams required.
-		if minReviewsNeeded > 0 {
+		if minReviewsNeeded > 0 && !a.config.Quiet {
 			// All required teams have approved, but we need more reviews
 			// Re-request review from the satisfied team(s)
 			currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()
