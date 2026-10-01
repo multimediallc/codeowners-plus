@@ -1,0 +1,146 @@
+name: 'Codeowners Plus JUnit Owners'
+description: 'Annotate JUnit XML test reports with the code owners of each test file'
+inputs:
+  path:
+    description: 'JUnit XML report(s) to annotate. Separate multiple reports with whitespace or newlines.'
+    required: true
+  type:
+    description: 'Framework that produced the report: pytest or jest. Selects the resolution strategy, and determines whether the resolved path is written back to the `file` attribute.'
+    required: true
+  root:
+    description: 'Path to the Git repository the reports belong to'
+    required: false
+    default: '.'
+  prefix:
+    description: 'Path prefix to prepend to test file paths, for reports that name files relative to a subdirectory (for example a workspace root)'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Resolve codeowners-cli binary'
+      id: resolve
+      shell: bash
+      env:
+        # The release tag this commit belongs to. Non-empty only in release
+        # commits: set by scripts/prepare-release.sh and cleared by
+        # scripts/post-release.sh. When set, the action downloads that
+        # release's prebuilt binary; when empty (any non-release ref) it
+        # builds from the checked-out source.
+        RELEASE_VERSION: ''
+      run: |
+        set -euo pipefail
+        # GITHUB_ACTION_PATH is this action's directory; the module root, which
+        # holds go.mod and scripts/, is two levels up.
+        ACTION_PATH=$(cd "${GITHUB_ACTION_PATH}/../.." && pwd)
+
+        # The build cache has to be keyed on what is actually compiled. The ref
+        # alone is constant for a floating pin such as @main or @v1, so the
+        # cache would hit forever and upstream fixes would never be rebuilt.
+        # hashFiles() cannot do this: it only matches inside GITHUB_WORKSPACE,
+        # and a remote `uses:` puts the action under _actions/, outside it,
+        # where it returns an empty string and every revision shares one key.
+        # sha256sum is GNU coreutils (Linux); macOS runners only ship shasum.
+        if command -v sha256sum >/dev/null 2>&1; then
+          sum() { sha256sum "$@"; }
+        else
+          sum() { shasum -a 256 "$@"; }
+        fi
+        # Paths are relative to ACTION_PATH so the digest does not change with
+        # the checkout location, and go.mod/go.sum are included because they
+        # determine the toolchain and dependencies the binary is built from.
+        SRC_HASH=$(
+          cd "${ACTION_PATH}" &&
+          { find tools/cli pkg -type f -name '*.go'; echo go.mod; echo go.sum; } |
+            LC_ALL=C sort | xargs sum | sum | cut -d' ' -f1
+        )
+
+        {
+          echo "release-version=${RELEASE_VERSION}"
+          echo "bin=${RUNNER_TEMP:-/tmp}/codeowners-plus-cli/codeowners-cli"
+          echo "action-path=${ACTION_PATH}"
+          echo "src-hash=${SRC_HASH}"
+        } >>"$GITHUB_OUTPUT"
+
+    # RELEASE_VERSION not set -> not a release: build from source (cached).
+    - name: 'Restore cached built binary'
+      id: buildcache
+      if: steps.resolve.outputs.release-version == ''
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.resolve.outputs.bin }}
+        key: codeowners-cli-build-${{ steps.resolve.outputs.src-hash }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: 'Set up Go'
+      if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      with:
+        go-version-file: ${{ steps.resolve.outputs.action-path }}/go.mod
+        cache-dependency-path: ${{ steps.resolve.outputs.action-path }}/go.sum
+
+    - name: 'Build codeowners-cli from source'
+      if: steps.resolve.outputs.release-version == '' && steps.buildcache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ steps.resolve.outputs.action-path }}
+        BIN: ${{ steps.resolve.outputs.bin }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$(dirname "${BIN}")"
+        cd "${ACTION_PATH}"
+        CGO_ENABLED=0 \
+          go build -trimpath -buildvcs=false -ldflags="-s -w" -o "${BIN}" ./tools/cli
+
+    # RELEASE_VERSION set -> a release: download + verify the prebuilt binary (cached).
+    - name: 'Restore cached release binary'
+      id: bincache
+      if: steps.resolve.outputs.release-version != ''
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.resolve.outputs.bin }}
+        key: codeowners-cli-${{ steps.resolve.outputs.release-version }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: 'Download codeowners-cli release binary'
+      if: steps.resolve.outputs.release-version != '' && steps.bincache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        REPO: ${{ github.action_repository }}
+        ACTION_PATH: ${{ steps.resolve.outputs.action-path }}
+        TAG: ${{ steps.resolve.outputs.release-version }}
+        BIN: ${{ steps.resolve.outputs.bin }}
+      run: '"${ACTION_PATH}/scripts/install-cli.sh"'
+
+    - name: 'Annotate JUnit reports'
+      shell: bash
+      env:
+        BIN: ${{ steps.resolve.outputs.bin }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_TYPE: ${{ inputs.type }}
+        INPUT_ROOT: ${{ inputs.root }}
+        INPUT_PREFIX: ${{ inputs.prefix }}
+      run: |
+        set -euo pipefail
+
+        args=(junit --in-place --root "${INPUT_ROOT}" --type "${INPUT_TYPE}")
+        if [ -n "${INPUT_PREFIX}" ]; then
+          args+=(--prefix "${INPUT_PREFIX}")
+        fi
+        # `path` accepts several values; commas and whitespace are equivalent
+        # separators so that a YAML list, a multiline block or a
+        # comma-separated string all work.
+        # Split on whitespace only: globbing is disabled so that a path
+        # containing a wildcard is passed through as written rather than
+        # silently expanding, or vanishing when it matches nothing.
+        set -f
+        reports=()
+        for report in ${INPUT_PATH//,/ }; do
+          reports+=("${report}")
+        done
+        set +f
+        if [ "${#reports[@]}" -eq 0 ]; then
+          echo "Error: no reports given in 'path'." >&2
+          exit 1
+        fi
+
+        "${BIN}" "${args[@]}" "${reports[@]}"

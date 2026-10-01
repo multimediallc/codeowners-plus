@@ -4,7 +4,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/multimediallc/codeowners-plus)](https://goreportcard.com/report/github.com/multimediallc/codeowners-plus?kill_cache=1)
 [![Tests](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml/badge.svg)](https://github.com/multimediallc/codeowners-plus/actions/workflows/go.yml)
-![Coverage](https://img.shields.io/badge/Coverage-83.6%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-83.9%25-brightgreen)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
@@ -25,6 +25,7 @@ Code Ownership &amp; Review Assignment Tool - GitHub CODEOWNERS but better
   - [Quiet Mode](#quiet-mode)
   - [Hunk Filters](#hunk-filters)
 - [CLI Tool](#cli-tool)
+- [JUnit Owners Action](#junit-owners-action)
 - [Contributing](#contributing)
 - [Future Features](#future-features)
 
@@ -462,6 +463,92 @@ Available subcommands are:
 * `unowned` to check for unowned files
 * `owner` to check who owns a specific file or list of files
 * `validate` to check for typos in a `.codeowners` file
+* `map` to generate a JSON ownership map of the entire repository
+* `junit` to annotate JUnit XML test reports with code owners
+
+### Annotating test reports
+
+`junit` writes the owners of each test's source file onto its `<testcase>` element:
+
+```bash
+codeowners-cli junit --in-place --type pytest junit.xml
+```
+
+```xml
+<testcase classname="abuse.tests.test_abuse" name="test_user_updated_at" time="0.2"
+          codeowners="@your-org/backend-team,@your-org/security-team" codeownersCount="2"/>
+```
+
+This lets whatever consumes the report downstream — a test analytics service, a dashboard, a
+flaky-test tracker — group results by the team that owns the test.
+
+Each testcase is traced back to a file in two ways. When the framework records a `file`
+attribute (jest-junit's [`addFileAttribute`](https://github.com/jest-community/jest-junit#configuration),
+among others) that path is used. Otherwise `classname` is read as a dotted module path, with
+trailing segments trimmed until a real file is found, which is what pytest emits for both
+module-level tests (`abuse.tests.test_abuse`) and class-based ones
+(`abuse.tests.test_abuse.TestAbuse`).
+
+### Report types
+
+`--type` names the framework that produced the report, which selects the right strategy and,
+just as importantly, skips the wrong one:
+
+`--type` is required, because there is no reliable way to tell the frameworks apart from the
+report alone and guessing wrong misattributes tests.
+
+| Type | `file` attribute | `classname` as a path | Extensions tried | Writes `file` |
+|------|------------------|-----------------------|------------------|---------------|
+| `pytest` | yes | yes | `.py` | **yes** |
+| `jest` | yes | **no** | — | no |
+
+`pytest` writes the resolved path back to `file` because pytest omits the attribute entirely
+under its default `xunit2` family, so the write is purely additive. `jest` does not, because
+overwriting a path the framework already set would change the meaning of a field its consumers
+may rely on.
+
+`jest` also refuses to read `classname` as a path, because jest puts the text of the describe
+block there. A block named something like `chatconnection.reconnectlimiter` looks exactly like a
+module path and could otherwise resolve to an unrelated file.
+
+Reports that name files relative to a subdirectory rather than the repository root — as jest
+does in a monorepo, where paths are relative to the package — need `--prefix`:
+
+```bash
+codeowners-cli junit --in-place --type jest --prefix frontend/react frontend/junit-react.xml
+```
+
+Useful options:
+
+| Option | Purpose |
+|--------|---------|
+| `--in-place`, `-i` | Rewrite the report in place instead of writing to stdout |
+| `--type`, `-t` | **Required.** Framework that produced the report: `pytest` or `jest` |
+| `--prefix`, `-p` | Path prefix for reports that name files relative to a subdirectory |
+
+Testcases that cannot be resolved, and files with no owner, are left untouched.
+
+## JUnit Owners Action
+
+The `junit` subcommand is also packaged as an action, so annotating a report in CI does not
+require installing the CLI yourself. Add it between the step that runs your tests and the step
+that uploads the report:
+
+```yaml
+- name: 'Annotate test results with code owners'
+  uses: multimediallc/codeowners-plus/actions/junit-owners@v1.11.0
+  with:
+    path: junit.xml
+    type: pytest
+```
+
+| Input | Default | Purpose |
+|-------|---------|---------|
+| `path` | *required* | Report(s) to annotate; separate several with whitespace or commas |
+| `type` | *required* | Framework that produced the report: `pytest` or `jest` |
+| `root` | `.` | Path to the Git repository the reports belong to |
+| `prefix` | `''` | Path prefix for reports that name files relative to a subdirectory |
+
 
 ## Contributing
 
