@@ -204,6 +204,9 @@ func (a *App) Run() (*OutputData, error) {
 	// Get the diff of the PR
 	a.printDebug("Getting diff for %s...%s\n", diffContext.Base, diffContext.Head)
 	var diffOpts []git.DiffOption
+	if conf.FetchOrphanedApproval {
+		diffOpts = append(diffOpts, git.WithFetchOrphanedRefs())
+	}
 	if conf.Hooks != nil && conf.Hooks.HunkFilter != "" {
 		hunkFilterPath, err := resolveHookPath(conf.Hooks.HunkFilter, a.config.Workspace)
 		if err != nil {
