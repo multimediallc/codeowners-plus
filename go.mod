@@ -5,7 +5,7 @@ go 1.25.0
 toolchain go1.26.5
 
 require (
-	github.com/bmatcuk/doublestar/v4 v4.10.0
+	github.com/bmatcuk/doublestar/v4 v4.10.2
 	github.com/boyter/gocodewalker v1.5.1
 	github.com/google/go-github/v89 v89.0.0
 	github.com/pelletier/go-toml/v2 v2.4.3
