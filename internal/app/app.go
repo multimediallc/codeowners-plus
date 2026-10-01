@@ -61,6 +61,7 @@ type Config struct {
 	Repo          string
 	Verbose       bool
 	Quiet         bool
+	QuietDrafts   bool
 	Workspace     string
 	InfoBuffer    io.Writer
 	WarningBuffer io.Writer
@@ -173,6 +174,15 @@ func toHookHunks(bodies []string) []hook.Hunk {
 	return hunks
 }
 
+// The webhook payload a caller could compute this from is frozen for the life of
+// the run, so a rerun of a PR since marked ready for review would stay quiet forever.
+func (a *App) enableQuietForDraft() {
+	if a.config.QuietDrafts && a.client.PR().GetDraft() {
+		a.printDebug("Draft PR - enabling quiet mode\n")
+		a.config.Quiet = true
+	}
+}
+
 // Run executes the application logic
 func (a *App) Run() (*OutputData, error) {
 	// Initialize PR
@@ -180,6 +190,7 @@ func (a *App) Run() (*OutputData, error) {
 		return &OutputData{}, fmt.Errorf("InitPR Error: %v", err)
 	}
 	a.printDebug("PR: %d\n", a.client.PR().GetNumber())
+	a.enableQuietForDraft()
 
 	// Create file reader for base ref to prevent PR authors from modifying config or .codeowners
 	// This ensures the security policy comes from the protected branch, not the PR branch
@@ -410,7 +421,7 @@ func (a *App) processApprovalsAndReviewers() (bool, string, []string, error) {
 	if a.Conf.MinReviews != nil && *a.Conf.MinReviews > 0 {
 		// Check if we need to re-request from a satisfied team when min_reviews is not met
 		// Handles the case when there min_reviews is higher than the number of teams required.
-		if minReviewsNeeded > 0 {
+		if minReviewsNeeded > 0 && !a.config.Quiet {
 			// All required teams have approved, but we need more reviews
 			// Re-request review from the satisfied team(s)
 			currentlyRequestedOwners, err := a.client.GetCurrentlyRequested()

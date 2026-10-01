@@ -27,6 +27,10 @@ inputs:
     description: 'Disable PR comments and review requests'
     required: false
     default: false
+  quiet-drafts:
+    description: 'Disable PR comments and review requests while the PR is a draft. Draft state is read from the API on every run, so it survives reruns and ready-for-review races.'
+    required: false
+    default: false
 
 outputs:
   data:
@@ -118,5 +122,6 @@ runs:
         INPUT_GITHUB-API-URL: ${{ inputs.github-api-url }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
         INPUT_QUIET: ${{ inputs.quiet }}
+        INPUT_QUIET-DRAFTS: ${{ inputs.quiet-drafts }}
         BIN: ${{ steps.resolve.outputs.bin }}
       run: '"${BIN}"'

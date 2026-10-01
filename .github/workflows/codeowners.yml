@@ -31,7 +31,7 @@ jobs:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           pr: '${{ github.event.pull_request.number }}'
           verbose: true
-          quiet: ${{ github.event.pull_request.draft }}
+          quiet-drafts: true
 
       - name: Create Check Run with JSON Output
         if: always()

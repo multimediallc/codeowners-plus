@@ -761,6 +761,8 @@ func TestRequestReviews(t *testing.T) {
 func TestProcessApprovalsAndReviewers(t *testing.T) {
 	maxReviews := 2
 	minReviews := 2
+	requestExpected := true
+	requestSuppressed := false
 	tt := []struct {
 		name                 string
 		requiredOwners       codeowners.ReviewerGroups
@@ -782,6 +784,8 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 		expectedEnfApproval  bool
 		minReviews           *int
 		maxReviews           *int
+		quiet                bool
+		expectReviewRequest  *bool
 		unownedFiles         []string
 		expectError          bool
 		expectSuccess        bool
@@ -889,12 +893,35 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@team/eng"})},
 				},
 			},
-			currentlyRequested: codeowners.NewSlugs([]string{}),
-			alreadyReviewed:    codeowners.NewSlugs([]string{"@team/eng"}),
-			minReviews:         &minReviews,
-			expectError:        false,
-			expectSuccess:      false,
-			expectedApprovals:  codeowners.NewSlugs([]string{"@team/eng"}),
+			currentlyRequested:  codeowners.NewSlugs([]string{}),
+			alreadyReviewed:     codeowners.NewSlugs([]string{"@team/eng"}),
+			minReviews:          &minReviews,
+			expectError:         false,
+			expectSuccess:       false,
+			expectedApprovals:   codeowners.NewSlugs([]string{"@team/eng"}),
+			expectReviewRequest: &requestExpected,
+		},
+		{
+			name: "min reviews re-request stays silent in quiet mode",
+			requiredOwners: codeowners.ReviewerGroups{
+				&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@team/eng", "@user1", "@user2"})},
+			},
+			currentApprovals: []*gh.CurrentApproval{
+				{GHLogin: codeowners.NewSlug("@user1"), Reviewers: codeowners.NewSlugs([]string{"@team/eng"})},
+			},
+			fileRequiredMap: map[string]codeowners.ReviewerGroups{
+				"file1.go": {
+					&codeowners.ReviewerGroup{Names: codeowners.NewSlugs([]string{"@team/eng"})},
+				},
+			},
+			currentlyRequested:  codeowners.NewSlugs([]string{}),
+			alreadyReviewed:     codeowners.NewSlugs([]string{"@team/eng"}),
+			minReviews:          &minReviews,
+			quiet:               true,
+			expectError:         false,
+			expectSuccess:       false,
+			expectedApprovals:   codeowners.NewSlugs([]string{"@team/eng"}),
+			expectReviewRequest: &requestSuppressed,
 		},
 		{
 			name: "token user is reviewer",
@@ -1039,7 +1066,7 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 
 			app := &App{
 				config: &Config{
-					Quiet:         false,
+					Quiet:         tc.quiet,
 					InfoBuffer:    io.Discard,
 					WarningBuffer: io.Discard,
 				},
@@ -1097,6 +1124,10 @@ func TestProcessApprovalsAndReviewers(t *testing.T) {
 
 			if !f.SlicesItemsMatch(tc.expectedApprovals, mockOwners.appliedApprovals) {
 				t.Errorf("expected approvals %x, got %x", tc.expectedApprovals, mockOwners.appliedApprovals)
+			}
+
+			if tc.expectReviewRequest != nil && mockGH.RequestReviewersCalled != *tc.expectReviewRequest {
+				t.Errorf("expected RequestReviewersCalled to be %t, got %t", *tc.expectReviewRequest, mockGH.RequestReviewersCalled)
 			}
 		})
 	}
@@ -1299,6 +1330,73 @@ func TestCommentDetailedReviewers(t *testing.T) {
 					tc.detailedReviewers, containsDetailedReviewersSnippet)
 			}
 
+		})
+	}
+}
+
+func TestEnableQuietForDraft(t *testing.T) {
+	testCases := []struct {
+		name          string
+		quietDrafts   bool
+		draft         bool
+		quietInput    bool
+		expectedQuiet bool
+	}{
+		{
+			name:          "draft PR with quiet-drafts on goes quiet",
+			quietDrafts:   true,
+			draft:         true,
+			expectedQuiet: true,
+		},
+		{
+			name:          "draft PR with quiet-drafts off still comments",
+			quietDrafts:   false,
+			draft:         true,
+			expectedQuiet: false,
+		},
+		{
+			name:          "ready PR with quiet-drafts on comments",
+			quietDrafts:   true,
+			draft:         false,
+			expectedQuiet: false,
+		},
+		{
+			name:          "quiet input wins over quiet-drafts on a ready PR",
+			quietDrafts:   false,
+			draft:         false,
+			quietInput:    true,
+			expectedQuiet: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			app, mockClient := setupAppForTest(t, testCase.quietInput)
+			app.config.QuietDrafts = testCase.quietDrafts
+			mockClient.pr = &github.PullRequest{Draft: github.Ptr(testCase.draft)}
+			mockClient.ResetGHClientTracking()
+
+			app.enableQuietForDraft()
+
+			if app.config.Quiet != testCase.expectedQuiet {
+				t.Errorf("expected Quiet %t, got %t", testCase.expectedQuiet, app.config.Quiet)
+			}
+
+			requiredOwners := app.codeowners.AllRequired()
+			if err := app.addReviewStatusComment(requiredOwners, false, 0, 0); err != nil {
+				t.Errorf("unexpected error during addReviewStatusComment: %v", err)
+			}
+			if err := app.requestReviews(); err != nil {
+				t.Errorf("unexpected error during requestReviews: %v", err)
+			}
+
+			expectedNotifications := !testCase.expectedQuiet
+			if mockClient.AddCommentCalled != expectedNotifications {
+				t.Errorf("expected AddCommentCalled to be %t, got %t", expectedNotifications, mockClient.AddCommentCalled)
+			}
+			if mockClient.RequestReviewersCalled != expectedNotifications {
+				t.Errorf("expected RequestReviewersCalled to be %t, got %t", expectedNotifications, mockClient.RequestReviewersCalled)
+			}
 		})
 	}
 }
