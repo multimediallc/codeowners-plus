@@ -849,6 +849,3 @@ func TestDiffOfDiffs(t *testing.T) {
 		}
 	}
 }
-
-// A hunk matching the approval-time diff is dropped as already reviewed, so two
-// different hunks that hash alike retain an approval over code nobody saw.
