@@ -158,11 +158,22 @@ func resolveHookPath(path, workspace string) (string, error) {
 	return resolved, nil
 }
 
+// resolveSymlinks resolves symlinks in the longest existing prefix of path,
+// so a path that does not exist yet still gets the same canonical prefix as
+// its existing parents (e.g. /var -> /private/var on macOS).
 func resolveSymlinks(path string) string {
-	if real, err := filepath.EvalSymlinks(path); err == nil {
-		return real
+	path = filepath.Clean(path)
+	rest := ""
+	for dir := path; ; dir = filepath.Dir(dir) {
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(real, rest)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return path
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
 	}
-	return filepath.Clean(path)
 }
 
 func toHookHunks(bodies []string) []hook.Hunk {
