@@ -169,12 +169,18 @@ func TestResolveHookPathFollowsASymlinkIntoTheCheckout(t *testing.T) {
 
 // Local runs have no GITHUB_WORKSPACE, so an absolute path stands on its own.
 func TestResolveHookPathWithoutAWorkspace(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "filter")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "filter")
 	got, err := resolveHookPath(path, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != filepath.Clean(path) {
-		t.Errorf("expected %q, got %q", path, got)
+	// The temp dir may sit behind a symlink (/var -> /private/var on macOS).
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(realDir, "filter"); got != want {
+		t.Errorf("expected %q, got %q", want, got)
 	}
 }
