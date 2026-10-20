@@ -16,14 +16,15 @@ import (
 
 // Flags holds the command line flags
 type Flags struct {
-	Token     *string
-	ApiUrl    *string
-	RepoDir   *string
-	PR        *int
-	Repo      *string
-	Verbose   *bool
-	Quiet     *bool
-	Workspace *string
+	Token       *string
+	ApiUrl      *string
+	RepoDir     *string
+	PR          *int
+	Repo        *string
+	Verbose     *bool
+	Quiet       *bool
+	QuietDrafts *bool
+	Workspace   *string
 }
 
 var (
@@ -33,12 +34,13 @@ var (
 		// empty — e.g. github-api-url passed an unset expression, or the binary run
 		// outside the composite action. Without it, a GHE run would silently hit the
 		// public GitHub API.
-		ApiUrl:  flag.String("api-url", firstNonEmpty(getEnv("INPUT_GITHUB-API-URL", ""), getEnv("GITHUB_API_URL", "")), "GitHub API base URL (for GitHub Enterprise, e.g. https://ghe.example.com/api/v3)"),
-		RepoDir: flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
-		PR:      flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
-		Repo:    flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
-		Verbose: flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
-		Quiet:   flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Disable PR comments and review requests"),
+		ApiUrl:      flag.String("api-url", firstNonEmpty(getEnv("INPUT_GITHUB-API-URL", ""), getEnv("GITHUB_API_URL", "")), "GitHub API base URL (for GitHub Enterprise, e.g. https://ghe.example.com/api/v3)"),
+		RepoDir:     flag.String("dir", getEnv("GITHUB_WORKSPACE", "/"), "Path to local Git repo"),
+		PR:          flag.Int("pr", ignoreError(strconv.Atoi(getEnv("INPUT_PR", ""))), "Pull Request number"),
+		Repo:        flag.String("repo", getEnv("INPUT_REPOSITORY", ""), "GitHub repo name"),
+		Verbose:     flag.Bool("v", ignoreError(strconv.ParseBool(getEnv("INPUT_VERBOSE", "0"))), "Verbose output"),
+		Quiet:       flag.Bool("quiet", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET", "0"))), "Disable PR comments and review requests"),
+		QuietDrafts: flag.Bool("quiet-drafts", ignoreError(strconv.ParseBool(getEnv("INPUT_QUIET-DRAFTS", "0"))), "Disable PR comments and review requests while the PR is a draft"),
 		// -dir cannot stand in for this: it falls back to "/", which would put every absolute path inside the checkout.
 		Workspace: flag.String("workspace", getEnv("GITHUB_WORKSPACE", ""), "Path to the checkout, which hook paths may not live under"),
 	}
@@ -154,6 +156,7 @@ func main() {
 		Repo:          *flags.Repo,
 		Verbose:       *flags.Verbose,
 		Quiet:         *flags.Quiet,
+		QuietDrafts:   *flags.QuietDrafts,
 		Workspace:     *flags.Workspace,
 		InfoBuffer:    InfoBuffer,
 		WarningBuffer: WarningBuffer,
