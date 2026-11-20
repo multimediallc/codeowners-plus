@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/multimediallc/codeowners-plus/pkg/codeowners"
 	"github.com/sourcegraph/go-diff/diff"
 )
@@ -363,16 +364,23 @@ func getGitDiff(data DiffContext, executor gitCommandExecutor) ([]*diff.FileDiff
 		return nil, err
 	}
 	gitDiff = slices.DeleteFunc(gitDiff, func(d *diff.FileDiff) bool {
-		fileName := diffToFilename(d)
-
-		for _, dir := range data.IgnoreDirs {
-			if strings.HasPrefix(fileName, dir) {
-				return true
-			}
-		}
-		return false
+		return isIgnored(diffToFilename(d), data.IgnoreDirs)
 	})
 	return gitDiff, nil
+}
+
+// isIgnored reports whether fileName matches an ignore entry, either as a path
+// prefix or as a doublestar glob pattern. Invalid patterns never match.
+func isIgnored(fileName string, ignore []string) bool {
+	for _, pattern := range ignore {
+		if strings.HasPrefix(fileName, pattern) {
+			return true
+		}
+		if match, _ := doublestar.Match(pattern, fileName); match {
+			return true
+		}
+	}
+	return false
 }
 
 const (
