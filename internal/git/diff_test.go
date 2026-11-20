@@ -215,6 +215,21 @@ index ghi..0000000
 				"file1.go": 1,
 			},
 		},
+		{
+			name: "ignore glob patterns",
+			context: DiffContext{
+				Base:       "main",
+				Head:       "feature",
+				Dir:        ".",
+				IgnoreDirs: []string{"**/file1.go"},
+			},
+			mockOutput:    sampleGitDiff,
+			expectedErr:   false,
+			expectedFiles: 1,
+			expectedHunks: map[string]int{
+				"file2.go": 1,
+			},
+		},
 	}
 
 	for _, tc := range tt {
@@ -255,6 +270,37 @@ index ghi..0000000
 				if len(file.Hunks) != expectedHunks {
 					t.Errorf("file %s: expected %d hunks, got %d", file.FileName, expectedHunks, len(file.Hunks))
 				}
+			}
+		})
+	}
+}
+
+func TestIsIgnored(t *testing.T) {
+	tt := []struct {
+		name     string
+		ignore   []string
+		fileName string
+		expected bool
+	}{
+		{name: "no ignore entries", ignore: nil, fileName: "file.go", expected: false},
+		{name: "directory prefix", ignore: []string{"ignored/"}, fileName: "ignored/a/file.go", expected: true},
+		{name: "partial name prefix", ignore: []string{"file1"}, fileName: "file1.go", expected: true},
+		{name: "exact file path", ignore: []string{"a/build.gradle"}, fileName: "a/build.gradle", expected: true},
+		{name: "no prefix or glob match", ignore: []string{"ignored/"}, fileName: "src/ignored/file.go", expected: false},
+		{name: "globstar matches at any depth", ignore: []string{"**/build.gradle"}, fileName: "a/b/build.gradle", expected: true},
+		{name: "globstar matches at the root", ignore: []string{"**/build.gradle"}, fileName: "build.gradle", expected: true},
+		{name: "globstar does not match a longer name", ignore: []string{"**/build.gradle"}, fileName: "a/build.gradle.kts", expected: false},
+		{name: "star does not cross directories", ignore: []string{"*/build.gradle"}, fileName: "a/b/build.gradle", expected: false},
+		{name: "trailing globstar matches everything below", ignore: []string{"**/generated/**"}, fileName: "pkg/generated/x/y.go", expected: true},
+		{name: "brace alternatives", ignore: []string{"**/build.gradle{,.kts}"}, fileName: "a/build.gradle.kts", expected: true},
+		{name: "any entry matching is enough", ignore: []string{"docs/", "**/*.pb.go"}, fileName: "api/v1/service.pb.go", expected: true},
+		{name: "invalid pattern does not match", ignore: []string{"a/[b"}, fileName: "a/b", expected: false},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isIgnored(tc.fileName, tc.ignore); got != tc.expected {
+				t.Errorf("isIgnored(%q, %q) = %v, expected %v", tc.fileName, tc.ignore, got, tc.expected)
 			}
 		})
 	}

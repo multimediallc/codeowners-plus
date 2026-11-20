@@ -232,9 +232,9 @@ max_reviews = 2
 #  skipped via the max_reviews setting
 unskippable_reviewers = ["@BakerNet"]
 
-# `ignore` (default empty) allows you to specify directories that should be ignored by the
-#  codeowners check
-ignore = ["test_project"]
+# `ignore` (default empty) allows you to specify paths that should be ignored by the
+#  codeowners check (each entry matches as a path prefix or as a doublestar glob pattern)
+ignore = ["test_project", "**/*.pb.go"]
 
 # `high_priority_labels (default empty) will cause "High Prio" label to be added to comments
 #  when one of these PR labels is present
